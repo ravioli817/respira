@@ -12,6 +12,8 @@ import { Stage, Layer } from "react-konva";
 import Konva from "konva";
 import { PhotoIcon, SunIcon, MoonIcon } from "@heroicons/react/24/solid";
 import { Grid, Origin, Hoop } from "./KonvaComponents";
+import { HoopBackground } from "./HoopBackground";
+import { MarkerTargets } from "./MarkerTargets";
 import {
   Card,
   CardHeader,
@@ -217,8 +219,12 @@ export function PatternCanvas() {
                 }
               }}
             >
-              {/* Background layer: grid, origin, hoop - static, no event listening */}
+              {/* Background layer: hoop photo, grid, origin, hoop - static, no event listening */}
               <Layer listening={false}>
+                {/* Aligned hoop photo sits beneath the grid so the reference
+                    grid and pattern overlay on top of the fabric. */}
+                <HoopBackground />
+                <MarkerTargets />
                 {displayPattern && (
                   <>
                     <Grid
