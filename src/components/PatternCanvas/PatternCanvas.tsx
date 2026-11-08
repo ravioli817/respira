@@ -25,6 +25,7 @@ import { PositionPresets } from "./PositionPresets";
 import { ZoomControls } from "./ZoomControls";
 import { PatternLayer } from "./PatternLayer";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { useCanvasViewport, usePatternTransform } from "@/hooks";
 
 export function PatternCanvas() {
@@ -180,8 +181,20 @@ export function PatternCanvas() {
         </div>
       </CardHeader>
       <CardContent className="px-4 pt-0 pb-4 flex-1 flex flex-col min-h-0">
+        {pesData && !patternUploaded && !isUploading && !uploadedPesData && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setPatternRotation((localPatternRotation + 90) % 360)
+              }
+            >
+              Rotate 90°
+            </Button>
+          </div>
+        )}
         <div
-          className={`relative w-full flex-1 min-h-0 border rounded overflow-hidden ${canvasBg}`}
+          className={`relative w-full flex-1 min-h-[360px] lg:min-h-0 border rounded overflow-hidden ${canvasBg}`}
           ref={containerRef}
         >
           {containerSize.width > 0 && (
@@ -200,6 +213,7 @@ export function PatternCanvas() {
                 stageRef.current = node;
                 if (node) {
                   node.container().style.cursor = "grab";
+                  node.container().style.touchAction = "none";
                 }
               }}
             >

@@ -6,7 +6,7 @@
  */
 
 import { useMemo, memo, type RefObject } from "react";
-import { Group, Transformer } from "react-konva";
+import { Group, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { PesPatternData } from "../../formats/import/pesImporter";
@@ -103,6 +103,17 @@ export const PatternLayer = memo(function PatternLayer({
             : undefined
         }
       >
+        {/* Make the whole design easy to grab, including gaps between stitches. */}
+        {isInteractive && (
+          <Rect
+            name="pattern-hit-area"
+            x={pesData.bounds.minX}
+            y={pesData.bounds.minY}
+            width={pesData.bounds.maxX - pesData.bounds.minX}
+            height={pesData.bounds.maxY - pesData.bounds.minY}
+            fill="rgba(0,0,0,0)"
+          />
+        )}
         <Stitches
           stitches={stitches}
           pesData={pesData}
@@ -132,6 +143,7 @@ export const PatternLayer = memo(function PatternLayer({
           rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
           ignoreStroke={true}
           rotateAnchorOffset={20}
+          anchorSize={16}
         />
       )}
 
