@@ -1,5 +1,26 @@
 import { MachineStatus } from "../types/machine";
 
+/** Machine states that confirm a pattern is loaded, even before metadata arrives. */
+export function hasLoadedPattern(status: MachineStatus): boolean {
+  switch (status) {
+    case MachineStatus.SEWING_WAIT:
+    case MachineStatus.MASK_TRACE_LOCK_WAIT:
+    case MachineStatus.MASK_TRACING:
+    case MachineStatus.MASK_TRACE_COMPLETE:
+    case MachineStatus.SEWING:
+    case MachineStatus.SEWING_COMPLETE:
+    case MachineStatus.SEWING_INTERRUPTION:
+    case MachineStatus.COLOR_CHANGE_WAIT:
+    case MachineStatus.PAUSE:
+    case MachineStatus.STOP:
+    case MachineStatus.HOOP_AVOIDANCE:
+    case MachineStatus.HOOP_AVOIDANCEING:
+      return true;
+    default:
+      return false;
+  }
+}
+
 /**
  * Machine state categories for safety logic
  */

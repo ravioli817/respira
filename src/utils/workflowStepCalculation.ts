@@ -26,7 +26,7 @@ export function getCurrentStep(
   // Check if machine needs homing (Initial state)
   if (machineStatus === MachineStatus.Initial) return 2;
 
-  if (!hasPattern) return 3;
+  if (!hasPattern && !patternUploaded) return 3;
   if (!patternUploaded) return 4;
 
   // After upload, determine step based on machine status

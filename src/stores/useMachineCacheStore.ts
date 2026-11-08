@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { PesPatternData } from "../formats/import/pesImporter";
 import { uuidToString } from "../services/PatternCacheService";
 import { onPatternDeleted } from "./storeEvents";
+import { hasLoadedPattern } from "../utils/machineStateHelpers";
 
 /**
  * Machine Cache Store
@@ -14,6 +15,7 @@ import { onPatternDeleted } from "./storeEvents";
 interface MachineCacheState {
   // Resume state
   resumeAvailable: boolean;
+  resumeCheckPending: boolean;
   resumeFileName: string | null;
   resumedPattern: {
     pesData: PesPatternData;
@@ -39,6 +41,7 @@ interface MachineCacheState {
 export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
   // Initial state
   resumeAvailable: false,
+  resumeCheckPending: false,
   resumeFileName: null,
   resumedPattern: null,
 
@@ -47,6 +50,12 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
    * Queries the machine for its current pattern UUID and checks if we have it cached
    */
   checkResume: async (): Promise<PesPatternData | null> => {
+    set({
+      resumeAvailable: false,
+      resumeCheckPending: false,
+      resumeFileName: null,
+      resumedPattern: null,
+    });
     try {
       // Import here to avoid circular dependency
       const { useMachineStore } = await import("./useMachineStore");
@@ -62,7 +71,11 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
 
       if (!machineUuid) {
         console.log("[Resume] No pattern loaded on machine");
-        set({ resumeAvailable: false, resumeFileName: null });
+        const { machineStatus, patternInfo } = useMachineStore.getState();
+        set({
+          resumeCheckPending:
+            patternInfo !== null || hasLoadedPattern(machineStatus),
+        });
         return null;
       }
 
@@ -92,15 +105,6 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
           },
         });
 
-        // Fetch pattern info from machine
-        try {
-          const info = await service.getPatternInfo();
-          useMachineStore.setState({ patternInfo: info });
-          console.log("[Resume] Pattern info loaded from machine");
-        } catch (err) {
-          console.error("[Resume] Failed to load pattern info:", err);
-        }
-
         return cached.pesData;
       } else {
         console.log("[Resume] Pattern on machine not found in cache");
@@ -109,7 +113,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
       }
     } catch (err) {
       console.error("[Resume] Failed to check resume:", err);
-      set({ resumeAvailable: false, resumeFileName: null });
+      set({ resumeCheckPending: true });
       return null;
     }
   },
@@ -176,6 +180,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
   setResumeAvailable: (available: boolean, fileName: string | null) => {
     set({
       resumeAvailable: available,
+      resumeCheckPending: false,
       resumeFileName: fileName,
       ...(available === false && { resumedPattern: null }),
     });
@@ -188,6 +193,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
   clearResumeState: () => {
     set({
       resumeAvailable: false,
+      resumeCheckPending: false,
       resumeFileName: null,
       resumedPattern: null,
     });

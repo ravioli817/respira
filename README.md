@@ -123,6 +123,18 @@ While the machine is embroidering, watch your sewing progress using the live pre
 
 After the embroidery is done, remove your fabric from the hoop and press the _Accept_ button on the machine to continue with a new job, or repeat the current job by pressing the _Start/Pause_ button again.
 
+### Reconnecting during a print
+
+Reconnect to the PP1 after a Bluetooth interruption to recover its live stitch
+count, progress, speed and machine state. Respira retries incomplete print
+information and does not require another upload. Progress also updates when the
+machine reaches a color change, pause or completion.
+
+The preview and color-step list are restored from the exact uploaded pattern
+cached in this browser when its ID matches the PP1. Keep using the same browser
+and site address to retain that cache. Live machine status remains available if
+the cached pattern is missing; color-step details require the cached pattern.
+
 ## Pattern Preparation
 
 Embroidery software seems to be a niche product and thus is quite expensive.

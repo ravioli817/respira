@@ -13,7 +13,10 @@ import {
   SewingMachineError,
   getErrorStitchRollback,
 } from "../utils/errorCodeHelpers";
-import { getMachineStateCategory } from "../utils/machineStateHelpers";
+import {
+  getMachineStateCategory,
+  hasLoadedPattern,
+} from "../utils/machineStateHelpers";
 import { uuidToString } from "../services/PatternCacheService";
 import { createStorageService } from "../platform";
 import type { IStorageService } from "../platform/interfaces/IStorageService";
@@ -78,6 +81,9 @@ interface MachineState {
   _handleErrorStitchRollback: () => Promise<void>;
 }
 
+// Invalidates an in-flight poll when Bluetooth disconnects or polling restarts.
+let pollingGeneration = 0;
+
 export const useMachineStore = create<MachineState>((set, get) => ({
   // Initial state
   service: new BrotherPP1Service(),
@@ -104,6 +110,7 @@ export const useMachineStore = create<MachineState>((set, get) => ({
     try {
       const { service } = get();
       set({ error: null, isPairingError: false });
+      get()._stopPolling();
 
       await service.connect();
       set({ isConnected: true });
@@ -126,6 +133,9 @@ export const useMachineStore = create<MachineState>((set, get) => ({
       } catch {
         // Not critical - polling will pick it up
       }
+
+      // Live print status must not depend on this browser having a cached PES.
+      await get().refreshPatternInfo();
 
       // Check for resume possibility using cache store
       const { useMachineCacheStore } = await import("./useMachineCacheStore");
@@ -172,15 +182,18 @@ export const useMachineStore = create<MachineState>((set, get) => ({
   refreshStatus: async () => {
     const { isConnected, service } = get();
     if (!isConnected) return;
+    const generation = pollingGeneration;
 
     try {
       const state = await service.getMachineState();
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         machineStatus: state.status,
         machineStatusName: MachineStatusNames[state.status] || "Unknown",
         machineError: state.error,
       });
     } catch (err) {
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         error: err instanceof Error ? err.message : "Failed to get status",
       });
@@ -191,11 +204,18 @@ export const useMachineStore = create<MachineState>((set, get) => ({
   refreshPatternInfo: async () => {
     const { isConnected, service } = get();
     if (!isConnected) return;
+    const generation = pollingGeneration;
 
     try {
       const info = await service.getPatternInfo();
-      set({ patternInfo: info });
+      if (!get().isConnected || generation !== pollingGeneration) return;
+      // An empty response means there is no metadata yet, not an uploaded job.
+      // Keep previously recovered metadata if the PP1 briefly reports zeros.
+      if (info.totalStitches > 0) {
+        set({ patternInfo: info, error: null });
+      }
     } catch (err) {
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         error:
           err instanceof Error ? err.message : "Failed to get pattern info",
@@ -207,11 +227,14 @@ export const useMachineStore = create<MachineState>((set, get) => ({
   refreshProgress: async () => {
     const { isConnected, service } = get();
     if (!isConnected) return;
+    const generation = pollingGeneration;
 
     try {
       const progress = await service.getSewingProgress();
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({ sewingProgress: progress });
     } catch (err) {
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         error: err instanceof Error ? err.message : "Failed to get progress",
       });
@@ -439,6 +462,9 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
     // Stop any existing polling
     _stopPolling();
+    const generation = pollingGeneration;
+    const isCurrentPoll = () =>
+      get().isConnected && generation === pollingGeneration;
 
     // Function to determine polling interval based on machine status
     const getPollInterval = () => {
@@ -463,15 +489,21 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
     // Main polling function
     const poll = async () => {
+      if (!isCurrentPoll()) return;
       await refreshStatus();
+      if (!isCurrentPoll()) return;
 
       const currentState = get();
       const category = getMachineStateCategory(currentState.machineStatus);
 
-      // Refresh progress during sewing
-      if (currentState.machineStatus === MachineStatus.SEWING) {
+      // Capture the stitch reached at color changes, pauses and completion too.
+      if (
+        currentState.patternInfo !== null ||
+        hasLoadedPattern(currentState.machineStatus)
+      ) {
         await refreshProgress();
       }
+      if (!isCurrentPoll()) return;
 
       // Reset step control state when machine is actively sewing
       if (category === "active") {
@@ -507,15 +539,19 @@ export const useMachineStore = create<MachineState>((set, get) => ({
         set({ pausedStitchIndex: postRollbackStitch });
       }
 
-      // follows the apps logic:
-      // Check if we have a cached pattern and pattern info needs refreshing
-      const { useMachineCacheStore } = await import("./useMachineCacheStore");
-      if (
-        useMachineCacheStore.getState().resumeAvailable &&
-        get().patternInfo?.totalStitches == 0
-      ) {
+      // Retry missing metadata independently of the local pattern cache.
+      if ((get().patternInfo?.totalStitches ?? 0) === 0) {
         await refreshPatternInfo();
       }
+      if (!isCurrentPoll()) return;
+
+      // A UUID read can fail briefly after reconnect. Retry artwork recovery
+      // without making live progress depend on its success.
+      const { useMachineCacheStore } = await import("./useMachineCacheStore");
+      if (useMachineCacheStore.getState().resumeCheckPending) {
+        await useMachineCacheStore.getState().checkResume();
+      }
+      if (!isCurrentPoll()) return;
 
       // Schedule next poll with updated interval
       const newInterval = getPollInterval();
@@ -535,6 +571,7 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
   // Stop polling
   _stopPolling: () => {
+    pollingGeneration++;
     const { pollIntervalId, serviceCountIntervalId } = get();
 
     if (pollIntervalId) {
@@ -568,6 +605,9 @@ export const useLastRolledBackError = () =>
   useMachineStore((state) => state.lastRolledBackError);
 export const usePausedStitchIndex = () =>
   useMachineStore((state) => state.pausedStitchIndex);
-// Derived state: pattern is uploaded if machine has pattern info
-export const usePatternUploaded = () =>
-  useMachineStore((state) => state.patternInfo !== null);
+export const selectPatternUploaded = (
+  state: Pick<MachineState, "patternInfo" | "machineStatus">,
+) => state.patternInfo !== null || hasLoadedPattern(state.machineStatus);
+
+// The PP1's live state also confirms a loaded pattern while metadata recovers.
+export const usePatternUploaded = () => useMachineStore(selectPatternUploaded);
