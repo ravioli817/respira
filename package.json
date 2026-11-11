@@ -22,6 +22,15 @@
     "electron:icons": "electron-icon-builder --input=./public/icons/icon.png --output=./public -f"
   },
   "dependencies": {
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/bebas-neue": "^5.3.0",
+    "@fontsource/bungee": "^5.3.0",
+    "@fontsource/fredoka": "^5.3.0",
+    "@fontsource/lobster": "^5.3.0",
+    "@fontsource/pacifico": "^5.3.0",
+    "@fontsource/permanent-marker": "^5.3.0",
+    "@fontsource/righteous": "^5.3.0",
+    "@fontsource/titan-one": "^5.3.0",
     "@heroicons/react": "^2.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",

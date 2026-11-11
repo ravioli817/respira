@@ -6,6 +6,17 @@ This allows the user to operate the embroidery machine fully offline and from th
 
 ![](./docs/main_screenshot.png)
 
+## This fork: Respira with a Create screen
+
+This is a fork of [jhbruhn/respira](https://github.com/jhbruhn/respira). Respira's machine code is used as it is. The fork adds:
+
+- **Create screen** (`src/studio/`): draw with a stylus, turn a picture into stitches, or set text, on a hoop shown at real size. "Send to Skitch" hands the design to the Stitch screen, where it goes through Respira's own encoder and upload. Designs made here do not need a PES file.
+- **"What to do now" card** (`src/guide/`): plain-language instructions for each machine state, a chime when the machine needs someone (thread change, a fault, finished), and the screen kept awake while connected.
+- **Practice machine** (`src/practice/`): open the app with `?practice` in the address to try the whole flow against a pretend Skitch. Its behaviour is a best guess from the code, not a recording of a real machine.
+- The pattern preview now has a height on screens narrower than 1024 px (a tablet held upright).
+
+Run it locally with `npm install`, then `npm run web:dev`, and open http://localhost:5173 in Chrome.
+
 ## Installation
 
 The latest release of Respira can be downloaded [here](https://github.com/jhbruhn/respira/releases/latest). Choose the appropriate installer for your Operating System.

@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { useRef, useMemo, useState, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -152,7 +153,7 @@ export function PatternCanvas() {
 
   return (
     <Card
-      className={`p-0 gap-0 lg:h-full flex flex-col border-l-4 ${borderColor}`}
+      className={`p-0 gap-0 h-[min(44rem,100vw)] lg:h-full flex flex-col border-l-4 ${borderColor}`}
     >
       <CardHeader className="p-4 pb-3">
         <div className="flex items-start gap-3">

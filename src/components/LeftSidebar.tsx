@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore, usePatternUploaded } from "../stores/useMachineStore";
 import { usePatternStore } from "../stores/usePatternStore";
@@ -5,6 +6,7 @@ import { ConnectionPrompt } from "./ConnectionPrompt";
 import { FileUpload } from "./FileUpload";
 import { PatternSummaryCard } from "./PatternSummaryCard";
 import { ProgressMonitor } from "./ProgressMonitor";
+import { NextStepCard } from "../guide/NextStepCard";
 
 export function LeftSidebar() {
   const { isConnected } = useMachineStore(
@@ -26,6 +28,9 @@ export function LeftSidebar() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
+      {/* What to do now, in plain words */}
+      <NextStepCard />
+
       {/* Connect Button or Browser Hint - Show when disconnected */}
       {!isConnected && <ConnectionPrompt />}
 

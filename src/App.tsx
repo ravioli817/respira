@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
+import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore } from "./stores/useMachineStore";
 import { useMachineCacheStore } from "./stores/useMachineCacheStore";
@@ -9,6 +10,11 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { PatternCanvas } from "./components/PatternCanvas";
 import { PatternCanvasPlaceholder } from "./components/PatternCanvasPlaceholder";
 import { BluetoothDevicePicker } from "./components/BluetoothDevicePicker";
+import { Studio } from "./studio/Studio";
+import { ScreenTabs, type Screen } from "./studio/ScreenTabs";
+import { loadStudioDesign } from "./studio/loadStudioDesign";
+import type { StudioDesign } from "./studio/studioApp.js";
+import { PracticePanel } from "./practice/PracticePanel";
 import { transformStitchesRotation } from "./utils/rotationUtils";
 import { encodeStitchesToPen } from "./formats/pen/encoder";
 import { decodePenData } from "./formats/pen/decoder";
@@ -37,10 +43,21 @@ function App() {
     })),
   );
 
+  // Which screen is showing: making a design, or running the machine
+  const [screen, setScreen] = useState<Screen>("create");
+
+  // A design sent from the Create screen lands where a loaded PES file would, then the Stitch screen opens
+  const handleStudioSend = useCallback((design: StudioDesign) => {
+    const refusal = loadStudioDesign(design);
+    setScreen("stitch");
+    return refusal;
+  }, []);
+
   // Pattern store - for auto-loading cached pattern
   const {
     pesData,
     uploadedPesData,
+    currentFileName,
     setPattern,
     setUploadedPattern,
     setPatternRotation,
@@ -49,6 +66,7 @@ function App() {
     useShallow((state) => ({
       pesData: state.pesData,
       uploadedPesData: state.uploadedPesData,
+      currentFileName: state.currentFileName,
       setPattern: state.setPattern,
       setUploadedPattern: state.setUploadedPattern,
       setPatternRotation: state.setPatternRotation,
@@ -201,9 +219,26 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
       <AppHeader />
+      <ScreenTabs
+        screen={screen}
+        onChange={setScreen}
+        patternName={pesData || uploadedPesData ? currentFileName : undefined}
+      />
 
-      <div className="flex-1 p-4 sm:p-5 lg:p-6 w-full overflow-y-auto lg:overflow-hidden flex flex-col">
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[480px_1fr] gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
+      {/* Create screen - stays mounted so a drawing in progress survives a visit to the Stitch screen */}
+      <Studio
+        className={screen === "create" ? "flex-1 overflow-y-auto" : "hidden"}
+        onSend={handleStudioSend}
+      />
+
+      <div
+        className={
+          screen === "stitch"
+            ? "flex-1 p-4 sm:p-5 lg:p-6 w-full overflow-y-auto lg:overflow-hidden flex flex-col"
+            : "hidden"
+        }
+      >
+        <div className="flex-1 grid grid-cols-1 content-start lg:content-normal lg:grid-cols-[480px_1fr] gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
           {/* Left Column - Controls */}
           <LeftSidebar />
 
@@ -220,6 +255,9 @@ function App() {
         {/* Bluetooth Device Picker (Electron only) */}
         <BluetoothDevicePicker />
       </div>
+
+      {/* Pretend machine buttons (only with ?practice in the address) */}
+      <PracticePanel />
     </div>
   );
 }
