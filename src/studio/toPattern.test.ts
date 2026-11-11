@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { StitchEngine } from "./engine.js";
 import { studioDesignToPattern } from "./toPattern";
 import { encodeStitchesToPen } from "../formats/pen/encoder";
-import { MOVE } from "../formats/import/constants";
+import { MOVE, TRIM } from "../formats/import/constants";
 import type { StudioDesign } from "./studioApp.js";
 
 const { GRID, RES, PEC } = StitchEngine;
@@ -59,11 +59,13 @@ describe("toRespiraStitches", () => {
     expect(design.threads.map((t) => t.index)).toEqual([5, 37]);
   });
 
-  it("never repeats the previous point", () => {
+  it("only repeats a point for a trim or a new color", () => {
     for (let i = 1; i < design.stitches.length; i++) {
-      const [x, y] = design.stitches[i];
-      const [px, py] = design.stitches[i - 1];
-      expect(x === px && y === py).toBe(false);
+      const [x, y, cmd, color] = design.stitches[i];
+      const [px, py, , previousColor] = design.stitches[i - 1];
+      if (x === px && y === py) {
+        expect(cmd === TRIM || color !== previousColor).toBe(true);
+      }
     }
   });
 
@@ -150,6 +152,62 @@ describe("studioDesignToPattern", () => {
     expect(data.threads).toHaveLength(3);
     expect(data.uniqueColors).toHaveLength(2);
     expect(data.uniqueColors[0].threadIndices).toEqual([0, 2]);
+  });
+
+  it("preserves a planned cut across a short same-color gap in machine bytes", () => {
+    const design = designFrom(
+      new Uint8Array(GRID * GRID),
+      [],
+      [
+        {
+          kind: "run",
+          color: 5,
+          pts: [
+            [40, 40, 0],
+            [50, 40, 0],
+          ],
+        },
+        {
+          kind: "run",
+          color: 5,
+          pts: [
+            [53, 40, 0],
+            [63, 40, 0],
+          ],
+        },
+      ],
+    );
+    expect(design.stitches.filter((s) => s[2] === TRIM)).toHaveLength(1);
+    const { data } = studioDesignToPattern(design);
+    const cutOffsets = [];
+    for (let i = 0; i < data.penData.length; i += 4) {
+      if (data.penData[i + 2] & 2) cutOffsets.push(i);
+    }
+    expect(cutOffsets).toHaveLength(1);
+    // Standalone cut at the previous endpoint, followed by the 3 mm jump.
+    const offset = cutOffsets[0];
+    const point = (i: number) =>
+      new DataView(data.penData.buffer).getInt16(i, true) >> 3;
+    expect(point(offset)).toBe(0);
+    expect(point(offset + 4)).toBe(30);
+    expect(data.penData[offset + 6] & 1).toBe(1);
+  });
+
+  it("keeps a color change when the next color starts at the same point", () => {
+    const { STITCH, COLOR_CHANGE, END } = StitchEngine.CMD;
+    const stitches = StitchEngine.toRespiraStitches([
+      [0, 0, STITCH],
+      [10, 0, STITCH],
+      [10, 0, COLOR_CHANGE],
+      [10, 0, STITCH],
+      [20, 0, STITCH],
+      [20, 0, END],
+    ]);
+    expect(stitches).toContainEqual([10, 0, 0, 1]);
+    const { penBytes } = encodeStitchesToPen(stitches);
+    expect(
+      penBytes.filter((b, i) => i % 4 === 0 && (b & 7) === 3),
+    ).toHaveLength(1);
   });
 
   it("refuses an empty design", () => {

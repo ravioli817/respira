@@ -729,6 +729,7 @@ export function mountStudio(root, opts) {
 
   // ---------- design + digitise pipeline ----------
   function updateDesign() {
+    invalidateDesign();
     if (S.mode === 'draw') {
       S.design = { labels: S.draw.labels, order: S.draw.order, lines: S.draw.strokes };
       S.note = '';
@@ -750,6 +751,18 @@ export function mountStudio(root, opts) {
     }
   }
   var digitizeTimer = null;
+  // An edit makes the old plan unusable immediately, including during debounce/font loading.
+  function invalidatePlan() {
+    clearTimeout(digitizeTimer);
+    S.plan = null; S.stats = null;
+    renderStats();
+    $('#readout').textContent = 'Preparing stitches…';
+  }
+  function invalidateDesign() {
+    textToken++; // Ignore font callbacks for an older edit or mode.
+    S.design = null;
+    invalidatePlan();
+  }
   function designReady() {
     labelsDirty = true;
     var note = $('#note'); note.textContent = S.note; note.hidden = !S.note;
@@ -780,10 +793,10 @@ export function mountStudio(root, opts) {
       var li = document.createElement('li'); li.className = 'empty';
       li.textContent = S.mode === 'draw' ? 'Each thread you use shows up here in sewing order.' : 'Nothing to stitch with these settings.';
       seq.appendChild(li);
-      $('#save').disabled = true; $('#send').disabled = true;
+      $('#save').disabled = true; $('#save-dst').disabled = true; $('#send').disabled = true;
       return;
     }
-    $('#save').disabled = false; $('#send').disabled = false;
+    $('#save').disabled = false; $('#save-dst').disabled = false; $('#send').disabled = false;
     var w = st.width, h = st.height;
     ro.innerHTML = '';
     var a = document.createElement('strong'); a.textContent = w.toFixed(1) + ' × ' + h.toFixed(1) + ' mm';
@@ -871,12 +884,13 @@ export function mountStudio(root, opts) {
   $('#file').addEventListener('change', function (e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
+    invalidateDesign();
     var done = function (src) {
       S.image.source = src; S.image.fileName = f.name; S.image.clusters = [];
       $('#file-name').textContent = f.name;
       processImage(); renderClusters(); autoName(); updateDesign();
     };
-    var fail = function () { toast("That file couldn't be opened as a picture. Try a PNG or JPEG."); };
+    var fail = function () { updateDesign(); toast("That file couldn't be opened as a picture. Try a PNG or JPEG."); };
     if (window.createImageBitmap) createImageBitmap(f).then(done, function () { viaImg(f, done, fail); });
     else viaImg(f, done, fail);
     e.target.value = '';
@@ -888,7 +902,7 @@ export function mountStudio(root, opts) {
     img.src = url;
   }
   var imgTimer = null;
-  function reprocessSoon() { clearTimeout(imgTimer); imgTimer = setTimeout(function () { processImage(); renderClusters(); updateDesign(); scheduleSave(); }, 120); }
+  function reprocessSoon() { invalidateDesign(); clearTimeout(imgTimer); imgTimer = setTimeout(function () { processImage(); renderClusters(); updateDesign(); scheduleSave(); }, 120); }
   $('#img-size').addEventListener('input', function (e) { S.image.sizeMM = +e.target.value; $('#img-size-out').textContent = e.target.value + ' mm'; reprocessSoon(); });
   $('#img-k').addEventListener('input', function (e) { S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; S.image.clusters = []; reprocessSoon(); });
   $('#img-bg').addEventListener('change', function (e) { S.image.removeBg = e.target.checked; reprocessSoon(); });
@@ -939,7 +953,7 @@ export function mountStudio(root, opts) {
   var fontSel = $('#txt-font');
   Object.keys(FONTS).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = FONTS[k].label; fontSel.appendChild(o); });
   var txtTimer = null;
-  function textChanged() { clearTimeout(txtTimer); txtTimer = setTimeout(function () { autoName(); updateDesign(); scheduleSave(); }, 180); }
+  function textChanged() { invalidateDesign(); clearTimeout(txtTimer); txtTimer = setTimeout(function () { autoName(); updateDesign(); scheduleSave(); }, 180); }
   $('#txt').addEventListener('input', function (e) { S.text.value = e.target.value; textChanged(); });
   fontSel.addEventListener('change', function (e) { S.text.font = e.target.value; textChanged(); });
   $('#txt-w').addEventListener('input', function (e) { S.text.widthMM = +e.target.value; $('#txt-w-out').textContent = e.target.value + ' mm'; textChanged(); });
@@ -955,7 +969,7 @@ export function mountStudio(root, opts) {
   });
   $('#angle').addEventListener('input', function (e) { S.settings.angle = +e.target.value; $('#angle-out').textContent = e.target.value + '°'; digitizeSoon(); scheduleSave(); });
   $('#underlay').addEventListener('change', function (e) { S.settings.underlay = e.target.checked; digitizeSoon(); scheduleSave(); });
-  function digitizeSoon() { clearTimeout(digitizeTimer); digitizeTimer = setTimeout(digitize, 120); }
+  function digitizeSoon() { invalidatePlan(); digitizeTimer = setTimeout(digitize, 120); }
 
   // ---------- naming + saving ----------
   function autoName() {
@@ -1076,7 +1090,7 @@ export function mountStudio(root, opts) {
   resizeStage();
 
   return {
-    destroy: function () { cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
+    destroy: function () { textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
   };
 }
 

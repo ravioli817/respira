@@ -49,7 +49,7 @@ function App() {
   // A design sent from the Create screen lands where a loaded PES file would, then the Stitch screen opens
   const handleStudioSend = useCallback((design: StudioDesign) => {
     const refusal = loadStudioDesign(design);
-    setScreen("stitch");
+    if (refusal === null) setScreen("stitch");
     return refusal;
   }, []);
 
