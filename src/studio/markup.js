@@ -5,13 +5,28 @@ export const STUDIO_MARKUP = `
     <span class="brand-name">Create a design</span>
     <span class="brand-sub">4 × 4 in hoop · 100 × 100 mm</span>
   </div>
-  <div class="seg modes" role="tablist" aria-label="Make a design from">
+  <div class="seg modes" role="tablist" aria-label="Edit a layer">
     <button role="tab" id="mode-draw" data-mode="draw" aria-selected="true">Draw</button>
     <button role="tab" id="mode-image" data-mode="image" aria-selected="false">Picture</button>
     <button role="tab" id="mode-text" data-mode="text" aria-selected="false">Text</button>
   </div>
 </header>
 
+<section class="composition-panel" aria-label="Design layers">
+  <div class="layer-actions"><strong>Design layers</strong><button class="btn" id="add-draw-layer">Add drawing</button><button class="btn" id="add-image-layer">Add picture</button><button class="btn" id="add-text-layer">Add text</button></div>
+  <div id="layers" class="layer-list" role="group" aria-label="Layers in sewing order"></div>
+  <details class="layer-details"><summary>Position, size and sewing order</summary>
+  <div class="layer-controls">
+    <label class="stack">Layer name<input id="layer-name" maxlength="60"></label>
+    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Layer size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
+    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
+  </div>
+  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include layer</label><label><input id="move-layer" type="checkbox"> Move drawing by dragging</label><button class="btn" id="layer-duplicate">Duplicate layer</button><button class="btn" id="layer-remove">Remove layer</button><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button><button class="btn" id="layer-undo">Undo edit</button><button class="btn" id="layer-redo">Redo edit</button></div>
+  </details>
+  <p class="hint">All included layers share the hoop and sew in the listed order. Select a layer to edit it. Drag pictures/text to move; use the switch above to move drawings. Overlapping layers both stitch.</p>
+</section>
 <main class="studio">
   <section class="stage-col" aria-label="Hoop">
     <div class="toolbar" id="toolbar">
@@ -133,9 +148,17 @@ export const STUDIO_MARKUP = `
 
     <section class="panel first" id="panel-text" hidden>
       <h2>Text</h2>
-      <label class="stack">Words<textarea id="txt" rows="2" maxlength="2000" spellcheck="false"></textarea></label>
+      <label class="stack">Words<textarea id="txt" rows="2" maxlength="200" spellcheck="false"></textarea></label>
       <label class="stack">Font<select id="txt-font"></select></label>
-      <label class="range"><span>Width</span><input type="range" id="txt-w" min="20" max="100" step="1" value="80"><output id="txt-w-out" for="txt-w">80 mm</output></label>
+      <label class="range" id="decorative-width"><span>Width</span><input type="range" id="txt-w" min="20" max="100" step="1" value="80"><output id="txt-w-out" for="txt-w">80 mm</output></label>
+      <div id="lettering-controls" class="shape-grid">
+        <label class="stack">Letter height (mm)<input id="txt-height" type="number" min="4" max="15" step="0.5" value="8"></label>
+        <label class="stack">Letter spacing (mm)<input id="txt-spacing" type="number" min="0" max="5" step="0.1" value="0.5"></label>
+        <label class="stack">Extra line gap (mm)<input id="txt-linegap" type="number" min="0" max="10" step="0.5" value="2"></label>
+        <label class="stack">Align lines<select id="txt-align"><option value="left">Left</option><option value="center" selected>Center</option><option value="right">Right</option></select></label>
+      </div>
+      <p id="font-note" class="hint"></p>
+      <details><summary>Embroidery font credit and license</summary><p class="hint">Small Satin is adapted from Ink/Stitch Small Font © 2017 Lex Neva. The satin rails are pre-digitized; this app generates its own stitches. Test on your fabric before a garment.</p><pre id="font-license" class="license-text"></pre></details>
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
     </section>
 

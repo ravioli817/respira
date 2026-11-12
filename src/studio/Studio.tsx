@@ -53,7 +53,26 @@ function download(data: string, name: string) {
 }
 const newRecord = (data?: ProjectData): SavedProject => ({
   id: crypto.randomUUID(),
-  data: data || emptyProject(),
+  data:
+    data ||
+    (() => {
+      const base = emptyProject();
+      return {
+        ...base,
+        v: 2,
+        activeLayerId: "drawing",
+        layers: [
+          {
+            id: "drawing",
+            name: "Drawing",
+            kind: "draw",
+            visible: true,
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            source: base.draw,
+          },
+        ],
+      } as ProjectData;
+    })(),
   updatedAt: Date.now(),
   thumbnail: "",
 });
