@@ -67,7 +67,7 @@ afterEach(() => {
 
 function enterDecorativeText() {
   // Select the legacy decorative font to exercise asynchronous browser font loading.
-  button("#mode-text").click();
+  button("#add-text-layer").click();
   button("#txt-font").value = "Lobster";
   button("#txt-font").dispatchEvent(new Event("change", { bubbles: true }));
   input("#txt-w", "20");
@@ -109,7 +109,7 @@ describe("Create output readiness", () => {
   it("blocks output during stitch-setting regeneration", () => {
     input("#angle", "90");
     expectBlocked();
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(180);
     expect(button("#send").disabled).toBe(false);
   });
 
@@ -122,7 +122,7 @@ describe("Create output readiness", () => {
     drawing.click();
     button("#layer-visible").checked = false;
     button("#layer-visible").dispatchEvent(new Event("change"));
-    root.querySelectorAll("#layers button")[1].click();
+    [...root.querySelectorAll("#layers button")].at(-1).click();
     input("#txt", "");
     await vi.advanceTimersByTimeAsync(240);
     expectBlocked();
@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(2);
+  expect(saved.v).toBe(3);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -229,4 +229,79 @@ it("does not treat a tap on text as a move or reset prepared placement", () => {
   );
   expect(studio.snapshot().placement).toEqual(before.placement);
   expect(studio.snapshot().layers).toEqual(before.layers);
+});
+
+it("has one canvas toolbar and no redundant Draw/Picture/Text mode tabs", () => {
+  expect(root.querySelectorAll('[role="tab"]')).toHaveLength(0);
+  expect(root.querySelector('[aria-label="Canvas tools"]')).not.toBeNull();
+  const before = studio.snapshot().layers.length;
+  button("#add-draw-layer").click();
+  expect(studio.snapshot().layers.length).toBe(before);
+  button("#add-image-layer").click(); // Cancelling the picker must not create an empty object.
+  expect(studio.snapshot().layers.length).toBe(before);
+});
+
+it("applies custom underlay and pull only to the selected object and preserves it across reopen", async () => {
+  button("#add-text-layer").click();
+  input("#txt", "Ravi");
+  await vi.advanceTimersByTimeAsync(250);
+  const original = studio.snapshot();
+  button("#stitch-custom").checked = true;
+  button("#stitch-custom").dispatchEvent(new Event("change"));
+  button("#stitch-satinUnderlay").value = "center-edge";
+  button("#stitch-satinUnderlay").dispatchEvent(new Event("change"));
+  input("#stitch-satinPullMm", "0.4");
+  await vi.advanceTimersByTimeAsync(60);
+  button("#send").click();
+  const encoded = onSend.mock.calls.at(-1)[0].stitches;
+  const saved = studio.snapshot();
+  expect(saved.layers[0].stitchSettings).toBeUndefined();
+  expect(saved.layers.at(-1).stitchSettings).toMatchObject({
+    satinUnderlay: "center-edge",
+    satinPullMm: 0.4,
+  });
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  await vi.advanceTimersByTimeAsync(60);
+  button("#send").click();
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(encoded);
+  expect(button("#stitch-satinPullMm").value).toBe("0.4");
+  button("#stitch-custom").checked = false;
+  button("#stitch-custom").dispatchEvent(new Event("change"));
+  expect(studio.snapshot().layers.at(-1).stitchSettings).toBeUndefined();
+  expect(studio.snapshot().layers[0].source).toEqual(original.layers[0].source);
+});
+
+it("regenerates satin lettering when the project underlay default changes", async () => {
+  button("#add-text-layer").click();
+  input("#txt", "Ravi");
+  await vi.advanceTimersByTimeAsync(250);
+  // Isolate lettering so a change in the example drawing cannot satisfy this test.
+  const textOnly = studio.snapshot();
+  textOnly.layers = textOnly.layers.filter(
+    (l) => l.id === textOnly.activeLayerId,
+  );
+  studio.destroy();
+  studio = mountStudio(root, { project: textOnly, onSend });
+  await vi.advanceTimersByTimeAsync(60);
+  button("#send").click();
+  const before = onSend.mock.calls.at(-1)[0].stitches.length;
+  button("#underlay").checked = false;
+  button("#underlay").dispatchEvent(new Event("change"));
+  await vi.advanceTimersByTimeAsync(180);
+  button("#send").click();
+  expect(onSend.mock.calls.at(-1)[0].stitches.length).toBeLessThan(before);
+});
+
+it("Draw does not silently include an excluded legacy drawing", () => {
+  const oldId = studio.snapshot().activeLayerId;
+  button("#layer-visible").checked = false;
+  button("#layer-visible").dispatchEvent(new Event("change"));
+  button("#add-draw-layer").click();
+  const saved = studio.snapshot();
+  expect(saved.layers.find((l) => l.id === oldId).visible).toBe(false);
+  expect(saved.activeLayerId).not.toBe(oldId);
+  expect(
+    saved.layers.find((l) => l.id === saved.activeLayerId).source.strokes,
+  ).toEqual([]);
 });

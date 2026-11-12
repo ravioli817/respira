@@ -59,7 +59,7 @@ const newRecord = (data?: ProjectData): SavedProject => ({
       const base = emptyProject();
       return {
         ...base,
-        v: 2,
+        v: 3,
         activeLayerId: "drawing",
         layers: [
           {
@@ -278,8 +278,17 @@ export function Studio({ className, onSend }: StudioProps) {
             void perform(async () => {
               if (!editor.current) return;
               const data = editor.current.snapshot();
+              const contents = exportProject(data);
+              // Finish the local save before offering the download when storage works.
+              // A failed local save must never prevent the user making a backup.
+              if (document)
+                await persist(
+                  document.id,
+                  data,
+                  editor.current.thumbnail(),
+                ).catch(() => {});
               download(
-                exportProject(data),
+                contents,
                 `${(data.name || "design").replace(/[^a-z0-9_-]/gi, "-")}.respira.json`,
               );
             })

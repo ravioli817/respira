@@ -6,6 +6,7 @@ import { FileUpload } from "../components/FileUpload";
 import { PatternCanvas } from "../components/PatternCanvas";
 import { preparePattern } from "./preparePattern";
 import { playbackStats } from "./playback";
+import { DensityInspector } from "./DensityInspector";
 import { StitchPlayback } from "./StitchPlayback";
 import { Button } from "../components/ui/button";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
@@ -34,7 +35,9 @@ export function PrepareScreen({
   );
   const fileName = usePatternStore((s) => s.currentFileName);
   const machineInfo = useMachineStore((s) => s.machineInfo);
-  const [view, setView] = useState<"placement" | "playback">("placement");
+  const [view, setView] = useState<"placement" | "playback" | "density">(
+    "placement",
+  );
   const prepared = useMemo(
     () =>
       uploadedPesData
@@ -105,7 +108,7 @@ export function PrepareScreen({
           {prepared ? (
             <>
               <div
-                className="flex gap-2"
+                className="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Review design"
               >
@@ -121,11 +124,24 @@ export function PrepareScreen({
                 >
                   Stitch playback
                 </Button>
+                <Button
+                  variant={view === "density" ? "default" : "outline"}
+                  onClick={() => setView("density")}
+                >
+                  Density inspection
+                </Button>
               </div>
               {view === "placement" ? (
                 <div className="h-[min(75dvh,720px)] min-h-[400px]">
                   <PatternCanvas />
                 </div>
+              ) : view === "density" ? (
+                <DensityInspector
+                  pattern={prepared.data}
+                  offset={prepared.offset}
+                  hoopWidth={machineInfo?.maxWidth}
+                  hoopHeight={machineInfo?.maxHeight}
+                />
               ) : (
                 <StitchPlayback
                   pattern={prepared.data}

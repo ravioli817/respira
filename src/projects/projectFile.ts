@@ -1,5 +1,5 @@
 export interface ProjectData {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
   activeLayerId?: string;
   layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
@@ -39,11 +39,30 @@ export interface ProjectData {
     align?: "left" | "center" | "right";
   };
 }
+export interface ObjectStitchSettings {
+  fillUnderlay: "none" | "tatami" | "edge" | "edge-tatami";
+  satinUnderlay:
+    | "none"
+    | "center"
+    | "edge"
+    | "zigzag"
+    | "center-edge"
+    | "center-zigzag";
+  fillPullMm: number;
+  satinPullMm: number;
+  underlayInsetMm: number;
+  underlaySpacingMm: number;
+  underlayStitchMm: number;
+  fillSpacing: number;
+  fillAngle: number;
+  satinSpacingMm: number;
+}
 export type DesignLayer = {
   id: string;
   name: string;
   visible: boolean;
   transform: { x: number; y: number; scale: number; rotation: number };
+  stitchSettings?: ObjectStitchSettings;
 } & (
   | { kind: "draw"; source: ProjectData["draw"] }
   | { kind: "image"; source: ProjectData["image"] }
@@ -114,6 +133,36 @@ const array = (v: unknown, max: number): unknown[] =>
   Array.isArray(v) && v.length <= max ? v : fail();
 const color = (v: unknown) => number(v, 1, 63, true);
 
+export function validateStitchSettings(value: unknown): ObjectStitchSettings {
+  const s = object(value);
+  if (
+    !["none", "tatami", "edge", "edge-tatami"].includes(
+      String(s.fillUnderlay),
+    ) ||
+    ![
+      "none",
+      "center",
+      "edge",
+      "zigzag",
+      "center-edge",
+      "center-zigzag",
+    ].includes(String(s.satinUnderlay))
+  )
+    return fail();
+  return {
+    fillUnderlay: s.fillUnderlay as ObjectStitchSettings["fillUnderlay"],
+    satinUnderlay: s.satinUnderlay as ObjectStitchSettings["satinUnderlay"],
+    fillPullMm: number(s.fillPullMm, 0, 1),
+    satinPullMm: number(s.satinPullMm, 0, 1),
+    underlayInsetMm: number(s.underlayInsetMm, 0.1, 2),
+    underlaySpacingMm: number(s.underlaySpacingMm, 0.8, 4),
+    underlayStitchMm: number(s.underlayStitchMm, 0.5, 4),
+    fillSpacing: number(s.fillSpacing, 0.25, 2),
+    fillAngle: number(s.fillAngle, 0, 180),
+    satinSpacingMm: number(s.satinSpacingMm, 0.3, 1),
+  };
+}
+
 /** Reconstruct only known fields. Imported files never supply live engine state or HTML. */
 export function validateProject(value: unknown): ProjectData {
   const s = object(value),
@@ -122,7 +171,7 @@ export function validateProject(value: unknown): ProjectData {
     t = object(s.text),
     settings = object(s.settings);
   if (
-    (s.v !== 1 && s.v !== 2) ||
+    (s.v !== 1 && s.v !== 2 && s.v !== 3) ||
     !["draw", "image", "text"].includes(String(s.mode))
   )
     return fail();
@@ -223,7 +272,7 @@ export function validateProject(value: unknown): ProjectData {
         : {}),
     },
   };
-  if (s.v === 2) {
+  if (s.v === 2 || s.v === 3) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
       const l = object(value),
@@ -248,6 +297,9 @@ export function validateProject(value: unknown): ProjectData {
         kind,
         source,
         visible: bool(l.visible),
+        ...(l.stitchSettings === undefined
+          ? {}
+          : { stitchSettings: validateStitchSettings(l.stitchSettings) }),
         transform: {
           x: number(tr.x, -100, 100),
           y: number(tr.y, -100, 100),
@@ -318,7 +370,7 @@ export function importProject(text: string): ProjectData {
   const file = object(parsed);
   if (
     file.format !== "respira-project" ||
-    (file.version !== 1 && file.version !== 2) ||
+    (file.version !== 1 && file.version !== 2 && file.version !== 3) ||
     object(file.data).v !== file.version
   )
     return fail();

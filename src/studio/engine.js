@@ -1,3 +1,4 @@
+import { columnUnderlay, maskContours } from './underlay.js';
 /* Stitch engine: turns filled areas and pen strokes into embroidery stitches,
    and writes Brother PES (v1) and Tajima DST files. No DOM access in here.
    Plain JavaScript on purpose (it started life as the single-file Stitch Sketchbook); types are in engine.d.ts. */
@@ -200,13 +201,20 @@ const holder = {};
       var px = Math.floor(x / res), py = Math.floor(y / res);
       return px >= 0 && py >= 0 && px < W && py < H && tolerant[py * W + px] === 1;
     };
-    if (s.underlay) {
-      var inner = erode(mask, W, H, 2);
-      var u = fillChains(inner, W, H, res, { angle: s.angle + 90, spacing: 2.0, pull: 0, minRun: 1.2, minOverlap: 0.6 });
-      var up = orderChains(u.chains, pos, { stitchLen: 3.0, minEnd: 0.6, tatami: false }, u.ca, u.sa);
+    var fillMode = s.fillUnderlay ?? (s.underlay ? 'tatami' : 'none');
+    var inner = erode(mask, W, H, Math.ceil((s.underlayInsetMm ?? 0.4) / res));
+    if (fillMode.includes('edge')) {
+      maskContours(inner, W, H, res).forEach(function (contour) {
+        var points = resample(contour, s.underlayStitchMm ?? 2).map(function (p) { return p.slice(0,2); });
+        if (points.length > 1) { out.push({ pts: points, inside: inside }); pos=points[points.length-1]; }
+      });
+    }
+    if (fillMode.includes('tatami')) {
+      var u = fillChains(inner, W, H, res, { angle: s.angle + 90, spacing: s.underlaySpacingMm ?? 2.0, pull: 0, minRun: 1.2, minOverlap: 0.6 });
+      var up = orderChains(u.chains, pos, { stitchLen: s.underlayStitchMm ?? 3.0, minEnd: 0.6, tatami: false }, u.ca, u.sa);
       for (var i = 0; i < up.length; i++) { out.push({ pts: up[i], inside: inside }); pos = up[i][up[i].length - 1]; }
     }
-    var t = fillChains(mask, W, H, res, { angle: s.angle, spacing: s.spacing, pull: 0.15, minRun: 0.5, minOverlap: 0.25 });
+    var t = fillChains(mask, W, H, res, { angle: s.angle, spacing: s.spacing, pull: s.fillPullMm ?? 0.15, minRun: 0.5, minOverlap: 0.25 });
     var tp = orderChains(t.chains, pos, { stitchLen: s.stitchLen, minEnd: 0.8, tatami: true }, t.ca, t.sa);
     for (var j = 0; j < tp.length; j++) out.push({ pts: tp[j], inside: inside });
     return out;
@@ -264,7 +272,15 @@ const holder = {};
     if (P.length < 2) return [];
     var path = [];
     var underlay = s.underlay !== false && avgW >= 1.8;
-    if (underlay) {
+    if (s.satinUnderlay !== undefined) {
+      var rails = P.map(function (p, i) {
+        var a=P[Math.max(0,i-2)], b=P[Math.min(P.length-1,i+2)], dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy)||1;
+        var half=Math.min(6.5,Math.max(1,p[2]))/2;
+        return [p[0]-dy/length*half,p[1]+dx/length*half,p[0]+dy/length*half,p[1]-dx/length*half];
+      });
+      path=columnUnderlay(rails,{mode:s.satinUnderlay,inset:s.underlayInsetMm,spacing:s.underlaySpacingMm,stitchLength:s.underlayStitchMm});
+      if(path.length && dist(path[path.length-1],P[P.length-1])<dist(path[path.length-1],P[0]))P=P.slice().reverse();
+    } else if (underlay) {
       var every = Math.max(1, Math.round(2.0 / hs));
       for (i = 0; i < P.length; i += every) path.push([P[i][0], P[i][1]]);
       var e = P[P.length - 1];
@@ -279,7 +295,7 @@ const holder = {};
         var a = Q[Math.max(0, i - 2)], b = Q[Math.min(n - 1, i + 2)];
         var tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1;
         tx /= tl; ty /= tl;
-        var w = Math.min(6.5, Math.max(1.0, Q[i][2])) + 0.2;
+        var w = Math.min(6.5, Math.max(1.0, Q[i][2])) + 2 * (s.satinPullMm ?? 0.1);
         var si = parity++ % 2, side = si === 0 ? 1 : -1;
         var c = [Q[i][0] - ty * side * w / 2, Q[i][1] + tx * side * w / 2];
         var L = last[si];
