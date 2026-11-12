@@ -91,7 +91,7 @@ export const emptyProject = (): ProjectData => ({
   },
   image: { sizeMM: 80, k: 4, removeBg: true, clean: 2 },
   text: {
-    value: "Hello",
+    value: "Bharti",
     font: "SmallSatin",
     widthMM: 80,
     color: 5,

@@ -180,7 +180,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   expect(saved.layers.at(-1).transform.y).toBe(30);
   button("#layer-earlier").click();
   expect(studio.snapshot().layers[1].id).toBe(saved.activeLayerId);
-  button("#layer-undo").click();
+  button("#undo").click();
   expect(studio.snapshot().layers.map((l) => l.id)).toEqual(
     saved.layers.map((l) => l.id),
   );
@@ -322,11 +322,11 @@ it("keeps a burst of typing as one undo step, so earlier edits stay undoable", a
   await vi.advanceTimersByTimeAsync(250);
   expect(studio.snapshot().layers.at(-1).source.value).toBe("aaaaaaaaaaaa");
 
-  button("#layer-undo").click(); // the typing
-  expect(studio.snapshot().layers.at(-1).source.value).toBe("Hello");
-  button("#layer-undo").click(); // the text object
+  button("#undo").click(); // the typing
+  expect(studio.snapshot().layers.at(-1).source.value).toBe("Bharti");
+  button("#undo").click(); // the text object
   expect(studio.snapshot().layers).toHaveLength(layersBefore);
-  button("#layer-undo").click(); // the shape
+  button("#undo").click(); // the shape
   expect(strokes()).toBe(before);
 });
 
@@ -337,7 +337,7 @@ it("starts a new undo step after a pause or once a control reports its final val
   vi.advanceTimersByTime(2000);
   input("#txt", "One two");
   await vi.advanceTimersByTimeAsync(250);
-  button("#layer-undo").click();
+  button("#undo").click();
   expect(value()).toBe("One");
 
   // A slider drag is one step; letting go ("change") closes it.
@@ -347,9 +347,9 @@ it("starts a new undo step after a pause or once a control reports its final val
   for (const v of ["20", "25"]) input("#layer-y", v);
   await vi.advanceTimersByTimeAsync(250);
   expect(y()).toBe(25);
-  button("#layer-undo").click();
+  button("#undo").click();
   expect(y()).toBe(15);
-  button("#layer-undo").click();
+  button("#undo").click();
   expect(y()).toBe(0);
 });
 
@@ -373,7 +373,9 @@ it("recolors only the selected drawing, supports one-step undo/redo and survives
   const original = studio.snapshot().layers[0];
   button("#layer-duplicate").click();
   const copyId = studio.snapshot().activeLayerId;
-  root.querySelector('#draw-palette [aria-label="Blue, thread 2"]').click();
+  root
+    .querySelector('#draw-palette-bench [aria-label="Blue, thread 2"]')
+    .click();
   button("#recolor-drawing").click();
   await vi.advanceTimersByTimeAsync(60);
   const saved = studio.snapshot(),
@@ -385,14 +387,14 @@ it("recolors only the selected drawing, supports one-step undo/redo and survives
       .every((c) => c === 0 || c === 2),
   ).toBe(true);
   expect(saved.layers[0].source).toEqual(original.source);
-  button("#layer-undo").click();
+  button("#undo").click();
   expect(
     studio
       .snapshot()
       .layers.find((l) => l.id === copyId)
       .source.strokes.map((s) => s.c),
   ).toEqual(original.source.strokes.map((s) => s.c));
-  button("#layer-redo").click();
+  button("#redo").click();
   expect(
     studio.snapshot().layers.find((l) => l.id === copyId).source.strokes,
   ).toEqual(copy.source.strokes);
@@ -447,4 +449,185 @@ it("shows a non-blocking named picture warning and clears it when the picture is
   await vi.advanceTimersByTimeAsync(60);
   expect(button("#note").textContent).not.toContain("Fine logo");
   expect(button("#send").disabled).toBe(false);
+});
+
+it("starts in Select, exposes only the selected object's properties and uses Bharti for new text", () => {
+  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("true");
+  button("#add-text-layer").click();
+  expect(button("#txt").value).toBe("Bharti");
+  expect(button("#panel-text").hidden).toBe(false);
+  expect(button("#panel-draw").hidden).toBe(true);
+  button("#add-draw-layer").click();
+  expect(button("#selection-box").hidden).toBe(true);
+  button("#move-layer").click();
+  expect(button("#selection-box").hidden).toBe(false);
+  expect(button("#panel-text").hidden).toBe(true);
+  expect(button("#panel-draw").hidden).toBe(false);
+});
+
+it("collapses portrait panels independently and restores docks on rotation", () => {
+  studio.destroy();
+  const media = new EventTarget();
+  media.matches = true;
+  vi.stubGlobal("matchMedia", () => media);
+  studio = mountStudio(root, { onSend });
+  expect(button("#objects-panel").hidden).toBe(true);
+  expect(button("#properties-panel").hidden).toBe(true);
+  button("#toggle-objects").click();
+  expect(button("#objects-panel").hidden).toBe(false);
+  button("#toggle-properties").click();
+  expect(button("#objects-panel").hidden).toBe(true);
+  expect(button("#properties-panel").hidden).toBe(false);
+  button("#close-properties").click();
+  expect(button("#toggle-properties").getAttribute("aria-expanded")).toBe(
+    "false",
+  );
+  expect(document.activeElement).toBe(button("#toggle-properties"));
+  const event = new Event("change");
+  Object.assign(event, { matches: false });
+  media.dispatchEvent(event);
+  expect(button("#objects-panel").hidden).toBe(false);
+  expect(button("#properties-panel").hidden).toBe(false);
+});
+
+it("inserts a toolbar shape as a separate editable object with one undo step", () => {
+  const before = studio.snapshot();
+  button("#shape-tool").click();
+  button("#shape-kind").value = "rectangle";
+  button("#add-shape").click();
+  const after = studio.snapshot();
+  expect(after.layers.length).toBe(before.layers.length + 1);
+  expect(after.layers.at(-1).source.strokes).toHaveLength(1);
+  expect(after.layers[0].source).toEqual(before.layers[0].source);
+  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("true");
+  button("#undo").click();
+  expect(studio.snapshot().layers).toEqual(before.layers);
+});
+
+it("updates rotated dimensions, regenerates resized output and keeps the edit through reopen", async () => {
+  button("#shape-tool").click();
+  button("#shape-kind").value = "rectangle";
+  button("#shape-width").value = "30";
+  button("#shape-height").value = "20";
+  button("#add-shape").click();
+  input("#layer-rotation", "90");
+  await vi.advanceTimersByTimeAsync(70);
+  expect(+button("#object-width").value).toBeCloseTo(20);
+  expect(+button("#object-height").value).toBeCloseTo(30);
+  const before = studio.snapshot();
+  button("#object-width").value = "24";
+  button("#object-width").dispatchEvent(new Event("change", { bubbles: true }));
+  expectBlocked();
+  await vi.advanceTimersByTimeAsync(70);
+  expect(+button("#object-height").value).toBeCloseTo(36);
+  expect(studio.snapshot().layers.at(-1).transform.scale).toBeCloseTo(1.2);
+  button("#send").click();
+  const output = onSend.mock.calls.at(-1)[0];
+  const saved = studio.snapshot();
+  button("#undo").click();
+  expect(studio.snapshot().layers).toEqual(before.layers);
+  button("#redo").click();
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  await vi.advanceTimersByTimeAsync(70);
+  button("#send").click();
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(output.stitches);
+});
+
+it("groups corner drag resizing into one undo step and ignores a second pointer", async () => {
+  button("#shape-tool").click();
+  button("#shape-kind").value = "rectangle";
+  button("#shape-width").value = "30";
+  button("#shape-height").value = "20";
+  button("#add-shape").click();
+  await vi.advanceTimersByTimeAsync(70);
+  const before = studio.snapshot();
+  vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+  });
+  const pointer = (target, type, x, y, id = 1) => {
+    const e = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+    Object.defineProperty(e, "pointerId", { value: id });
+    target.dispatchEvent(e);
+  };
+  pointer(root.querySelector('[data-corner="se"]'), "pointerdown", 65, 60);
+  pointer(button("#overlay"), "pointermove", 95, 80, 2);
+  expect(studio.snapshot().layers).toEqual(before.layers);
+  pointer(button("#overlay"), "pointermove", 68, 62);
+  pointer(button("#overlay"), "pointermove", 71, 64);
+  pointer(button("#overlay"), "pointerup", 71, 64);
+  expect(studio.snapshot().layers.at(-1).transform.scale).toBeCloseTo(1.2);
+  button("#undo").click();
+  expect(studio.snapshot().layers).toEqual(before.layers);
+});
+
+it("keeps zoom, pan and panel changes out of artwork history and prepared placement", () => {
+  studio.setPlacement({ x: 10, y: 20, rotation: 15 });
+  const before = studio.snapshot();
+  input("#canvas-zoom", "200");
+  button("#pan-canvas").click();
+  const event = (type, x, y) =>
+    button("#overlay").dispatchEvent(
+      new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
+    );
+  event("pointerdown", 20, 20);
+  event("pointermove", 40, 40);
+  event("pointerup", 40, 40);
+  button("#grid-toggle").click();
+  button("#toggle-properties").click();
+  expect(studio.snapshot()).toEqual(before);
+  expect(button("#undo").disabled).toBe(true);
+  expect(button("#selection-box").hidden).toBe(true);
+  button("#move-layer").click();
+  expect(button("#pan-canvas").getAttribute("aria-pressed")).toBe("false");
+  button("#size-fit").click();
+  expect(button("#canvas-zoom").value).toBe("100");
+});
+
+it("draws only after choosing Draw, then returns to object selection", async () => {
+  const before = studio.snapshot().draw.strokes.length;
+  vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+  });
+  const event = (type, x, y) =>
+    button("#overlay").dispatchEvent(
+      new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
+    );
+  event("pointerdown", 5, 5);
+  event("pointermove", 15, 15);
+  event("pointerup", 15, 15);
+  expect(studio.snapshot().draw.strokes.length).toBe(before);
+  button("#add-draw-layer").click();
+  event("pointerdown", 5, 5);
+  event("pointermove", 15, 15);
+  event("pointerup", 15, 15);
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().draw.strokes.length).toBe(before + 1);
+  button("#move-layer").click();
+  expect(button("#selection-box").hidden).toBe(false);
+  button("#undo").click();
+  expect(studio.snapshot().draw.strokes.length).toBe(before);
+});
+
+it("does not create an empty drawing when opening or cancelling Shape from a text-only project", () => {
+  button("#add-text-layer").click();
+  const saved = studio.snapshot();
+  saved.layers = saved.layers.filter((l) => l.id === saved.activeLayerId);
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  const before = studio.snapshot();
+  button("#shape-tool").click();
+  expect(studio.snapshot().layers).toEqual(before.layers);
+  button("#cancel-shape").click();
+  expect(studio.snapshot().layers).toEqual(before.layers);
+  button("#shape-tool").click();
+  button("#add-shape").click();
+  expect(studio.snapshot().layers).toHaveLength(2);
+  expect(studio.snapshot().layers.at(-1).source.strokes).toHaveLength(1);
 });

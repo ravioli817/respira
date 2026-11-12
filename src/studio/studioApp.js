@@ -5,7 +5,7 @@ import { StitchEngine as E } from './engine.js';
 import { drawingColors, recolorDrawing } from './recolor.js';
 import { pictureDetailWarnings } from './pictureWarnings.js';
 import { engineSettings, stitchDefaults } from './stitchSettings.js';
-import { hitTestLayer } from './selection.js';
+import { hitTestLayer, designBounds, scaleAbout, resizeFromCorner } from './selection.js';
 import { transformPoint, transformDesign, composePlans, identityTransform } from './composition.js';
 import { letteringDesign, EMBROIDERY_FONT, FONT_LICENSE } from './lettering.js';
 import { shapePoints } from './shapes.js';
@@ -24,11 +24,11 @@ export function mountStudio(root, opts) {
   var $ = function (s) { return root.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(root.querySelectorAll(s)); };
   var cleanups = [];
-  var destroyed = false, loadedProject = null, moveDrawing = false;
+  var destroyed = false, loadedProject = null, moveDrawing = true;
   function listen(target, type, fn, o) { target.addEventListener(type, fn, o); cleanups.push(function () { target.removeEventListener(type, fn, o); }); }
   function shown() { return holder.getClientRects().length > 0; }
 
-  var CURATED = [20, 29, 23, 39, 16, 5, 28, 48, 25, 43, 27, 51, 62, 52, 13, 58, 14, 37, 54, 44, 3, 32, 2, 21, 1, 55, 9, 45, 26, 24, 47];
+  var CURATED = [20, 29, 5, 43, 13, 37, 2, 55];
   var ALL = []; for (var ti = 1; ti < 64; ti++) ALL.push(ti);
   var FABRICS = [['#FFFFFF', 'White'], ['#E9E1CF', 'Natural linen'], ['#B8BCC4', 'Heather gray'], ['#1F2944', 'Navy'], ['#181818', 'Black']];
   var FONTS = {
@@ -55,15 +55,16 @@ export function mountStudio(root, opts) {
     mode: 'draw',
     view: { draw: 'design', image: 'stitches', text: 'stitches' },
     fabric: '#FFFFFF',
-    hoop: { real: true, pxmm: null },     // pxmm: CSS px per mm once the size was checked against a card
+    hoop: { real: false, pxmm: null },     // pxmm: CSS px per mm once the size was checked against a card
     settings: { spacing: 0.4, angle: 45, underlay: true },
     draw: { tool: 'satin', color: 37, sizes: { satin: 3, brush: 6, eraser: 6 }, pressure: true, strokes: [], labels: new Uint8Array(GRID * GRID), order: [], example: false },
     image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [] },
-    text: { value: 'Hello', font: 'SmallSatin', widthMM: 80, color: 5, heightMM: 8, letterSpacing: 0.5, lineGap: 2, align: 'center' },
+    text: { value: 'Bharti', font: 'SmallSatin', widthMM: 80, color: 5, heightMM: 8, letterSpacing: 0.5, lineGap: 2, align: 'center' },
     name: '', nameAuto: true, placement: undefined,
     design: null, parts: [], layers: [], activeId: null, plan: null, stats: null, note: ''
   };
   var undoStack = [], redoStack = [];
+  var objectBounds = new Map(), zoom = 1, showGrid = true, panCanvas = false;
 
   // ---------- helpers ----------
   function rgb(i) { var c = PEC[i]; return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
@@ -146,20 +147,23 @@ export function mountStudio(root, opts) {
   function pxPerMM() { return S.hoop.pxmm || sizeGuess.v; }
   function applyHoopSize() {
     var need = Math.round(HOOP * pxPerMM()) + 22;       // the hoop's rim is 11 px each side
-    var room = stageCol.clientWidth;
-    var real = S.hoop.real && (!room || need <= room + 1);
+    var viewport = $('#canvas-viewport');
+    var room = Math.min(viewport.clientWidth - 32, viewport.clientHeight - 32);
+    var fit = Math.max(100, room || 400);
+    $('.hoop').style.width = ((S.hoop.real ? Math.min(need, fit) : fit) * zoom) + 'px';
+    var real = S.hoop.real && zoom === 1 && (!room || need <= room + 1);
     stageCol.classList.toggle('real', real);
     stageCol.style.setProperty('--real-w', need + 'px');
     $('#size-real').setAttribute('aria-pressed', String(S.hoop.real));
     $('#size-fit').setAttribute('aria-pressed', String(!S.hoop.real));
-    $('#size-note').textContent = !S.hoop.real ? 'Scaled to fit the screen.'
+    $('#size-note').textContent = zoom!==1 ? 'Zoomed preview · use Pan to move around the hoop.' : !S.hoop.real ? 'Scaled to fit the screen.'
       : !real ? 'This screen is too small for real size, so the hoop is scaled to fit.'
       : (S.hoop.pxmm || sizeGuess.sure) ? 'Real size: the hoop is 100 mm (4 in) across, the same as on the machine.'
       : 'Real size is an estimate on this screen.';
     $('#size-check').hidden = !S.hoop.real;
   }
-  $('#size-real').addEventListener('click', function () { S.hoop.real = true; applyHoopSize(); scheduleSave(); });
-  $('#size-fit').addEventListener('click', function () { S.hoop.real = false; applyHoopSize(); scheduleSave(); });
+  $('#size-real').addEventListener('click', function () { S.hoop.real = true; resetZoom(); applyHoopSize(); scheduleSave(); });
+  $('#size-fit').addEventListener('click', function () { S.hoop.real = false; resetZoom(); applyHoopSize(); scheduleSave(); });
   function showRuler(v) {
     var o = $('#ruler-outline');
     o.style.width = (85.6 * v) + 'px'; o.style.height = (53.98 * v) + 'px';   // a bank card is 85.60 x 53.98 mm
@@ -171,7 +175,7 @@ export function mountStudio(root, opts) {
   $('#ruler-reset').addEventListener('click', function () { S.hoop.pxmm = null; showRuler(sizeGuess.v); });
   $('#ruler-done').addEventListener('click', closeRuler);
   $('#ruler').addEventListener('click', function (e) { if (e.target === $('#ruler')) closeRuler(); });
-  if (window.ResizeObserver) { var roCol = new ResizeObserver(applyHoopSize); roCol.observe(stageCol); cleanups.push(function () { roCol.disconnect(); }); }
+  if (window.ResizeObserver) { var roCol = new ResizeObserver(applyHoopSize); roCol.observe($('#canvas-viewport')); cleanups.push(function () { roCol.disconnect(); }); }
 
   if (window.ResizeObserver) { var ro = new ResizeObserver(resizeStage); ro.observe(stage); cleanups.push(function () { ro.disconnect(); }); }
   listen(window, 'resize', resizeStage);
@@ -198,10 +202,11 @@ export function mountStudio(root, opts) {
     var ctx = bctx, W = base.width;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = S.fabric; ctx.fillRect(0, 0, W, W);
-    drawGrid(ctx, W);
+    if(showGrid) drawGrid(ctx, W);
     if (currentView() === 'design') drawDesign(ctx);
     else drawStitches(ctx);
     drawCenter(ctx);
+    renderSelection();
   }
   function drawGrid(ctx, W) {
     var dark = lum(S.fabric) < 0.45;
@@ -343,7 +348,8 @@ export function mountStudio(root, opts) {
     }
   }
   over.addEventListener('pointerdown', function (e) {
-    if (active) return;
+    if (active || (e.button && e.button !== 0)) return;
+    if(panCanvas){e.preventDefault();var viewport=$('#canvas-viewport');active={id:e.pointerId,pan:true,x:e.clientX,y:e.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};try{over.setPointerCapture(e.pointerId);}catch(err){}return;}
     if(S.mode!=='draw' || moveDrawing) {
       var rect=over.getBoundingClientRect(), hit=hitTestLayer(S.parts,[(e.clientX-rect.left)/rect.width*100,(e.clientY-rect.top)/rect.height*100]);
       if(!hit)return;
@@ -365,13 +371,21 @@ export function mountStudio(root, opts) {
   over.addEventListener('pointermove', function (e) {
     if (!active || e.pointerId !== active.id) return;
     e.preventDefault();
+    if(active.pan){var viewport=$('#canvas-viewport');viewport.scrollLeft=active.left-(e.clientX-active.x);viewport.scrollTop=active.top-(e.clientY-active.y);return;}
+    if(active.resize){
+      if(!active.changed){if(Math.hypot(e.clientX-active.x,e.clientY-active.y)<2)return;pushUndo();active.changed=true;}
+      var box=over.getBoundingClientRect();
+      currentLayer().transform=resizeFromCorner(active.transform,active.bounds,active.corner,[(e.clientX-box.left)/box.width*100,(e.clientY-box.top)/box.height*100]);
+      S.placement=undefined;syncLayers();updateDesign();return;
+    }
     if(active.move){if(!active.changed){if(Math.hypot(e.clientX-active.x,e.clientY-active.y)<2)return;pushUndo();active.changed=true;}var r=over.getBoundingClientRect();currentLayer().transform.x=clamp(active.transform.x+(e.clientX-active.x)/r.width*100,-100,100);currentLayer().transform.y=clamp(active.transform.y+(e.clientY-active.y)/r.height*100,-100,100);syncLayers();updateDesign();return;}
     var list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
     if (list && list.length) list.forEach(addPoint); else addPoint(e);
   });
   function endStroke(e) {
     if (!active || e.pointerId !== active.id) return;
-    if(active.move){var changed=active.changed;active=null;if(changed){S.placement=undefined;scheduleSave();}return;}
+    if(active.pan){active=null;return;}
+    if(active.move||active.resize){var changed=active.changed;active=null;if(changed){S.placement=undefined;scheduleSave();}return;}
     var pts = active.pts; active = null;
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, over.width, over.height);
     if (pts.length) commitStroke(pts);
@@ -466,7 +480,7 @@ export function mountStudio(root, opts) {
   holder.addEventListener('change', endUndoGroup);
   function undo() { if (!undoStack.length) return; endUndoGroup(); redoStack.push(snap()); restore(undoStack.pop()); afterDrawChange(); }
   function redo() { if (!redoStack.length) return; endUndoGroup(); undoStack.push(snap()); restore(redoStack.pop()); afterDrawChange(); }
-  function syncHistory() { ['#undo','#layer-undo'].forEach(function(id){$(id).disabled=!undoStack.length;}); ['#redo','#layer-redo'].forEach(function(id){$(id).disabled=!redoStack.length;}); }
+  function syncHistory() { ['#undo'].forEach(function(id){$(id).disabled=!undoStack.length;}); ['#redo'].forEach(function(id){$(id).disabled=!redoStack.length;}); }
 
   var clearArmed = null;
   $('#clear').addEventListener('click', function () {
@@ -776,7 +790,13 @@ export function mountStudio(root, opts) {
     function ready() {
       if (collecting || pending || token !== textToken || destroyed) return;
       try {
+        parts.filter(Boolean).forEach(function(part){
+          var b=designBounds(part.design); if(!b){objectBounds.delete(part.layer.id);return;}
+          var t=part.layer.transform, corners=[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map(function(p){return transformPoint(p,t);});
+          objectBounds.set(part.layer.id,[Math.min(...corners.map(p=>p[0])),Math.min(...corners.map(p=>p[1])),Math.max(...corners.map(p=>p[0])),Math.max(...corners.map(p=>p[1]))]);
+        });
         S.parts = parts.filter(Boolean).map(function (part) { return { layer: part.layer, design: transformDesign(part.design, part.layer.transform) }; });
+        S.parts.forEach(function(part){objectBounds.set(part.layer.id,designBounds(part.design));});
         S.note = [S.note].concat(pictureDetailWarnings(S.parts)).filter(Boolean).join('\n');
         S.design = { labels: new Uint8Array(GRID * GRID), lines: [] };
         designReady();
@@ -842,7 +862,7 @@ export function mountStudio(root, opts) {
     syncDrawingRecolor();
     S.placement = undefined;
     syncHistory();
-    $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example);
+    $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     updateDesign();
     scheduleSave();
   }
@@ -883,7 +903,7 @@ export function mountStudio(root, opts) {
   function freshSource(kind) {
     if (kind === 'draw') return { tool:'satin',color:37,sizes:{satin:3,brush:6,eraser:6},pressure:true,order:[],example:false,labels:new Uint8Array(GRID*GRID),strokes:[] };
     if (kind === 'image') return { source:null, fileName:'', sizeMM:50,k:4,removeBg:true,clean:2,proc:null,clusters:[] };
-    return { value:'Hello',font:EMBROIDERY_FONT,widthMM:60,color:5,heightMM:8,letterSpacing:0.5,lineGap:2,align:'center' };
+    return { value:'Bharti',font:EMBROIDERY_FONT,widthMM:60,color:5,heightMM:8,letterSpacing:0.5,lineGap:2,align:'center' };
   }
   // "Drawing", then "Drawing 2", "Drawing 3": two objects of one kind must be told apart in the list.
   function layerName(kind) {
@@ -899,15 +919,16 @@ export function mountStudio(root, opts) {
     // Finish queued processing on its original source before rebinding controls.
     clearTimeout(txtTimer); clearTimeout(imgTimer);
     if(S.mode==='image' && S.image.source) processImage(S.image);
-    S.activeId = id; endUndoGroup();
+    if(S.activeId!==id) $('#properties-panel').scrollTop=0;
+    setPan(false);$('.shape-tools').hidden=true;S.activeId = id; endUndoGroup();
     var layer = currentLayer(); if (!layer) return;
     lastOfKind[layer.kind] = id;
     S.mode = layer.kind; S[S.mode] = layer.source;
     if (S.mode === 'image' && S.image.source) processImage(S.image);
     ['draw','image','text'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
-    $('#toolbar').hidden = S.mode !== 'draw'; $('#draw-threads').hidden = S.mode !== 'draw';
-    stage.classList.toggle('drawing', S.mode === 'draw');
-    $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example);
+    $('#toolbar').hidden = S.mode !== 'draw'; $('#clear').hidden = S.mode !== 'draw';
+    stage.classList.toggle('drawing', S.mode === 'draw' && !moveDrawing);
+    $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#pressure').checked = S.draw.pressure;
     setTool(S.draw.tool); syncThreadName(); drawPalettes.forEach(function (p) { p.draw(); });
     $('#img-size').value=S.image.sizeMM; $('#img-size-out').textContent=S.image.sizeMM+' mm';
@@ -933,17 +954,19 @@ export function mountStudio(root, opts) {
     $('#add-draw-layer').setAttribute('aria-pressed',String(S.mode==='draw'&&!moveDrawing));
     $('#move-layer').setAttribute('aria-pressed',String(S.mode!=='draw'||moveDrawing));
     $('#editing-object').textContent=selected ? 'Editing: '+selected.name : '';
-    $('#editing-object').hidden=S.layers.length<2; // with one object there is nothing to tell apart
+    $('#editing-object').hidden=false;
+    stage.classList.toggle('drawing', S.mode === 'draw' && !moveDrawing);
+    $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#object-count').textContent='('+S.layers.length+')';
     var list=$('#layers'); list.innerHTML='';
-    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (excluded)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){selectLayer(layer.id);}); list.appendChild(button); });
+    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (excluded)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){moveDrawing=true;selectLayer(layer.id);}); list.appendChild(button); });
     if(!selected) return;
-    $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
-    $('#layer-x').value=selected.transform.x; $('#layer-y').value=selected.transform.y;
+    if(root.activeElement!==$('#layer-name') && document.activeElement!==$('#layer-name')) $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
+    $('#layer-x').value=+selected.transform.x.toFixed(2); $('#layer-y').value=+selected.transform.y.toFixed(2);
     $('#layer-size').value=Math.round(selected.transform.scale*100); $('#layer-rotation').value=selected.transform.rotation;
     $('#layer-remove').disabled=S.layers.length===1;
     $('#layer-earlier').disabled=S.layers[0]===selected; $('#layer-later').disabled=S.layers[S.layers.length-1]===selected;
-    syncHistory();
+    syncHistory(); renderSelection();
   }
 
   function syncView() {
@@ -976,7 +999,7 @@ export function mountStudio(root, opts) {
     }
     scheduleSave();
   }
-  $$('.tool').forEach(function (b) { b.addEventListener('click', function () { setTool(b.dataset.tool); }); });
+  $$('.tool').forEach(function (b) { b.addEventListener('click', function () { moveDrawing=false;setTool(b.dataset.tool);syncLayers();render(); }); });
   $('#size').addEventListener('input', function (e) {
     var t = S.draw.tool; if (!SIZE_CFG[t]) return;
     S.draw.sizes[t] = +e.target.value;
@@ -987,7 +1010,6 @@ export function mountStudio(root, opts) {
 
   var drawPalettes = [];
   function pickDrawColor(i) { S.draw.color = i; syncThreadName(); syncDrawingRecolor(); drawPalettes.forEach(function (p) { p.draw(); }); scheduleSave(); }
-  drawPalettes.push(Palette($('#draw-palette'), function () { return S.draw.color; }, pickDrawColor));
   drawPalettes.push(Palette($('#draw-palette-bench'), function () { return S.draw.color; }, pickDrawColor));
   function syncThreadName() { $$('.thread-name').forEach(function (el) { el.textContent = threadName(S.draw.color) + ' · #' + S.draw.color; }); }
 
@@ -1015,7 +1037,7 @@ export function mountStudio(root, opts) {
     if (!f) return;
     if(asNew && S.layers.length>=20){toast('A design can contain up to 20 objects.');e.target.value='';return;}
     pushUndo();
-    if(asNew){var layer=makeLayer('image');S.layers.push(layer);selectLayer(layer.id);}
+    if(asNew){var layer=makeLayer('image');S.layers.push(layer);moveDrawing=true;showPanel('properties');selectLayer(layer.id);}
     invalidateDesign();
     S.placement=undefined;
     var targetImage = S.image; targetImage.loading = true;
@@ -1251,13 +1273,18 @@ export function mountStudio(root, opts) {
     } catch (e) { return false; }
   }
 
+  var shapeAsObject=false;
+  $('#shape-tool').addEventListener('click',function(){showPanel('properties');shapeAsObject=true;$('.shape-tools').hidden=false;$('.shape-tools').open=true;$('#shape-status').textContent='';$('#properties-panel').scrollTop=0;});
+  $('#cancel-shape').addEventListener('click',function(){shapeAsObject=false;$('.shape-tools').hidden=true;$('#shape-tool').focus();});
   // Presets become normal editable drawing strokes/fills, including undo and project saving.
   $('#add-shape').addEventListener('click', function () {
     try {
       var style = $('#shape-style').value, w = +$('#shape-line-width').value;
       var points = shapePoints($('#shape-kind').value, +$('#shape-width').value, +$('#shape-height').value, +$('#shape-x').value, +$('#shape-y').value, style === 'satin' ? w / 2 + 0.3 : 0.3);
       if (!Number.isFinite(w) || w < 1.5 || w > 6) throw new Error('Choose an outline width between 1.5 and 6 mm.');
+      if(shapeAsObject && S.layers.length>=20){toast('A design can contain up to 20 objects.');return;}
       pushUndo();
+      if(shapeAsObject){var shape=makeLayer('draw');shape.source.color=S.draw.color;var name=$('#shape-kind').selectedOptions[0].textContent, number=2;shape.name=name;while(S.layers.some(l=>l.name===shape.name))shape.name=name+' '+number++;S.layers.push(shape);moveDrawing=true;selectLayer(shape.id);shapeAsObject=false;}
       if (style === 'fill') {
         var mask = rasterize(function (ctx, k) { ctx.beginPath(); ctx.moveTo(points[0][0]*k, points[0][1]*k); points.slice(1).forEach(function (p) { ctx.lineTo(p[0]*k,p[1]*k); }); ctx.closePath(); ctx.fill(); });
         for (var i=0; i<mask.length; i++) if (mask[i]) S.draw.labels[i] = S.draw.color;
@@ -1273,18 +1300,18 @@ export function mountStudio(root, opts) {
     pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
     if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
   }
-  $('#add-draw-layer').addEventListener('click',function(){moveDrawing=false;setMode('draw');});
-  $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;addObject('draw');});
+  $('#add-draw-layer').addEventListener('click',function(){setPan(false);moveDrawing=false;setMode('draw');showPanel('properties');});
+  $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;showPanel('properties');addObject('draw');});
   $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
-  $('#add-text-layer').addEventListener('click',function(){addObject('text');});
-  $('#move-layer').addEventListener('click',function(){moveDrawing=true;syncLayers();});
+  $('#add-text-layer').addEventListener('click',function(){moveDrawing=true;showPanel('properties');addObject('text');});
+  $('#move-layer').addEventListener('click',function(){setPan(false);moveDrawing=true;syncLayers();render();});
   $('#layer-name').addEventListener('input',function(e){pushUndo('layer-name');currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
   $('#layer-visible').addEventListener('change',function(e){pushUndo();S.placement=undefined;currentLayer().visible=e.target.checked;syncLayers();updateDesign();scheduleSave();});
   ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo('layer-'+key);S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
   $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
   $('#layer-remove').addEventListener('click',function(){if(S.layers.length<2)return;pushUndo();S.placement=undefined;S.layers=S.layers.filter(function(l){return l.id!==S.activeId;});selectLayer(S.layers[0].id);});
   [-1,1].forEach(function(direction){$(direction===-1?'#layer-earlier':'#layer-later').addEventListener('click',function(){var i=S.layers.indexOf(currentLayer()),j=i+direction;if(j<0||j>=S.layers.length)return;pushUndo();S.placement=undefined;var layer=S.layers.splice(i,1)[0];S.layers.splice(j,0,layer);syncLayers();updateDesign();scheduleSave();});});
-  $('#layer-undo').addEventListener('click',undo); $('#layer-redo').addEventListener('click',redo);
+
 
   function hydrateImages() {
   S.layers.forEach(function(layer){
@@ -1295,6 +1322,50 @@ export function mountStudio(root, opts) {
     image.src=im.sourceDataURL;
   });
   }
+
+
+  // Docked panels in landscape; independent, dismissible drawers in portrait.
+  var compactQuery=window.matchMedia?.('(max-width: 1023px)'), compact=!!compactQuery?.matches;
+  var panels={objects:!compact,properties:!compact};
+  function syncPanels(){
+    ['objects','properties'].forEach(function(name){
+      $('#'+name+'-panel').hidden=!panels[name];
+      $('#toggle-'+name).setAttribute('aria-expanded',String(panels[name]));
+      $('.editor-workspace').classList.toggle('without-'+name,!panels[name]);
+    });
+    applyHoopSize();
+  }
+  function showPanel(name){if(compact)panels={objects:false,properties:false};panels[name]=true;syncPanels();}
+  ['objects','properties'].forEach(function(name){
+    $('#toggle-'+name).addEventListener('click',function(){if(panels[name]){panels[name]=false;syncPanels();}else showPanel(name);});
+    $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-'+name).focus();});
+  });
+  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:!compact,properties:!compact};syncPanels();});
+  listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-'+name).focus();}});
+  function setPan(value){panCanvas=value;$('#pan-canvas').setAttribute('aria-pressed',String(value));stage.classList.toggle('panning',value);renderSelection();}
+  $('#pan-canvas').addEventListener('click',function(){setPan(!panCanvas);});
+  function resetZoom(){zoom=1;$('#canvas-zoom').value=100;$('#zoom-out').textContent='100%';}
+  $('#canvas-zoom').addEventListener('input',function(e){zoom=+e.target.value/100;$('#zoom-out').textContent=e.target.value+'%';applyHoopSize();});
+  $('#grid-toggle').addEventListener('click',function(){showGrid=!showGrid;$('#grid-toggle').setAttribute('aria-pressed',String(showGrid));render();});
+  function renderSelection(force=false){
+    var selected=currentLayer(), bounds=selected&&selected.visible&&objectBounds.get(selected.id), box=$('#selection-box');
+    box.hidden=panCanvas||!bounds||!selected.visible||(S.mode==='draw'&&!moveDrawing);
+    ['width','height'].forEach(function(key,i){var el=$('#object-'+key);el.disabled=!bounds; if(force||(root.activeElement!==el&&document.activeElement!==el))el.value=bounds?Math.max(.1,bounds[i+2]-bounds[i]).toFixed(1):'';});
+    if(box.hidden)return;
+    box.style.left=bounds[0]+'%';box.style.top=bounds[1]+'%';box.style.width=(bounds[2]-bounds[0])+'%';box.style.height=(bounds[3]-bounds[1])+'%';
+  }
+  $$('.resize-handle').forEach(function(handle){handle.addEventListener('pointerdown',function(e){
+    if(active || (e.button&&e.button!==0))return;
+    var bounds=objectBounds.get(S.activeId);if(!bounds)return;e.preventDefault();e.stopPropagation();
+    active={id:e.pointerId,resize:true,changed:false,x:e.clientX,y:e.clientY,corner:handle.dataset.corner,bounds:bounds.slice(),transform:{...currentLayer().transform}};
+    try{over.setPointerCapture(e.pointerId);}catch(err){}
+  });});
+  ['width','height'].forEach(function(key,i){$('#object-'+key).addEventListener('change',function(e){
+    var bounds=objectBounds.get(S.activeId), value=Number(e.target.value), size=bounds&&bounds[i+2]-bounds[i];
+    if(!size||!Number.isFinite(value)||value<=0||value>400){renderSelection(true);return;}
+    pushUndo();currentLayer().transform=scaleAbout(currentLayer().transform,value/size,[(bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2]);
+    S.placement=undefined;syncLayers();updateDesign();renderSelection(true);scheduleSave();
+  });});
 
   // ---------- boot ----------
   var savedMode = loadLocal();
@@ -1323,6 +1394,7 @@ export function mountStudio(root, opts) {
   }
   hydrateImages();
   selectLayer(S.activeId || S.layers[0].id);
+  syncPanels();
   applyHoopSize();
   resizeStage();
 

@@ -1,9 +1,99 @@
 // The Create screen's markup. Mounted into a shadow root by mountStudio().
 export const STUDIO_MARKUP = `
 <main class="studio">
+  <header class="editor-tools" aria-label="Editor toolbar">
+    <div class="canvas-actions" role="group" aria-label="Canvas tools">
+      <button class="btn" id="move-layer" aria-pressed="true">Select</button>
+      <button class="btn" id="add-draw-layer" aria-pressed="false">Draw</button>
+      <button class="btn" id="add-image-layer">Picture</button>
+      <input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas">
+      <button class="btn" id="add-text-layer">Text</button>
+      <button class="btn" id="shape-tool">Shape</button>
+    </div>
+      <div class="history">
+        <button class="icon-btn" id="undo" aria-label="Undo" title="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 4 10l5 5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H12"/></svg>
+        </button>
+        <button class="icon-btn" id="redo" aria-label="Redo" title="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 5 5-5 5"/><path d="M20 10H9.5a5.5 5.5 0 0 0 0 11H12"/></svg>
+        </button>
+        <button class="icon-btn" id="clear">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span id="clear-label">Clear</span>
+        </button>
+      </div>
+    <div class="panel-toggles" role="group" aria-label="Editor panels">
+      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="true">Objects</button>
+      <button class="btn" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Properties</button>
+    </div>
+    <button class="btn-primary" id="send">Prepare to stitch</button>
+  </header>
+  <div class="editor-workspace">
+  <aside class="objects-panel" id="objects-panel" aria-label="Objects and sewing order">
+    <div class="panel-heading"><h2>Objects <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Collapse objects panel">×</button></div>
+    <p class="hint">Sews from first to last</p>
+    <div id="layers" class="layer-list" role="group" aria-label="Select an existing object"></div>
+    <div class="layer-order"><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button></div>
+    <button class="btn" id="new-drawing-object">New drawing object</button>
+    <p class="hint">Overlapping included objects both stitch.</p>
+  </aside>
   <section class="stage-col" aria-label="Hoop">
-    <div class="canvas-actions" role="group" aria-label="Canvas tools"><button class="btn" id="add-draw-layer" aria-pressed="true">Draw</button><button class="btn" id="add-image-layer">Add picture</button><input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas"><button class="btn" id="add-text-layer">Add text</button><button class="btn" id="move-layer" aria-pressed="false">Move</button></div>
-    <p id="editing-object" class="hint" aria-live="polite"></p>
+    <div class="canvas-heading"><span class="mono">100 × 100 mm</span><p id="editing-object" class="hint" aria-live="polite"></p></div>
+    <p class="note" id="note" role="status" hidden></p>
+    <div class="canvas-viewport" id="canvas-viewport">
+
+    <div class="hoop">
+      <div class="field" id="stage">
+        <canvas id="base" aria-hidden="true"></canvas>
+        <canvas id="overlay" role="img" aria-label="Embroidery canvas. Select an object to move or resize it, or choose Draw to add marks."></canvas>
+        <div id="selection-box" class="selection-box" hidden>
+          <button class="resize-handle nw" data-corner="nw" aria-label="Resize object from top left" tabindex="-1"></button>
+          <button class="resize-handle ne" data-corner="ne" aria-label="Resize object from top right" tabindex="-1"></button>
+          <button class="resize-handle sw" data-corner="sw" aria-label="Resize object from bottom left" tabindex="-1"></button>
+          <button class="resize-handle se" data-corner="se" aria-label="Resize object from bottom right" tabindex="-1"></button>
+        </div>
+        <div class="example-tag" id="example-tag" hidden>Example · tap Clear to start your own</div>
+        <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+      </div>
+    </div>
+
+    </div>
+    <div class="meta">
+      <div class="readout mono" id="readout">Nothing to stitch yet</div>
+      <div class="seg small" role="group" aria-label="Show">
+        <button id="view-design" data-view="design" aria-pressed="true">Design</button>
+        <button id="view-stitches" data-view="stitches" aria-pressed="false">Stitches</button>
+      </div>
+      <div class="fabrics" role="group" aria-label="Fabric color for the preview" id="fabrics">
+        <span class="fabric-label">Fabric</span>
+      </div>
+
+    </div>
+    <div class="zoom-row">      <div class="seg small" role="group" aria-label="Hoop size on screen">
+        <button id="size-real" aria-pressed="true">Real size</button>
+        <button id="size-fit" aria-pressed="false">Fit screen</button>
+      </div><button class="btn" id="pan-canvas" aria-pressed="false">Pan</button><button class="btn" id="grid-toggle" aria-pressed="true">Grid</button><label>Zoom <input id="canvas-zoom" type="range" min="50" max="200" step="10" value="100"><output id="zoom-out">100%</output></label></div>
+    <p class="size-line"><span id="size-note"></span><button class="link" id="size-check">Check the size with a card</button></p>
+
+  </section>
+  <aside class="bench" id="properties-panel" aria-label="Selected object properties">
+    <div class="panel-heading"><h2>Properties</h2><button class="icon-btn" id="close-properties" aria-label="Collapse properties panel">×</button></div>
+      <details class="panel shape-tools" hidden>
+        <summary>Add a shape</summary>
+        <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>
+        <div class="shape-grid">
+          <label class="stack">Width (mm)<input id="shape-width" type="number" min="2" max="98" value="30"></label>
+          <label class="stack">Height (mm)<input id="shape-height" type="number" min="2" max="98" value="30"></label>
+          <label class="stack">Center X (mm)<input id="shape-x" type="number" min="0" max="100" value="50"></label>
+          <label class="stack">Center Y (mm)<input id="shape-y" type="number" min="0" max="100" value="50"></label>
+        </div>
+        <label class="stack">Stitch style<select id="shape-style"><option value="run">Line outline</option><option value="satin">Satin outline</option><option value="fill">Filled</option></select></label>
+        <label class="stack">Satin width (mm)<input id="shape-line-width" type="number" min="1.5" max="6" step="0.1" value="3"></label>
+        <p class="hint">Uses the selected thread. X and Y are measured from the top-left of the hoop. Equal width and height make a circle or square.</p>
+        <button class="btn" id="add-shape">Add shape</button><button class="btn" id="cancel-shape">Cancel shape</button>
+        <p id="shape-status" role="status" class="hint"></p>
+      </details>
+    <section class="panel first" id="panel-draw">
+      <h2>Drawing</h2>
     <div class="toolbar" id="toolbar">
       <div class="seg tools" role="group" aria-label="Brush">
         <button class="tool" id="tool-line" data-tool="line" aria-pressed="false" title="Line: a bold outline stitch">
@@ -23,69 +113,8 @@ export const STUDIO_MARKUP = `
         </button>
       </div>
       <label class="size" id="size-wrap"><span id="size-label">Width</span><input type="range" id="size" min="1.5" max="6" step="0.1" value="3"><output id="size-out" class="mono" for="size">3.0 mm</output></label>
-      <div class="history">
-        <button class="icon-btn" id="undo" aria-label="Undo" title="Undo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 4 10l5 5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H12"/></svg>
-        </button>
-        <button class="icon-btn" id="redo" aria-label="Redo" title="Redo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 5 5-5 5"/><path d="M20 10H9.5a5.5 5.5 0 0 0 0 11H12"/></svg>
-        </button>
-        <button class="icon-btn" id="clear">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span id="clear-label">Clear</span>
-        </button>
-      </div>
     </div>
 
-    <div class="hoop">
-      <div class="field" id="stage">
-        <canvas id="base" aria-hidden="true"></canvas>
-        <canvas id="overlay" role="img" aria-label="Embroidery hoop. Draw here with Apple Pencil, a finger or a mouse."></canvas>
-        <div class="example-tag" id="example-tag" hidden>Example · tap Clear to start your own</div>
-        <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-      </div>
-    </div>
-
-    <div class="meta">
-      <div class="readout mono" id="readout">Nothing to stitch yet</div>
-      <div class="seg small" role="group" aria-label="Show">
-        <button id="view-design" data-view="design" aria-pressed="true">Design</button>
-        <button id="view-stitches" data-view="stitches" aria-pressed="false">Stitches</button>
-      </div>
-      <div class="fabrics" role="group" aria-label="Fabric color for the preview" id="fabrics">
-        <span class="fabric-label">Fabric</span>
-      </div>
-      <div class="seg small" role="group" aria-label="Hoop size on screen">
-        <button id="size-real" aria-pressed="true">Real size</button>
-        <button id="size-fit" aria-pressed="false">Fit screen</button>
-      </div>
-    </div>
-    <p class="size-line"><span id="size-note"></span><button class="link" id="size-check">Check the size with a card</button></p>
-
-    <div class="threads in-stage" id="draw-threads">
-      <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
-      <div class="palette" id="draw-palette"></div>
-    </div>
-  </section>
-
-  <aside class="bench" aria-label="Design settings">
-<details class="composition-panel" id="objects-panel"><summary>Objects and sewing order <span id="object-count"></span></summary>
-  <p class="hint">Select an object to edit. Included objects sew from first to last.</p>
-  <div id="layers" class="layer-list" role="group" aria-label="Select an existing object"></div>
-  <details class="layer-details"><summary>Position, size and sewing order</summary>
-  <div class="layer-controls">
-    <label class="stack">Layer name<input id="layer-name" maxlength="60"></label>
-    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Layer size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
-    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
-  </div>
-  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include layer</label><button class="btn" id="layer-duplicate">Duplicate layer</button><button class="btn" id="layer-remove">Remove layer</button><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button><button class="btn" id="layer-undo">Undo edit</button><button class="btn" id="layer-redo">Redo edit</button></div>
-  </details>
-  <p class="hint">Use Move on the canvas to select and drag objects. Overlapping included objects both stitch.</p>
-<button class="btn" id="new-drawing-object">New drawing object</button></details>
-
-    <section class="panel first" id="panel-draw">
-      <h2>Drawing tools</h2>
       <div class="threads in-bench">
         <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
         <div class="palette" id="draw-palette-bench"></div>
@@ -96,21 +125,8 @@ export const STUDIO_MARKUP = `
         <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
         <button class="btn" id="recolor-drawing">Recolor marks</button>
       </details>
-      <details class="shape-tools">
-        <summary>Preset shapes</summary>
-        <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>
-        <div class="shape-grid">
-          <label class="stack">Width (mm)<input id="shape-width" type="number" min="2" max="98" value="30"></label>
-          <label class="stack">Height (mm)<input id="shape-height" type="number" min="2" max="98" value="30"></label>
-          <label class="stack">Center X (mm)<input id="shape-x" type="number" min="0" max="100" value="50"></label>
-          <label class="stack">Center Y (mm)<input id="shape-y" type="number" min="0" max="100" value="50"></label>
-        </div>
-        <label class="stack">Stitch style<select id="shape-style"><option value="run">Line outline</option><option value="satin">Satin outline</option><option value="fill">Filled</option></select></label>
-        <label class="stack">Satin width (mm)<input id="shape-line-width" type="number" min="1.5" max="6" step="0.1" value="3"></label>
-        <p class="hint">Uses the selected thread. X and Y are measured from the top-left of the hoop. Equal width and height make a circle or square.</p>
-        <button class="btn" id="add-shape">Add shape</button>
-        <p id="shape-status" role="status" class="hint"></p>
-      </details>
+
+      <details><summary>Drawing help</summary>
       <dl class="legend">
         <dt>Line</dt><dd>A bold outline stitch.</dd>
         <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
@@ -120,6 +136,7 @@ export const STUDIO_MARKUP = `
       </dl>
       <label class="check"><input type="checkbox" id="pressure" checked> <span>Pencil pressure changes satin width</span></label>
       <p class="hint">Filled areas stitch first, then lines and satin go on top. Once you use Apple Pencil, finger touches are ignored so your palm can rest on the screen.</p>
+      </details>
     </section>
 
     <section class="panel first" id="panel-image" hidden>
@@ -159,7 +176,20 @@ export const STUDIO_MARKUP = `
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
     </section>
 
-    <p class="note" id="note" hidden></p>
+    <section class="panel object-properties">
+  <div class="layer-controls">
+    <label class="stack">Width (mm)<input id="object-width" type="number" min="0.1" max="400" step="0.5"></label>
+    <label class="stack">Height (mm)<input id="object-height" type="number" min="0.1" max="400" step="0.5"></label>
+    <label class="stack">Object name<input id="layer-name" maxlength="60"></label>
+    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Scale (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
+    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
+  </div>
+  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include in stitching</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
+    <p class="hint">Resize keeps proportions. Dimensions include rotation.</p>
+    </section>
+
 
     <details class="panel" id="object-stitches">
       <summary>Underlay and pull compensation</summary>
@@ -196,16 +226,13 @@ export const STUDIO_MARKUP = `
       <label class="check"><input type="checkbox" id="underlay" checked> <span>Supporting underlay stitches beneath fills and satin</span></label>
     </details>
 
-    <section class="panel sequence">
-      <h2>Color sequence <span class="mono muted" id="seq-sum"></span></h2>
+    <details class="panel sequence">
+      <summary>Color sequence <span class="mono muted" id="seq-sum"></span></summary>
       <ol id="sequence"></ol>
-    </section>
+    </details>
 
     <section class="panel save mid" id="save-panel">
       <label class="stack">Design name<input id="fname" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24"></label>
-      <button class="btn-primary" id="send">Prepare to stitch</button>
-      <p class="muted small">Review placement and play the stitches before uploading.</p>
-      <p class="status" id="save-status" role="status" aria-live="polite"></p>
       <div class="save-files"><button class="link" id="save">Save a .pes file</button><button class="link" id="save-dst">Save a .dst file</button></div>
     </section>
 
@@ -219,6 +246,8 @@ export const STUDIO_MARKUP = `
       <p>You can also save a .pes file and bring it into Brother's Artspira app.</p>
     </details>
   </aside>
+  </div>
+  <p class="status editor-status" id="save-status" role="status" aria-live="polite"></p>
 </main>
 
 <div class="sheet" id="sheet" hidden>
