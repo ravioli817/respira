@@ -368,3 +368,83 @@ it("Draw stays on the selected drawing, and objects of one kind get distinct nam
   button("#add-draw-layer").click();
   expect(studio.snapshot().activeLayerId).toBe(second);
 });
+
+it("recolors only the selected drawing, supports one-step undo/redo and survives reopening", async () => {
+  const original = studio.snapshot().layers[0];
+  button("#layer-duplicate").click();
+  const copyId = studio.snapshot().activeLayerId;
+  root.querySelector('#draw-palette [aria-label="Blue, thread 2"]').click();
+  button("#recolor-drawing").click();
+  await vi.advanceTimersByTimeAsync(60);
+  const saved = studio.snapshot(),
+    copy = saved.layers.find((l) => l.id === copyId);
+  expect(copy.source.strokes.every((s) => s.c === 2)).toBe(true);
+  expect(
+    copy.source.labels
+      .filter((_, i) => i % 2 === 0)
+      .every((c) => c === 0 || c === 2),
+  ).toBe(true);
+  expect(saved.layers[0].source).toEqual(original.source);
+  button("#layer-undo").click();
+  expect(
+    studio
+      .snapshot()
+      .layers.find((l) => l.id === copyId)
+      .source.strokes.map((s) => s.c),
+  ).toEqual(original.source.strokes.map((s) => s.c));
+  button("#layer-redo").click();
+  expect(
+    studio.snapshot().layers.find((l) => l.id === copyId).source.strokes,
+  ).toEqual(copy.source.strokes);
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  await vi.advanceTimersByTimeAsync(60);
+  expect(studio.snapshot().layers.find((l) => l.id === copyId).source).toEqual(
+    copy.source,
+  );
+  expect(button("#send").disabled).toBe(false);
+});
+
+it("shows a non-blocking named picture warning and clears it when the picture is enlarged", async () => {
+  vi.stubGlobal(
+    "Image",
+    class {
+      width = 500;
+      height = 20;
+      set src(value) {
+        this.url = value;
+        Promise.resolve().then(() => this.onload?.());
+      }
+    },
+  );
+  const project = studio.snapshot();
+  project.mode = "image";
+  project.activeLayerId = "thin";
+  project.layers = [
+    {
+      id: "thin",
+      name: "Fine logo",
+      kind: "image",
+      visible: true,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      source: {
+        sizeMM: 20,
+        k: 1,
+        removeBg: false,
+        clean: 1,
+        fileName: "thin.png",
+        sourceDataURL: "data:image/png;base64,AAAA",
+        clusters: [],
+      },
+    },
+  ];
+  studio.destroy();
+  studio = mountStudio(root, { project, onSend });
+  await vi.advanceTimersByTimeAsync(100);
+  expect(button("#note").textContent).toContain("Fine logo");
+  expect(button("#send").disabled).toBe(false);
+  input("#layer-size", "200");
+  await vi.advanceTimersByTimeAsync(60);
+  expect(button("#note").textContent).not.toContain("Fine logo");
+  expect(button("#send").disabled).toBe(false);
+});

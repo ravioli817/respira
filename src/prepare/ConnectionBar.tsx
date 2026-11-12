@@ -8,7 +8,11 @@ import { Button } from "../components/ui/button";
  * It used to be a bar of its own under the header; on an iPad in landscape that bar took
  * height the real-size hoop needs.
  */
-export function ConnectionBar() {
+export function ConnectionBar({
+  statusOnly = false,
+}: {
+  statusOnly?: boolean;
+}) {
   const connected = useMachineStore((s) => s.isConnected);
   const connect = useMachineStore((s) => s.connect);
   const [connecting, setConnecting] = useState(false);
@@ -24,6 +28,13 @@ export function ConnectionBar() {
       </span>
     );
   }
+
+  if (statusOnly)
+    return (
+      <span className="text-sm text-gray-600 dark:text-gray-300">
+        Not connected
+      </span>
+    );
 
   if (!isBluetoothSupported()) {
     return (

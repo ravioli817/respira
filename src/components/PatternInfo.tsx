@@ -1,3 +1,6 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
+import { useMemo } from "react";
+import { formatPatternDimensions } from "../prepare/patternDimensions";
 import type { PesPatternData } from "../formats/import/pesImporter";
 import {
   Tooltip,
@@ -10,12 +13,18 @@ import { Separator } from "@/components/ui/separator";
 interface PatternInfoProps {
   pesData: PesPatternData;
   showThreadBlocks?: boolean;
+  rotation?: number;
 }
 
 export function PatternInfo({
   pesData,
   showThreadBlocks = false,
+  rotation = 0,
 }: PatternInfoProps) {
+  const dimensions = useMemo(
+    () => formatPatternDimensions(pesData, rotation),
+    [pesData, rotation],
+  );
   return (
     <>
       <TooltipProvider>
@@ -27,19 +36,14 @@ export function PatternInfo({
                   Size
                 </span>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {((pesData.bounds.maxX - pesData.bounds.minX) / 10).toFixed(
-                    1,
-                  )}{" "}
-                  x{" "}
-                  {((pesData.bounds.maxY - pesData.bounds.minY) / 10).toFixed(
-                    1,
-                  )}{" "}
-                  mm
+                  {dimensions}
                 </span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="text-xs">Pattern dimensions (width × height)</p>
+              <p className="text-xs">
+                Final machine area (width × height), including locks and travel
+              </p>
             </TooltipContent>
           </Tooltip>
 

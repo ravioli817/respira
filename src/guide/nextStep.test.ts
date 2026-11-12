@@ -61,6 +61,8 @@ describe("which thread", () => {
   it("finds the block being stitched", () => {
     expect(currentBlockIndex(blocks, 0)).toBe(0);
     expect(currentBlockIndex(blocks, 999)).toBe(0);
+    expect(currentBlockIndex(blocks, 1000)).toBe(0);
+    expect(currentBlockIndex(blocks, 1001)).toBe(1);
     expect(currentBlockIndex(blocks, 1100)).toBe(1);
     expect(currentBlockIndex(blocks, 5000)).toBe(2);
   });

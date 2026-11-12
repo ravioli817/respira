@@ -70,6 +70,8 @@ export function AppHeader({ compact = false }: { compact?: boolean }) {
     isOpen: errorPopoverOpen,
     handleOpenChange: handlePopoverOpenChange,
   } = useErrorPopoverState({
+    // Stitch already shows error details beside its primary action. Keep the badge manually available.
+    autoOpen: compact,
     machineError,
     machineErrorMessage,
     pyodideError,

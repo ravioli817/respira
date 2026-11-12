@@ -21,7 +21,7 @@ export function useNextStep(): NextStep | null {
   const isUploading = useMachineUploadStore((state) => state.isUploading);
   const pesData = usePatternStore((state) => state.pesData);
   const uploadedPesData = usePatternStore((state) => state.uploadedPesData);
-  const displayPattern = uploadedPesData || pesData;
+  const displayPattern = machine.patternUploaded ? uploadedPesData : pesData;
 
   const colorBlocks = useMemo(
     () => calculateColorBlocks(displayPattern),

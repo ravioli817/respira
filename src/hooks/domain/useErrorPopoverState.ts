@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * useErrorPopoverState Hook
  *
@@ -36,6 +37,7 @@ import { useState, useEffect } from "react";
 import { usePrevious } from "../utility/usePrevious";
 
 export interface UseErrorPopoverStateOptions {
+  autoOpen?: boolean;
   machineError: number | undefined;
   machineErrorMessage: string | null;
   pyodideError: string | null;
@@ -52,7 +54,13 @@ export interface UseErrorPopoverStateReturn {
 export function useErrorPopoverState(
   options: UseErrorPopoverStateOptions,
 ): UseErrorPopoverStateReturn {
-  const { machineError, machineErrorMessage, pyodideError, hasError } = options;
+  const {
+    machineError,
+    machineErrorMessage,
+    pyodideError,
+    hasError,
+    autoOpen = true,
+  } = options;
 
   // Internal state
   const [isOpen, setIsOpen] = useState(false);
@@ -62,6 +70,7 @@ export function useErrorPopoverState(
   const [wasManuallyDismissed, setWasManuallyDismissed] = useState(false);
 
   // Track previous values for comparison
+  const prevAutoOpen = usePrevious(autoOpen);
   const prevMachineError = usePrevious(machineError);
   const prevErrorMessage = usePrevious(machineErrorMessage);
   const prevPyodideError = usePrevious(pyodideError);
@@ -88,9 +97,14 @@ export function useErrorPopoverState(
       machineErrorMessage && machineErrorMessage !== prevErrorMessage;
     const isNewPyodideError = pyodideError && pyodideError !== prevPyodideError;
 
+    if (!autoOpen && prevAutoOpen) setIsOpen(false);
     if (
+      autoOpen &&
       !wasManuallyDismissed &&
-      (isNewMachineError || isNewErrorMessage || isNewPyodideError)
+      (isNewMachineError ||
+        isNewErrorMessage ||
+        isNewPyodideError ||
+        (!prevAutoOpen && hasAnyError))
     ) {
       setIsOpen(true);
     }
@@ -102,6 +116,8 @@ export function useErrorPopoverState(
       setWasManuallyDismissed(false); // Reset manual dismissal flag
     }
   }, [
+    autoOpen,
+    prevAutoOpen,
     machineError,
     machineErrorMessage,
     pyodideError,

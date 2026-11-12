@@ -226,7 +226,7 @@ function App() {
         screen={screen}
         onChange={setScreen}
         patternName={pesData || uploadedPesData ? currentFileName : undefined}
-        trailing={<ConnectionBar />}
+        trailing={<ConnectionBar statusOnly={screen === "stitch"} />}
       />
 
       {/* Create screen - stays mounted so a drawing in progress survives a visit to the Stitch screen */}
@@ -251,7 +251,7 @@ function App() {
       >
         <div className="flex-1 grid grid-cols-1 content-start lg:content-normal lg:grid-cols-[480px_1fr] gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
           {/* Left Column - Controls */}
-          <LeftSidebar />
+          <LeftSidebar onPrepare={() => setScreen("prepare")} />
 
           {/* Right Column - Pattern Preview */}
           <div className="flex flex-col lg:overflow-hidden lg:h-full">

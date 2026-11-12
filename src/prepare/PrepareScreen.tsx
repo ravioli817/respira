@@ -1,3 +1,4 @@
+import { formatPatternDimensions } from "./patternDimensions";
 import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePatternStore } from "../stores/usePatternStore";
@@ -66,7 +67,15 @@ export function PrepareScreen({
         <div className="space-y-4">
           <section className="bg-white dark:bg-gray-800 rounded-xl border p-4 space-y-3">
             <h1 className="text-xl font-bold">Prepare to stitch</h1>
-            {prepared && <p className="font-medium break-words">{fileName}</p>}
+            {prepared && (
+              <p className="font-medium break-words">
+                {fileName}
+                <br />
+                <span className="text-sm font-normal">
+                  Final machine area: {formatPatternDimensions(prepared.data)}
+                </span>
+              </p>
+            )}
             <p className="text-sm">
               Place your design in the hoop, then play its stitches. Nothing is
               sent to the machine here.
