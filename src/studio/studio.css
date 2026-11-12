@@ -286,3 +286,15 @@ details.panel[open] { gap: 14px; }
 /* Keep iPad editing controls at 16px to avoid focus zoom. */
 input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size:16px; }
 .layer-controls input, #lettering-controls input { min-height:44px; }
+.canvas-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.canvas-actions button { min-height:44px; flex:1; }
+.canvas-actions button[aria-pressed="true"] { border:2px solid var(--accent); background:var(--accent-soft); }
+#editing-object { margin:0; }
+.bench .composition-panel { margin:0; border:1px solid var(--line); border-radius:var(--radius); }
+.composition-panel > summary { cursor:pointer; font-weight:650; min-height:32px; }
+.bench .layer-controls { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.bench .layer-controls label:first-child { grid-column:1/-1; }
+#stitch-fields { border:0; padding:0; margin:12px 0; }
+#stitch-fields .stack { margin-block:10px; }
+#stitch-fields input { width:100%; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+#stitch-fields:disabled { opacity:0.6; }

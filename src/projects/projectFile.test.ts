@@ -125,3 +125,49 @@ it("round trips a v2 mixed composition without duplicating image payloads", () =
   badSelection.activeLayerId = "missing";
   expect(() => exportProject(badSelection)).toThrow();
 });
+
+it("preserves version 3 custom stitch settings and rejects invalid values", () => {
+  const base = emptyProject();
+  const settings: import("./projectFile").ObjectStitchSettings = {
+    fillUnderlay: "edge-tatami",
+    satinUnderlay: "center-zigzag",
+    fillPullMm: 0,
+    satinPullMm: 0.3,
+    underlayInsetMm: 0.4,
+    underlaySpacingMm: 2,
+    underlayStitchMm: 1.5,
+    fillSpacing: 0.4,
+    fillAngle: 45,
+    satinSpacingMm: 0.45,
+  };
+  const data: import("./projectFile").ProjectData = {
+    ...base,
+    v: 3,
+    activeLayerId: "d",
+    layers: [
+      {
+        id: "d",
+        name: "Drawing",
+        kind: "draw",
+        source: base.draw,
+        visible: true,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        stitchSettings: settings,
+      },
+    ],
+  };
+  expect(importProject(exportProject(data)).layers?.[0].stitchSettings).toEqual(
+    settings,
+  );
+  for (const [key, value] of [
+    ["fillPullMm", -1],
+    ["satinPullMm", 2],
+    ["underlayStitchMm", 0],
+    ["underlaySpacingMm", 0],
+    ["satinUnderlay", "unknown"],
+  ]) {
+    const invalid = structuredClone(data);
+    Object.assign(invalid.layers![0].stitchSettings!, { [key]: value });
+    expect(() => exportProject(invalid)).toThrow();
+  }
+});

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { PesPatternData } from "../../formats/import/pesImporter";
 import type { MachineInfo } from "../../types/machine";
-import { calculateRotatedBounds } from "../../utils/rotationUtils";
+import { preparePattern } from "../../prepare/preparePattern";
 import { calculatePatternCenter } from "../../components/PatternCanvas/patternCanvasHelpers";
 
 export interface PatternBoundsCheckResult {
@@ -37,23 +37,24 @@ export function usePatternValidation({
       return { fits: true, error: null };
     }
 
-    // Calculate rotated bounds if rotation is applied
-    let bounds = pesData.bounds;
-    if (patternRotation && patternRotation !== 0) {
-      bounds = calculateRotatedBounds(pesData.bounds, patternRotation);
+    // Use the same encoded geometry and adjusted placement as upload. Lock stitches
+    // and jumps can extend beyond the original artwork's bounds.
+    const prepared = preparePattern(pesData, patternOffset, patternRotation);
+    const center = calculatePatternCenter(prepared.data.bounds);
+    let patternMinX = Infinity,
+      patternMaxX = -Infinity,
+      patternMinY = Infinity,
+      patternMaxY = -Infinity;
+    for (const stitch of prepared.data.penStitches.stitches) {
+      const x = prepared.offset.x - center.x + stitch.x,
+        y = prepared.offset.y - center.y + stitch.y;
+      patternMinX = Math.min(patternMinX, x);
+      patternMaxX = Math.max(patternMaxX, x);
+      patternMinY = Math.min(patternMinY, y);
+      patternMaxY = Math.max(patternMaxY, y);
+      if (stitch.isDataEnd) break;
     }
-
     const { maxWidth, maxHeight } = machineInfo;
-
-    // The patternOffset represents the pattern's CENTER position (due to offsetX/offsetY in canvas)
-    // So we need to calculate bounds relative to the center
-    const center = calculatePatternCenter(bounds);
-
-    // Calculate actual bounds in world coordinates
-    const patternMinX = patternOffset.x - center.x + bounds.minX;
-    const patternMaxX = patternOffset.x - center.x + bounds.maxX;
-    const patternMinY = patternOffset.y - center.y + bounds.minY;
-    const patternMaxY = patternOffset.y - center.y + bounds.maxY;
 
     // Hoop bounds (centered at origin)
     const hoopMinX = -maxWidth / 2;

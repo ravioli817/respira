@@ -1,3 +1,4 @@
+import { columnUnderlay } from './underlay.js';
 import font from './fonts/small-satin/geometry.json';
 import license from './fonts/small-satin/LICENSE?raw';
 export const FONT_LICENSE = license;
@@ -18,7 +19,7 @@ function samplePairs(pairs, step) {
   return out;
 }
 /** Satin geometry is digitized at its final size; ordinary web fonts are never rasterized here. */
-export function letteringDesign(text, layerScale=1, underlay=true) {
+export function letteringDesign(text, layerScale=1, underlay=true, settings={}) {
   const height=text.heightMM ?? 8, effective=height*layerScale;
   if(!Number.isFinite(effective) || effective<4 || effective>15) throw new Error('Small Satin needs a final letter height between 4 and 15 mm. Adjust letter height or layer size.');
   const value=String(text.value || '').normalize('NFC');
@@ -40,10 +41,15 @@ export function letteringDesign(text, layerScale=1, underlay=true) {
         const column=glyph.columns[entry[1]];
         const pairs=column.map(p=>[...move(p.slice(0,2)),...move(p.slice(2))]);
         const pts=[];
-        if(underlay) for(const p of samplePairs(pairs,1.2/layerScale)) pts.push([(p[0]+p[2])/2,(p[1]+p[3])/2]);
-        const satin=samplePairs(underlay?pairs.slice().reverse():pairs,0.2/layerScale);
+        let reverse=underlay;
+        if(settings.satinUnderlay !== undefined) {
+          pts.push(...columnUnderlay(pairs,{mode:settings.satinUnderlay,inset:(settings.underlayInsetMm??0.4)/layerScale,spacing:(settings.underlaySpacingMm??2)/layerScale,stitchLength:(settings.underlayStitchMm??1.2)/layerScale}));
+          const last=pts.at(-1), start=[(pairs[0][0]+pairs[0][2])/2,(pairs[0][1]+pairs[0][3])/2], end=[(pairs.at(-1)[0]+pairs.at(-1)[2])/2,(pairs.at(-1)[1]+pairs.at(-1)[3])/2];
+          reverse=!!last && distance(last,end)<distance(last,start);
+        } else if(underlay) for(const p of samplePairs(pairs,1.2/layerScale)) pts.push([(p[0]+p[2])/2,(p[1]+p[3])/2]);
+        const satin=samplePairs(reverse?pairs.slice().reverse():pairs,(settings.satinSpacingMm??0.4)/2/layerScale);
         satin.forEach((p,i)=>{
-          const dx=p[2]-p[0],dy=p[3]-p[1],len=Math.hypot(dx,dy)||1, pull=0.2/layerScale;
+          const dx=p[2]-p[0],dy=p[3]-p[1],len=Math.hypot(dx,dy)||1, pull=(settings.satinPullMm??0.2)/layerScale;
           pts.push(i%2?[p[2]+dx/len*pull,p[3]+dy/len*pull]:[p[0]-dx/len*pull,p[1]-dy/len*pull]);
         });
         paths.push({color:text.color,pts});

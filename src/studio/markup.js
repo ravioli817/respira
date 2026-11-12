@@ -5,30 +5,12 @@ export const STUDIO_MARKUP = `
     <span class="brand-name">Create a design</span>
     <span class="brand-sub">4 × 4 in hoop · 100 × 100 mm</span>
   </div>
-  <div class="seg modes" role="tablist" aria-label="Edit a layer">
-    <button role="tab" id="mode-draw" data-mode="draw" aria-selected="true">Draw</button>
-    <button role="tab" id="mode-image" data-mode="image" aria-selected="false">Picture</button>
-    <button role="tab" id="mode-text" data-mode="text" aria-selected="false">Text</button>
-  </div>
 </header>
 
-<section class="composition-panel" aria-label="Design layers">
-  <div class="layer-actions"><strong>Design layers</strong><button class="btn" id="add-draw-layer">Add drawing</button><button class="btn" id="add-image-layer">Add picture</button><button class="btn" id="add-text-layer">Add text</button></div>
-  <div id="layers" class="layer-list" role="group" aria-label="Layers in sewing order"></div>
-  <details class="layer-details"><summary>Position, size and sewing order</summary>
-  <div class="layer-controls">
-    <label class="stack">Layer name<input id="layer-name" maxlength="60"></label>
-    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Layer size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
-    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
-  </div>
-  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include layer</label><label><input id="move-layer" type="checkbox"> Move drawing by dragging</label><button class="btn" id="layer-duplicate">Duplicate layer</button><button class="btn" id="layer-remove">Remove layer</button><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button><button class="btn" id="layer-undo">Undo edit</button><button class="btn" id="layer-redo">Redo edit</button></div>
-  </details>
-  <p class="hint">All included layers share the hoop and sew in the listed order. Select a layer to edit it. Drag pictures/text to move; use the switch above to move drawings. Overlapping layers both stitch.</p>
-</section>
 <main class="studio">
   <section class="stage-col" aria-label="Hoop">
+    <div class="canvas-actions" role="group" aria-label="Canvas tools"><button class="btn" id="add-draw-layer" aria-pressed="true">Draw</button><button class="btn" id="add-image-layer">Add picture</button><input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas"><button class="btn" id="add-text-layer">Add text</button><button class="btn" id="move-layer" aria-pressed="false">Move</button></div>
+    <p id="editing-object" class="hint" aria-live="polite"></p>
     <div class="toolbar" id="toolbar">
       <div class="seg tools" role="group" aria-label="Brush">
         <button class="tool" id="tool-line" data-tool="line" aria-pressed="false" title="Line: a bold outline stitch">
@@ -93,8 +75,24 @@ export const STUDIO_MARKUP = `
   </section>
 
   <aside class="bench" aria-label="Design settings">
+<details class="composition-panel" id="objects-panel"><summary>Objects and sewing order <span id="object-count"></span></summary>
+  <p class="hint">Select an object to edit. Included objects sew from first to last.</p>
+  <div id="layers" class="layer-list" role="group" aria-label="Select an existing object"></div>
+  <details class="layer-details"><summary>Position, size and sewing order</summary>
+  <div class="layer-controls">
+    <label class="stack">Layer name<input id="layer-name" maxlength="60"></label>
+    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Layer size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
+    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
+  </div>
+  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include layer</label><button class="btn" id="layer-duplicate">Duplicate layer</button><button class="btn" id="layer-remove">Remove layer</button><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button><button class="btn" id="layer-undo">Undo edit</button><button class="btn" id="layer-redo">Redo edit</button></div>
+  </details>
+  <p class="hint">Use Move on the canvas to select and drag objects. Overlapping included objects both stitch.</p>
+<button class="btn" id="new-drawing-object">New drawing object</button></details>
+
     <section class="panel first" id="panel-draw">
-      <h2>Draw</h2>
+      <h2>Drawing tools</h2>
       <div class="threads in-bench">
         <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
         <div class="palette" id="draw-palette-bench"></div>
@@ -126,7 +124,7 @@ export const STUDIO_MARKUP = `
     </section>
 
     <section class="panel first" id="panel-image" hidden>
-      <h2>Picture</h2>
+      <h2>Picture settings</h2>
       <div class="file-row">
         <label class="btn" for="file">Choose a picture</label>
         <input type="file" id="file" accept="image/*" class="visually-hidden">
@@ -147,7 +145,7 @@ export const STUDIO_MARKUP = `
     </section>
 
     <section class="panel first" id="panel-text" hidden>
-      <h2>Text</h2>
+      <h2>Lettering</h2>
       <label class="stack">Words<textarea id="txt" rows="2" maxlength="200" spellcheck="false"></textarea></label>
       <label class="stack">Font<select id="txt-font"></select></label>
       <label class="range" id="decorative-width"><span>Width</span><input type="range" id="txt-w" min="20" max="100" step="1" value="80"><output id="txt-w-out" for="txt-w">80 mm</output></label>
@@ -164,8 +162,30 @@ export const STUDIO_MARKUP = `
 
     <p class="note" id="note" hidden></p>
 
+    <details class="panel" id="object-stitches">
+      <summary>Underlay and pull compensation</summary>
+      <p class="hint" id="stitch-object-name"></p>
+      <label class="check"><input type="checkbox" id="stitch-custom"> Customize stitches for this object</label>
+      <fieldset id="stitch-fields" disabled>
+        <div id="fill-stitch-fields">
+          <label class="stack">Fill underlay<select id="stitch-fillUnderlay"><option value="none">None</option><option value="tatami">Sparse tatami</option><option value="edge">Inset edge walk</option><option value="edge-tatami">Edge walk + sparse tatami</option></select></label>
+          <label class="stack">Fill pull per edge (mm)<input id="stitch-fillPullMm" type="number" min="0" max="1" step="0.05"></label>
+          <label class="stack">Fill row spacing (mm)<input id="stitch-fillSpacing" type="number" min="0.25" max="2" step="0.05"></label>
+          <label class="stack">Fill angle in hoop (°)<input id="stitch-fillAngle" type="number" min="0" max="180" step="5"></label>
+        </div>
+        <div id="satin-stitch-fields">
+          <label class="stack">Satin underlay<select id="stitch-satinUnderlay"><option value="none">None</option><option value="center">Center walk</option><option value="edge">Inset edge walk</option><option value="zigzag">Sparse zigzag</option><option value="center-edge">Center + edge walk</option><option value="center-zigzag">Center walk + zigzag</option></select></label>
+          <label class="stack">Satin pull per edge (mm)<input id="stitch-satinPullMm" type="number" min="0" max="1" step="0.05"></label>
+          <label class="stack">Satin peak-to-peak spacing (mm)<input id="stitch-satinSpacingMm" type="number" min="0.3" max="1" step="0.05"></label>
+        </div>
+        <label class="stack">Underlay edge inset (mm)<input id="stitch-underlayInsetMm" type="number" min="0.1" max="2" step="0.1"></label>
+        <label class="stack">Underlay row / zigzag spacing (mm)<input id="stitch-underlaySpacingMm" type="number" min="0.8" max="4" step="0.1"></label>
+        <label class="stack">Underlay running stitch length (mm)<input id="stitch-underlayStitchMm" type="number" min="0.5" max="4" step="0.1"></label>
+      </fieldset>
+      <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Review Density inspection and test on your fabric.</p>
+    </details>
     <details class="panel" id="settings">
-      <summary>Stitch settings</summary>
+      <summary>Project stitch defaults</summary>
       <div class="field-row"><span>Fill density</span>
         <div class="seg small" role="group" aria-label="Fill density" id="density">
           <button data-spacing="0.5" aria-pressed="false">Light</button>
@@ -174,7 +194,7 @@ export const STUDIO_MARKUP = `
         </div>
       </div>
       <label class="range"><span>Fill angle</span><input type="range" id="angle" min="0" max="175" step="5" value="45"><output id="angle-out" for="angle">45°</output></label>
-      <label class="check"><input type="checkbox" id="underlay" checked> <span>Underlay stitches under fills and satin, which keep the fabric from puckering</span></label>
+      <label class="check"><input type="checkbox" id="underlay" checked> <span>Supporting underlay stitches beneath fills and satin</span></label>
     </details>
 
     <section class="panel sequence">

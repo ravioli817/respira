@@ -2,6 +2,8 @@
    interface, mounted into a shadow root so its styles and Respira's stay out of each other's way.
    Plain JavaScript on purpose; the typed surface is in studioApp.d.ts. */
 import { StitchEngine as E } from './engine.js';
+import { engineSettings, stitchDefaults } from './stitchSettings.js';
+import { hitTestLayer } from './selection.js';
 import { transformPoint, transformDesign, composePlans, identityTransform } from './composition.js';
 import { letteringDesign, EMBROIDERY_FONT, FONT_LICENSE } from './lettering.js';
 import { shapePoints } from './shapes.js';
@@ -20,7 +22,7 @@ export function mountStudio(root, opts) {
   var $ = function (s) { return root.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(root.querySelectorAll(s)); };
   var cleanups = [];
-  var destroyed = false, loadedProject = null;
+  var destroyed = false, loadedProject = null, moveDrawing = false;
   function listen(target, type, fn, o) { target.addEventListener(type, fn, o); cleanups.push(function () { target.removeEventListener(type, fn, o); }); }
   function shown() { return holder.getClientRects().length > 0; }
 
@@ -339,8 +341,15 @@ export function mountStudio(root, opts) {
     }
   }
   over.addEventListener('pointerdown', function (e) {
-    if (active || !currentLayer().visible) return;
-    if(S.mode!=='draw' || $('#move-layer').checked) { e.preventDefault();active={id:e.pointerId,move:true,changed:false,x:e.clientX,y:e.clientY,transform:Object.assign({},currentLayer().transform)};try{over.setPointerCapture(e.pointerId);}catch(err){}return; }
+    if (active) return;
+    if(S.mode!=='draw' || moveDrawing) {
+      var rect=over.getBoundingClientRect(), hit=hitTestLayer(S.parts,[(e.clientX-rect.left)/rect.width*100,(e.clientY-rect.top)/rect.height*100]);
+      if(!hit)return;
+      moveDrawing=true;
+      if(hit!==S.activeId)selectLayer(hit);
+    }
+    if(!currentLayer().visible)return;
+    if(S.mode!=='draw' || moveDrawing) { e.preventDefault();active={id:e.pointerId,move:true,changed:false,x:e.clientX,y:e.clientY,transform:Object.assign({},currentLayer().transform)};try{over.setPointerCapture(e.pointerId);}catch(err){}return; }
     if (e.pointerType === 'pen') penSeen = true;
     else if (e.pointerType === 'touch' && penSeen) return;
     if (e.button && e.button !== 0) return;
@@ -436,7 +445,7 @@ export function mountStudio(root, opts) {
     if(layer.kind==='draw') source=Object.assign({},source,{sizes:Object.assign({},source.sizes),order:source.order.slice(),labels:source.labels.slice(),strokes:source.strokes.map(function(s){return Object.assign({},s,{pts:s.pts.map(function(p){return p.slice();})});})});
     else if(layer.kind==='image') source=Object.assign({},source,{loading:false,clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
     else source=Object.assign({},source);
-    return Object.assign({},layer,{transform:Object.assign({},layer.transform),source:source});
+    return Object.assign({},layer,{transform:Object.assign({},layer.transform),source:source,stitchSettings:layer.stitchSettings?Object.assign({},layer.stitchSettings):undefined});
   }
   function snap() { return { layers:S.layers.map(cloneLayer), activeId:S.activeId }; }
   function restore(saved) { S.layers=saved.layers.map(cloneLayer); hydrateImages(); selectLayer(saved.activeId); }
@@ -767,7 +776,7 @@ export function mountStudio(root, opts) {
         var source = layer.source, design;
         if (layer.kind === 'draw') design = { labels: source.labels, order: source.order, lines: source.strokes };
         else if (layer.kind === 'image') design = imageDesign(source);
-        else if (source.font === EMBROIDERY_FONT) design = letteringDesign(source, layer.transform.scale, S.settings.underlay);
+        else if (source.font === EMBROIDERY_FONT) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
         else {
           textDesign(source, function (d, thin) { if (token !== textToken) return; parts[index] = { layer: layer, design: d }; if (thin > 0.08) S.note = 'Some decorative letters are thin. Try Small Satin for embroidery lettering.'; pending--; ready(); }, token);
           return;
@@ -806,7 +815,7 @@ export function mountStudio(root, opts) {
   }
   function digitize() {
     if (!S.design) return;
-    S.plan = composePlans(S.parts.map(function (part) { return E.plan(part.design, { spacing: S.settings.spacing, angle: S.settings.angle, underlay: S.settings.underlay }); }));
+    S.plan = composePlans(S.parts.map(function (part) { return E.plan(part.design, engineSettings(part.layer, S.settings)); }));
     S.stats = E.planStats(S.plan);
     var bounds = S.stats.bounds;
     if (bounds && (bounds[0] < 0 || bounds[1] < 0 || bounds[2] > 100 || bounds[3] > 100)) { failDesign('Stitches extend beyond the hoop. Move the layer inward or reduce its size.'); return; }
@@ -869,7 +878,6 @@ export function mountStudio(root, opts) {
     var layer = currentLayer(); if (!layer) return;
     S.mode = layer.kind; S[S.mode] = layer.source;
     if (S.mode === 'image' && S.image.source) processImage(S.image);
-    $$('.modes [role="tab"]').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.mode === S.mode)); });
     ['draw','image','text'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
     $('#toolbar').hidden = S.mode !== 'draw'; $('#draw-threads').hidden = S.mode !== 'draw';
     stage.classList.toggle('drawing', S.mode === 'draw');
@@ -883,17 +891,22 @@ export function mountStudio(root, opts) {
     $('#txt').value=S.text.value; fontSel.value=S.text.font; $('#txt-w').value=S.text.widthMM; $('#txt-w-out').textContent=S.text.widthMM+' mm';
     $('#txt-height').value=S.text.heightMM ?? 8; $('#txt-spacing').value=S.text.letterSpacing ?? 0.5; $('#txt-linegap').value=S.text.lineGap ?? 2; $('#txt-align').value=S.text.align || 'center';
     syncLettering(); if (textPalette) textPalette.draw();
-    syncView(); syncLayers(); updateDesign(); scheduleSave();
+    syncView(); syncLayers(); syncStitchSettings(); updateDesign(); scheduleSave();
   }
   function setMode(m) {
-    var layer=S.layers.find(function (l) { return l.kind===m; });
+    var layer=S.layers.find(function (l) { return l.kind===m && l.visible; });
     if(!layer) { if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
     if(!layer.visible) { pushUndo(); S.placement=undefined; layer.visible=true; }
     selectLayer(layer.id);
   }
   function syncLayers() {
-    var selected=currentLayer(), list=$('#layers'); list.innerHTML='';
-    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (hidden)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){selectLayer(layer.id);}); list.appendChild(button); });
+    var selected=currentLayer();
+    $('#add-draw-layer').setAttribute('aria-pressed',String(S.mode==='draw'&&!moveDrawing));
+    $('#move-layer').setAttribute('aria-pressed',String(S.mode!=='draw'||moveDrawing));
+    $('#editing-object').textContent=selected ? 'Editing: '+selected.name : '';
+    $('#object-count').textContent='('+S.layers.length+')';
+    var list=$('#layers'); list.innerHTML='';
+    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (excluded)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){selectLayer(layer.id);}); list.appendChild(button); });
     if(!selected) return;
     $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
     $('#layer-x').value=selected.transform.x; $('#layer-y').value=selected.transform.y;
@@ -902,7 +915,6 @@ export function mountStudio(root, opts) {
     $('#layer-earlier').disabled=S.layers[0]===selected; $('#layer-later').disabled=S.layers[S.layers.length-1]===selected;
     syncHistory();
   }
-  $$('.modes [role="tab"]').forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
 
   function syncView() {
     var v = currentView();
@@ -950,11 +962,13 @@ export function mountStudio(root, opts) {
   function syncThreadName() { $$('.thread-name').forEach(function (el) { el.textContent = threadName(S.draw.color) + ' · #' + S.draw.color; }); }
 
   // picture controls
-  $('#file').addEventListener('change', function (e) {
+  function handlePictureFile(e, asNew) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
-    invalidateDesign();
+    if(asNew && S.layers.length>=20){toast('A design can contain up to 20 objects.');e.target.value='';return;}
     pushUndo();
+    if(asNew){var layer=makeLayer('image');S.layers.push(layer);selectLayer(layer.id);}
+    invalidateDesign();
     S.placement=undefined;
     var targetImage = S.image; targetImage.loading = true;
     var done = function (src) {
@@ -971,7 +985,9 @@ export function mountStudio(root, opts) {
     if (window.createImageBitmap) createImageBitmap(f).then(done, function () { viaImg(f, done, fail); });
     else viaImg(f, done, fail);
     e.target.value = '';
-  });
+  }
+  $('#file').addEventListener('change',function(e){handlePictureFile(e,false);});
+  $('#add-picture-file').addEventListener('change',function(e){handlePictureFile(e,true);});
   function viaImg(f, done, fail) {
     var url = URL.createObjectURL(f), img = new Image();
     img.onload = function () { var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(url); done(c); };
@@ -1032,12 +1048,12 @@ export function mountStudio(root, opts) {
   var txtTimer = null;
   function textChanged() { S.placement=undefined; invalidateDesign(); clearTimeout(txtTimer); txtTimer = setTimeout(function () { autoName(); updateDesign(); scheduleSave(); }, 180); }
   $('#txt').addEventListener('input', function (e) { pushUndo(); S.text.value = e.target.value; textChanged(); });
-  fontSel.addEventListener('change', function (e) { pushUndo(); S.text.font = e.target.value; syncLettering(); textChanged(); });
+  fontSel.addEventListener('change', function (e) { pushUndo(); S.text.font = e.target.value; syncLettering(); syncStitchSettings(); textChanged(); });
   $('#txt-w').addEventListener('input', function (e) { pushUndo(); S.text.widthMM = +e.target.value; $('#txt-w-out').textContent = e.target.value + ' mm'; textChanged(); });
   function syncLettering() {
     var embroidery=S.text.font===EMBROIDERY_FONT;
     $('#lettering-controls').hidden=!embroidery; $('#decorative-width').hidden=embroidery;
-    $('#font-note').textContent=embroidery?'Satin lettering with center-walk underlay. Final cap height must stay between 4 and 15 mm, including layer scaling.':'Decorative fill lettering: ordinary font shapes filled with stitches.';
+    $('#font-note').textContent=embroidery?'Satin embroidery lettering. Final cap height must stay between 4 and 15 mm, including layer scaling.':'Decorative fill lettering: ordinary font shapes filled with stitches.';
   }
   ['height','spacing','linegap'].forEach(function(key){$('#txt-'+key).addEventListener('input',function(e){var value=+e.target.value;var field=key==='height'?'heightMM':key==='spacing'?'letterSpacing':'lineGap'; if(!Number.isFinite(value) || value < +e.target.min || value > +e.target.max) {failDesign('Enter a lettering value within the displayed range.');return;} pushUndo();S.text[field]=value;textChanged();});});
   $('#txt-align').addEventListener('change',function(e){pushUndo();S.text.align=e.target.value;textChanged();});
@@ -1053,8 +1069,28 @@ export function mountStudio(root, opts) {
     });
   });
   $('#angle').addEventListener('input', function (e) { S.settings.angle = +e.target.value; $('#angle-out').textContent = e.target.value + '°'; digitizeSoon(); scheduleSave(); });
-  $('#underlay').addEventListener('change', function (e) { S.settings.underlay = e.target.checked; digitizeSoon(); scheduleSave(); });
-  function digitizeSoon() { S.placement=undefined; invalidatePlan(); digitizeTimer = setTimeout(digitize, 120); }
+  $('#underlay').addEventListener('change', function (e) { S.settings.underlay = e.target.checked; syncStitchSettings(); digitizeSoon(); scheduleSave(); });
+  function digitizeSoon() { syncStitchSettings(); S.placement=undefined; invalidateDesign(); digitizeTimer=setTimeout(updateDesign,120); }
+
+  function syncStitchSettings() {
+    var layer=currentLayer(); if(!layer)return;
+    var values=layer.stitchSettings || stitchDefaults(layer,S.settings);
+    $('#stitch-custom').checked=!!layer.stitchSettings; $('#stitch-fields').disabled=!layer.stitchSettings;
+    $('#stitch-object-name').textContent='Stitches for: '+layer.name+(layer.stitchSettings?' (custom)':' (project defaults)');
+    var lettering=layer.kind==='text'&&layer.source.font===EMBROIDERY_FONT;
+    $('#fill-stitch-fields').hidden=lettering; $('#satin-stitch-fields').hidden=layer.kind==='image'||(layer.kind==='text'&&!lettering);
+    Object.keys(values).forEach(function(key){$('#stitch-'+key).value=values[key];});
+  }
+  $('#stitch-custom').addEventListener('change',function(e){pushUndo();currentLayer().stitchSettings=e.target.checked?stitchDefaults(currentLayer(),S.settings):undefined;S.placement=undefined;syncStitchSettings();updateDesign();scheduleSave();});
+  Object.keys(stitchDefaults({kind:'draw',source:{}},S.settings)).forEach(function(key){
+    var input=$('#stitch-'+key);
+    input.addEventListener(input.tagName==='SELECT'?'change':'input',function(e){
+      if(!currentLayer().stitchSettings)return;
+      var value=e.target.tagName==='SELECT'?e.target.value:+e.target.value;
+      if(typeof value==='number' && (!Number.isFinite(value)||value<+e.target.min||value>+e.target.max)){failDesign('Use a stitch setting within the displayed range.');return;}
+      pushUndo();currentLayer().stitchSettings[key]=value;S.placement=undefined;updateDesign();scheduleSave();
+    });
+  });
 
   // ---------- naming + saving ----------
   function autoName() {
@@ -1126,9 +1162,9 @@ export function mountStudio(root, opts) {
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:2,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:3,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
-      activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),source:serializeSource(l.kind,l.source)};})};
+      activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
   function thumbnail() {
     var c = document.createElement('canvas'); c.width = c.height = 180;
@@ -1144,7 +1180,7 @@ export function mountStudio(root, opts) {
     try {
       var s = opts.project;
       if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
-      if (!s || (s.v !== 1 && s.v !== 2)) return false;
+      if (!s || (s.v !== 1 && s.v !== 2 && s.v !== 3)) return false;
       loadedProject = s;
       S.placement = s.placement;
       if (s.view) S.view = Object.assign(S.view, s.view);
@@ -1184,8 +1220,17 @@ export function mountStudio(root, opts) {
     } catch (error) { $('#shape-status').textContent = error.message; }
   });
 
-  ['draw','image','text'].forEach(function(kind){$('#add-'+kind+'-layer').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=makeLayer(kind);S.layers.push(layer);selectLayer(layer.id);});});
-  $('#layer-name').addEventListener('input',function(e){pushUndo();currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();scheduleSave();});
+  function addObject(kind) {
+    if(S.layers.length>=20){toast('A design can contain up to 20 objects.');return;}
+    pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
+    if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
+  }
+  $('#add-draw-layer').addEventListener('click',function(){moveDrawing=false;setMode('draw');});
+  $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;addObject('draw');});
+  $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
+  $('#add-text-layer').addEventListener('click',function(){addObject('text');});
+  $('#move-layer').addEventListener('click',function(){moveDrawing=true;syncLayers();});
+  $('#layer-name').addEventListener('input',function(e){pushUndo();currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
   $('#layer-visible').addEventListener('change',function(e){pushUndo();S.placement=undefined;currentLayer().visible=e.target.checked;syncLayers();updateDesign();scheduleSave();});
   ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo();S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
   $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
@@ -1220,7 +1265,7 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { pushUndo(); S.placement=undefined; S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
-  if(loadedProject && loadedProject.v===2 && loadedProject.layers) {
+  if(loadedProject && (loadedProject.v===2 || loadedProject.v===3) && loadedProject.layers) {
     S.layers=loadedProject.layers.map(function(l){return Object.assign({},l,{transform:Object.assign({},l.transform),source:deserializeSource(l.kind,l.source)});});
     S.activeId=loadedProject.activeLayerId;
   } else {
