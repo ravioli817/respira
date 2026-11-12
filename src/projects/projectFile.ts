@@ -1,5 +1,7 @@
 export interface ProjectData {
-  v: 1;
+  v: 1 | 2;
+  activeLayerId?: string;
+  layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
   mode: "draw" | "image" | "text";
   name: string;
@@ -26,8 +28,27 @@ export interface ProjectData {
     fileName?: string;
     clusters?: Array<{ rgb: number[]; thread: number; on: boolean }>;
   };
-  text: { value: string; font: string; widthMM: number; color: number };
+  text: {
+    value: string;
+    font: string;
+    widthMM: number;
+    color: number;
+    heightMM?: number;
+    letterSpacing?: number;
+    lineGap?: number;
+    align?: "left" | "center" | "right";
+  };
 }
+export type DesignLayer = {
+  id: string;
+  name: string;
+  visible: boolean;
+  transform: { x: number; y: number; scale: number; rotation: number };
+} & (
+  | { kind: "draw"; source: ProjectData["draw"] }
+  | { kind: "image"; source: ProjectData["image"] }
+  | { kind: "text"; source: ProjectData["text"] }
+);
 export interface SavedProject {
   id: string;
   updatedAt: number;
@@ -50,7 +71,16 @@ export const emptyProject = (): ProjectData => ({
     strokes: [],
   },
   image: { sizeMM: 80, k: 4, removeBg: true, clean: 2 },
-  text: { value: "Hello", font: "Lobster", widthMM: 80, color: 5 },
+  text: {
+    value: "Hello",
+    font: "SmallSatin",
+    widthMM: 80,
+    color: 5,
+    heightMM: 8,
+    letterSpacing: 0.5,
+    lineGap: 2,
+    align: "center",
+  },
 });
 const fail = () => {
   throw new Error("This is not a supported Respira project file.");
@@ -91,7 +121,10 @@ export function validateProject(value: unknown): ProjectData {
     im = object(s.image),
     t = object(s.text),
     settings = object(s.settings);
-  if (s.v !== 1 || !["draw", "image", "text"].includes(String(s.mode)))
+  if (
+    (s.v !== 1 && s.v !== 2) ||
+    !["draw", "image", "text"].includes(String(s.mode))
+  )
     return fail();
   const labels = array(d.labels, 500000).map((v, i) =>
     number(v, i % 2 ? 1 : 0, i % 2 ? 250000 : 63, true),
@@ -130,7 +163,7 @@ export function validateProject(value: unknown): ProjectData {
   )
     return fail();
   const result: ProjectData = {
-    v: 1,
+    v: s.v,
     mode: s.mode as ProjectData["mode"],
     name: string(s.name, 100),
     settings: {
@@ -174,8 +207,63 @@ export function validateProject(value: unknown): ProjectData {
       font: string(t.font, 100),
       widthMM: number(t.widthMM, 20, 100),
       color: color(t.color),
+      ...(t.heightMM !== undefined
+        ? { heightMM: number(t.heightMM, 4, 15) }
+        : {}),
+      ...(t.letterSpacing !== undefined
+        ? { letterSpacing: number(t.letterSpacing, 0, 5) }
+        : {}),
+      ...(t.lineGap !== undefined ? { lineGap: number(t.lineGap, 0, 10) } : {}),
+      ...(t.align !== undefined
+        ? {
+            align: (["left", "center", "right"].includes(String(t.align))
+              ? t.align
+              : fail()) as "left" | "center" | "right",
+          }
+        : {}),
     },
   };
+  if (s.v === 2) {
+    const ids = new Set<string>();
+    result.layers = array(s.layers, 20).map((value) => {
+      const l = object(value),
+        tr = object(l.transform),
+        id = string(l.id, 100);
+      if (
+        !id ||
+        ids.has(id) ||
+        !["draw", "image", "text"].includes(String(l.kind))
+      )
+        return fail();
+      ids.add(id);
+      const kind = l.kind as "draw" | "image" | "text";
+      const source = validateProject({
+        ...emptyProject(),
+        v: 1,
+        [kind]: l.source,
+      })[kind];
+      return {
+        id,
+        name: string(l.name, 60),
+        kind,
+        source,
+        visible: bool(l.visible),
+        transform: {
+          x: number(tr.x, -100, 100),
+          y: number(tr.y, -100, 100),
+          scale: number(tr.scale, 0.1, 4),
+          rotation: number(tr.rotation, -180, 180),
+        },
+      } as DesignLayer;
+    });
+    // Layer sources are authoritative in v2; do not embed the selected picture twice.
+    const legacyDefaults = emptyProject();
+    result.draw = legacyDefaults.draw;
+    result.image = legacyDefaults.image;
+    result.text = legacyDefaults.text;
+    result.activeLayerId = string(s.activeLayerId, 100);
+    if (!ids.has(result.activeLayerId)) return fail();
+  }
   if (s.placement !== undefined) {
     const p = object(s.placement);
     result.placement = {
@@ -207,11 +295,16 @@ export function validateProject(value: unknown): ProjectData {
   return result;
 }
 export function exportProject(data: ProjectData): string {
-  return JSON.stringify({
+  const encoded = JSON.stringify({
     format: "respira-project",
-    version: 1,
+    version: data.v,
     data: validateProject(data),
   });
+  if (encoded.length > 20000000)
+    throw new Error(
+      "Project files must be smaller than 20 MB. Use smaller pictures or fewer copies.",
+    );
+  return encoded;
 }
 export function importProject(text: string): ProjectData {
   if (text.length > 20000000)
@@ -223,6 +316,11 @@ export function importProject(text: string): ProjectData {
     return fail();
   }
   const file = object(parsed);
-  if (file.format !== "respira-project" || file.version !== 1) return fail();
+  if (
+    file.format !== "respira-project" ||
+    (file.version !== 1 && file.version !== 2) ||
+    object(file.data).v !== file.version
+  )
+    return fail();
   return validateProject(file.data);
 }
