@@ -109,16 +109,6 @@ In fact, Respira is using their pystitch library to import PES patterns.
 
 But PES patterns from other software or downloaded from the internet should work as well.
 
-## Vibe Code Warning
-
-For reasons of fairness and possibly also as a warning, be aware that 99% of the code has been written using LLMs, specifically Claude Code.
-
-That does not mean that the code is untested, bad or dysfunctional.
-In fact, LLMs were a great tool for reverse engineering the Bluetooth Protocol and pattern format the Brother PP-1 uses to communicate with Brothers App.
-
-This project wouldn't have happened without the existence of LLMs.
-So, while LLMs are still being heavily oversold and the circulary economy of the big AI companies is not exactly a healthy market IMO, they do still offer _some_ benefits.
-
 ## License
 
 See `LICENSE.md`.
