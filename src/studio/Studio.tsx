@@ -297,7 +297,7 @@ export function Studio({ className, onSend }: StudioProps) {
           </p>
         )}
       </section>
-      <div ref={hostRef} />
+      <div ref={hostRef} className="flex-1 min-h-0" />
       <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[85dvh] overflow-y-auto">
           <DialogTitle>Your projects</DialogTitle>

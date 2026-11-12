@@ -72,7 +72,9 @@ describe("Create handoff navigation", () => {
     render(<App />);
     fireEvent.click(screen.getByText("Send"));
     expect(screen.getByTestId("active-screen").textContent).toBe("create");
-    expect(screen.getByTestId("studio").className).not.toContain("hidden");
+    expect(screen.getByTestId("studio").classList.contains("hidden")).toBe(
+      false,
+    );
     expect(screen.getByRole("alert").textContent).toBe(refusal);
   });
 
