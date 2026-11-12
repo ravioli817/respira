@@ -8,6 +8,8 @@ import { useUIStore } from "./stores/useUIStore";
 import type { StudioDesign } from "./studio/studioApp.js";
 
 vi.mock("./studio/loadStudioDesign", () => ({ loadStudioDesign: vi.fn() }));
+vi.mock("./prepare/PrepareScreen", () => ({ PrepareScreen: () => null }));
+vi.mock("./prepare/ConnectionBar", () => ({ ConnectionBar: () => null }));
 vi.mock("./components/AppHeader", () => ({ AppHeader: () => null }));
 vi.mock("./components/LeftSidebar", () => ({ LeftSidebar: () => null }));
 vi.mock("./components/PatternCanvas", () => ({ PatternCanvas: () => null }));
@@ -74,10 +76,10 @@ describe("Create handoff navigation", () => {
     expect(screen.getByRole("alert").textContent).toBe(refusal);
   });
 
-  it("opens Stitch after a successful handoff", () => {
+  it("opens Prepare after a successful handoff", () => {
     vi.mocked(loadStudioDesign).mockReturnValue(null);
     render(<App />);
     fireEvent.click(screen.getByText("Send"));
-    expect(screen.getByTestId("active-screen").textContent).toBe("stitch");
+    expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
   });
 });

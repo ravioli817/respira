@@ -10,6 +10,8 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { PatternCanvas } from "./components/PatternCanvas";
 import { PatternCanvasPlaceholder } from "./components/PatternCanvasPlaceholder";
 import { BluetoothDevicePicker } from "./components/BluetoothDevicePicker";
+import { PrepareScreen } from "./prepare/PrepareScreen";
+import { ConnectionBar } from "./prepare/ConnectionBar";
 import { Studio } from "./studio/Studio";
 import { ScreenTabs, type Screen } from "./studio/ScreenTabs";
 import { loadStudioDesign } from "./studio/loadStudioDesign";
@@ -46,10 +48,10 @@ function App() {
   // Which screen is showing: making a design, or running the machine
   const [screen, setScreen] = useState<Screen>("create");
 
-  // A design sent from the Create screen lands where a loaded PES file would, then the Stitch screen opens
+  // A design sent from the Create screen lands where a loaded PES file would, then the Prepare screen opens
   const handleStudioSend = useCallback((design: StudioDesign) => {
     const refusal = loadStudioDesign(design);
-    if (refusal === null) setScreen("stitch");
+    if (refusal === null) setScreen("prepare");
     return refusal;
   }, []);
 
@@ -218,7 +220,8 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
-      <AppHeader />
+      <AppHeader showWorkflow={screen === "stitch"} />
+      <ConnectionBar onStitch={() => setScreen("stitch")} />
       <ScreenTabs
         screen={screen}
         onChange={setScreen}
@@ -230,6 +233,13 @@ function App() {
         className={screen === "create" ? "flex-1 overflow-y-auto" : "hidden"}
         onSend={handleStudioSend}
       />
+
+      {screen === "prepare" && (
+        <PrepareScreen
+          onContinue={() => setScreen("stitch")}
+          onCreate={() => setScreen("create")}
+        />
+      )}
 
       <div
         className={
@@ -251,11 +261,9 @@ function App() {
             )}
           </div>
         </div>
-
-        {/* Bluetooth Device Picker (Electron only) */}
-        <BluetoothDevicePicker />
       </div>
 
+      <BluetoothDevicePicker />
       {/* Pretend machine buttons (only with ?practice in the address) */}
       <PracticePanel />
     </div>

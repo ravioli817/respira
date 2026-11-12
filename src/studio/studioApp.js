@@ -2,6 +2,7 @@
    interface, mounted into a shadow root so its styles and Respira's stay out of each other's way.
    Plain JavaScript on purpose; the typed surface is in studioApp.d.ts. */
 import { StitchEngine as E } from './engine.js';
+import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
 
 export function mountStudio(root, opts) {
@@ -17,6 +18,7 @@ export function mountStudio(root, opts) {
   var $ = function (s) { return root.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(root.querySelectorAll(s)); };
   var cleanups = [];
+  var destroyed = false, pictureLoading = false;
   function listen(target, type, fn, o) { target.addEventListener(type, fn, o); cleanups.push(function () { target.removeEventListener(type, fn, o); }); }
   function shown() { return holder.getClientRects().length > 0; }
 
@@ -51,7 +53,7 @@ export function mountStudio(root, opts) {
     draw: { tool: 'satin', color: 37, sizes: { satin: 3, brush: 6, eraser: 6 }, pressure: true, strokes: [], labels: new Uint8Array(GRID * GRID), order: [], example: false },
     image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [] },
     text: { value: 'Hello', font: 'Lobster', widthMM: 80, color: 5 },
-    name: '', nameAuto: true,
+    name: '', nameAuto: true, placement: undefined,
     design: null, plan: null, stats: null, note: ''
   };
   var undoStack = [], redoStack = [];
@@ -826,11 +828,12 @@ export function mountStudio(root, opts) {
     $('#draw-threads').hidden = m !== 'draw';
     stage.classList.toggle('drawing', m === 'draw');
     $('#example-tag').hidden = !(m === 'draw' && S.draw.example);
-    if (m === 'image' && !S.image.source) { S.image.source = examplePicture(); processImage(); renderClusters(); }
+    if (m === 'image' && !S.image.source && !S.image.sourceDataURL) { S.image.source = examplePicture(); processImage(); renderClusters(); }
     syncView();
     autoName();
     S.plan = null; S.stats = null;
     updateDesign();
+    scheduleSave();
     scheduleSave();
   }
   $$('.modes [role="tab"]').forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
@@ -885,12 +888,20 @@ export function mountStudio(root, opts) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
     invalidateDesign();
+    pictureLoading = true;
     var done = function (src) {
-      S.image.source = src; S.image.fileName = f.name; S.image.clusters = [];
+      if (destroyed) return;
+      pictureLoading = false;
+      var picture = document.createElement('canvas');
+      var scale = Math.min(1, 2048 / Math.max(src.width, src.height));
+      picture.width = Math.max(1, Math.round(src.width * scale)); picture.height = Math.max(1, Math.round(src.height * scale));
+      picture.getContext('2d').drawImage(src, 0, 0, picture.width, picture.height);
+      S.image.sourceDataURL = picture.toDataURL('image/png');
+      S.image.source = picture; S.image.fileName = f.name; S.image.clusters = [];
       $('#file-name').textContent = f.name;
-      processImage(); renderClusters(); autoName(); updateDesign();
+      processImage(); renderClusters(); autoName(); updateDesign(); scheduleSave();
     };
-    var fail = function () { updateDesign(); toast("That file couldn't be opened as a picture. Try a PNG or JPEG."); };
+    var fail = function () { if (destroyed) return; pictureLoading = false; updateDesign(); toast("That file couldn't be opened as a picture. Try a PNG or JPEG."); };
     if (window.createImageBitmap) createImageBitmap(f).then(done, function () { viaImg(f, done, fail); });
     else viaImg(f, done, fail);
     e.target.value = '';
@@ -921,11 +932,11 @@ export function mountStudio(root, opts) {
       var orig = document.createElement('span'); orig.className = 'orig'; orig.style.setProperty('--c', 'rgb(' + cl.rgb.join(',') + ')'); orig.title = 'Color in the picture';
       var sw = document.createElement('button'); sw.type = 'button'; sw.className = 'swatch'; sw.style.setProperty('--c', rgb(cl.thread));
       sw.setAttribute('aria-label', 'Change thread, now ' + threadName(cl.thread));
-      sw.addEventListener('click', function () { openSheet(cl.thread, function (t) { cl.thread = t; renderClusters(); updateDesign(); }); });
+      sw.addEventListener('click', function () { openSheet(cl.thread, function (t) { cl.thread = t; renderClusters(); updateDesign(); scheduleSave(); }); });
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = threadName(cl.thread) + ' #' + cl.thread;
       var pct = document.createElement('span'); pct.className = 'pct'; pct.textContent = Math.max(1, Math.round(cl.area / total * 100)) + '%';
       var tg = document.createElement('button'); tg.type = 'button'; tg.className = 'pill'; tg.setAttribute('aria-pressed', String(cl.on)); tg.textContent = cl.on ? 'Stitch' : 'Skip';
-      tg.addEventListener('click', function () { cl.on = !cl.on; renderClusters(); updateDesign(); });
+      tg.addEventListener('click', function () { cl.on = !cl.on; renderClusters(); updateDesign(); scheduleSave(); });
       row.appendChild(orig); row.appendChild(sw); row.appendChild(nm); row.appendChild(pct); row.appendChild(tg);
       box.appendChild(row);
     });
@@ -994,6 +1005,7 @@ export function mountStudio(root, opts) {
     var out = E.toStream(S.plan);
     return {
       name: slug(S.name) || 'design',
+      placement: S.placement,
       stitches: E.toRespiraStitches(out.stream),
       threads: out.colors.map(function (c) { var t = PEC[c]; return { index: c, name: t[3], rgb: [t[0], t[1], t[2]] }; })
     };
@@ -1028,26 +1040,38 @@ export function mountStudio(root, opts) {
   function rle(a) { var out = [], v = a[0], n = 0; for (var i = 0; i < a.length; i++) { if (a[i] === v) n++; else { out.push(v, n); v = a[i]; n = 1; } } out.push(v, n); return out; }
   function unrle(r, len) { var a = new Uint8Array(len), p = 0; for (var i = 0; i < r.length; i += 2) { a.fill(r[i], p, Math.min(len, p + r[i + 1])); p += r[i + 1]; } return a; }
   var saveTimer = null;
-  function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 500); }
+  function scheduleSave() { if (opts.onDirty) opts.onDirty(); clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 500); }
   function r2(v) { return Math.round(v * 100) / 100; }
+  function snapshot() {
+    if (pictureLoading) throw new Error('Wait for the picture to finish loading.');
+    var d = S.draw;
+    var sourceDataURL = S.image.sourceDataURL;
+    if (!sourceDataURL && S.image.source) sourceDataURL = S.image.source.toDataURL('image/png');
+    return {
+      v: 1, mode: S.mode, view: S.view, fabric: S.fabric, hoop: S.hoop, settings: S.settings,
+      draw: { tool: d.tool, color: d.color, sizes: d.sizes, pressure: d.pressure, order: d.order, example: d.example, labels: rle(d.labels),
+        strokes: d.strokes.map(function (st) { return { k: st.kind, c: st.color, p: st.pts.map(function (p) { return [r2(p[0]), r2(p[1]), r2(p[2])]; }) }; }) },
+      image: { sizeMM: S.image.sizeMM, k: S.image.k, removeBg: S.image.removeBg, clean: S.image.clean, sourceDataURL: sourceDataURL, fileName: S.image.fileName,
+        clusters: S.image.clusters.map(function (c) { return { rgb: c.rgb, thread: c.thread, on: c.on }; }) },
+      text: S.text, name: S.name, placement: S.placement
+    };
+  }
+  function thumbnail() {
+    var c = document.createElement('canvas'); c.width = c.height = 180;
+    c.getContext('2d').drawImage(base, 0, 0, 180, 180);
+    return c.toDataURL('image/png');
+  }
   function saveLocal() {
-    try {
-      var d = S.draw;
-      localStorage.setItem(KEY, JSON.stringify({
-        v: 1, mode: S.mode, view: S.view, fabric: S.fabric, hoop: S.hoop, settings: S.settings,
-        draw: { tool: d.tool, color: d.color, sizes: d.sizes, pressure: d.pressure, order: d.order, example: d.example, labels: rle(d.labels),
-          strokes: d.strokes.map(function (st) { return { k: st.kind, c: st.color, p: st.pts.map(function (p) { return [r2(p[0]), r2(p[1]), r2(p[2])]; }) }; }) },
-        image: { sizeMM: S.image.sizeMM, k: S.image.k, removeBg: S.image.removeBg, clean: S.image.clean },
-        text: S.text, name: S.nameAuto ? '' : S.name
-      }));
-    } catch (e) { /* storage unavailable: nothing to keep */ }
+    if (destroyed || pictureLoading) return;
+    if (opts.onSave) opts.onSave(snapshot(), thumbnail());
+    else { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* legacy standalone mode */ } }
   }
   function loadLocal() {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return false;
-      var s = JSON.parse(raw);
+      var s = opts.project;
+      if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
       if (!s || s.v !== 1) return false;
+      S.placement = s.placement;
       if (s.view) S.view = Object.assign(S.view, s.view);
       if (s.fabric) S.fabric = s.fabric;
       if (s.hoop) S.hoop = { real: s.hoop.real !== false, pxmm: +s.hoop.pxmm > 2 && +s.hoop.pxmm < 9 ? +s.hoop.pxmm : null };
@@ -1068,6 +1092,23 @@ export function mountStudio(root, opts) {
     } catch (e) { return false; }
   }
 
+  // Presets become normal editable drawing strokes/fills, including undo and project saving.
+  $('#add-shape').addEventListener('click', function () {
+    try {
+      var style = $('#shape-style').value, w = +$('#shape-line-width').value;
+      var points = shapePoints($('#shape-kind').value, +$('#shape-width').value, +$('#shape-height').value, +$('#shape-x').value, +$('#shape-y').value, style === 'satin' ? w / 2 + 0.3 : 0.3);
+      if (!Number.isFinite(w) || w < 1.5 || w > 6) throw new Error('Choose an outline width between 1.5 and 6 mm.');
+      pushUndo();
+      if (style === 'fill') {
+        var mask = rasterize(function (ctx, k) { ctx.beginPath(); ctx.moveTo(points[0][0]*k, points[0][1]*k); points.slice(1).forEach(function (p) { ctx.lineTo(p[0]*k,p[1]*k); }); ctx.closePath(); ctx.fill(); });
+        for (var i=0; i<mask.length; i++) if (mask[i]) S.draw.labels[i] = S.draw.color;
+        noteOrder(S.draw.color);
+      } else S.draw.strokes.push({ kind: style === 'satin' ? 'satin' : 'run', color: S.draw.color, pts: points.map(function (p) { return [p[0],p[1],style === 'satin' ? w : 0]; }) });
+      S.draw.example = false; afterDrawChange();
+      $('#shape-status').textContent = 'Shape added. Use Undo to remove it.';
+    } catch (error) { $('#shape-status').textContent = error.message; }
+  });
+
   // ---------- boot ----------
   var savedMode = loadLocal();
   if (!savedMode) exampleDrawing();
@@ -1085,12 +1126,24 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
+  if (S.image.sourceDataURL) {
+    pictureLoading = true;
+    var restoredImage = new Image();
+    restoredImage.onload = function () { if (destroyed) return; pictureLoading = false; S.image.source = restoredImage; processImage(); renderClusters(); if (S.mode === 'image') updateDesign(); scheduleSave(); };
+    restoredImage.onerror = function () { if (destroyed) return; pictureLoading = false; toast('The saved picture could not be opened. Choose the picture again.'); };
+    restoredImage.src = S.image.sourceDataURL;
+    $('#file-name').textContent = S.image.fileName || 'Saved picture';
+  }
   setMode(savedMode || 'draw');
   applyHoopSize();
   resizeStage();
 
+  listen(window, 'pagehide', saveLocal);
+  listen(document, 'visibilitychange', function () { if (document.visibilityState === 'hidden') saveLocal(); });
   return {
-    destroy: function () { textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
+    snapshot: snapshot, thumbnail: thumbnail,
+    setPlacement: function (value) { if (JSON.stringify(value) !== JSON.stringify(S.placement)) { S.placement = value; scheduleSave(); } },
+    destroy: function () { destroyed = true; textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
   };
 }
 

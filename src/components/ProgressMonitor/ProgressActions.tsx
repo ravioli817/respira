@@ -72,7 +72,7 @@ export function ProgressActions({
           }
         >
           <ArrowPathIcon className="w-3.5 h-3.5" />
-          {isMaskTraceComplete ? "Trace Again" : "Start Mask Trace"}
+          {isMaskTraceComplete ? "Trace again" : "Trace outline"}
         </Button>
       )}
     </div>

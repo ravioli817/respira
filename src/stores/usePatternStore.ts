@@ -9,6 +9,7 @@ import { calculateRotatedBounds } from "../utils/rotationUtils";
 const isDev = import.meta.env.DEV;
 
 interface PatternState {
+  sourceProjectId: string | null;
   // Original pattern (pre-upload)
   pesData: PesPatternData | null;
   currentFileName: string;
@@ -22,7 +23,11 @@ interface PatternState {
   patternUploaded: boolean;
 
   // Actions
-  setPattern: (data: PesPatternData, fileName: string) => void;
+  setPattern: (
+    data: PesPatternData,
+    fileName: string,
+    sourceProjectId?: string,
+  ) => void;
   setPatternOffset: (x: number, y: number) => void;
   setPatternRotation: (rotation: number) => void;
   setUploadedPattern: (
@@ -55,6 +60,7 @@ export interface TransformedBounds {
 
 export const usePatternStore = create<PatternState>((set) => ({
   // Initial state - original pattern
+  sourceProjectId: null,
   pesData: null,
   currentFileName: "",
   patternOffset: { x: 0, y: 0 },
@@ -67,8 +73,13 @@ export const usePatternStore = create<PatternState>((set) => ({
   patternUploaded: false,
 
   // Set pattern data and filename (replaces current pattern)
-  setPattern: (data: PesPatternData, fileName: string) => {
+  setPattern: (
+    data: PesPatternData,
+    fileName: string,
+    sourceProjectId?: string,
+  ) => {
     set({
+      sourceProjectId: sourceProjectId || null,
       pesData: data,
       currentFileName: fileName,
       patternOffset: { x: 0, y: 0 },

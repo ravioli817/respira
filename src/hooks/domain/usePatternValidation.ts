@@ -11,7 +11,7 @@ export interface PatternBoundsCheckResult {
 
 export interface UsePatternValidationParams {
   pesData: PesPatternData | null;
-  machineInfo: MachineInfo | null;
+  machineInfo: Pick<MachineInfo, "maxWidth" | "maxHeight"> | null;
   patternOffset: { x: number; y: number };
   patternRotation: number;
 }

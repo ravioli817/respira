@@ -10,12 +10,22 @@ This allows the user to operate the embroidery machine fully offline and from th
 
 This is a fork of [jhbruhn/respira](https://github.com/jhbruhn/respira). Respira's machine code is used as it is. The fork adds:
 
-- **Create screen** (`src/studio/`): draw with a stylus, turn a picture into stitches, or set text, on a hoop shown at real size. "Send to Skitch" hands the design to the Stitch screen, where it goes through Respira's own encoder and upload. Designs made here do not need a PES file.
+- **Create screen** (`src/studio/`): draw with a stylus, turn a picture into stitches, or set text, on a hoop shown at real size. "Prepare to stitch" hands the design to the Prepare screen, where it goes through Respira's own encoder and upload. Designs made here do not need a PES file.
 - **"What to do now" card** (`src/guide/`): plain-language instructions for each machine state, a chime when the machine needs someone (thread change, a fault, finished), and the screen kept awake while connected.
 - **Practice machine** (`src/practice/`): open the app with `?practice` in the address to try the whole flow against a pretend Skitch. Its behaviour is a best guess from the code, not a recording of a real machine.
 - The pattern preview now has a height on screens narrower than 1024 px (a tablet held upright).
 
 Run it locally with `npm install`, then `npm run web:dev`, and open http://localhost:5173 in Chrome.
+
+## Projects, preparation and playback
+
+- **Create:** use Draw, Picture or Text. In Draw, expand **Preset shapes** to add an ellipse/circle, rectangle, triangle, star or heart. Set its width, height and center position in millimeters, choose a line outline, satin outline or fill, then tap **Add shape**. Shapes use the selected thread and support Undo/Redo. Dimensions describe the contour; satin extends beyond it. Inserted shapes become normal drawing strokes/fills. Combining the three design modes in one composition is not part of this release.
+- **Projects:** edits save automatically to this browser's IndexedDB. Use **Projects** for the thumbnail gallery, **New project** for a blank drawing, and **Save a copy** to duplicate. Drawings, text, pictures, thread choices and prepared placement/rotation are preserved. Picture copies are embedded as PNG, with the longest side limited to 2048 pixels. Clearing browser data removes local projects; **Export project** saves an editable `.respira.json` backup to Files/Downloads. **Import project** opens it as a new project without overwriting another. Projects do not sync between browsers/devices automatically.
+- **Prepare:** tap **Prepare to stitch** in Create, or import a PES file on the Prepare screen. Review the dimensions, thread sequence, placement and sewing-time estimate before connecting. After further edits in Create, tap **Prepare to stitch** again to update the prepared snapshot.
+- **Stitch playback:** choose this view on Prepare to play, pause, scrub, step one command or jump to color stops. Toggle jumps, cuts and needle points. Playback uses the final encoded PEN data, including machine lock stitches and rotation; it never sends movement commands. The estimate excludes thread changes, cuts and other stops, and the preview does not predict fabric movement.
+- **Stitch:** continue to Stitch to upload, trace the outline, and start sewing with the machine's physical buttons. Connection controls remain available on every screen. Opening a different project does not replace the design already held by the machine.
+
+On iPad, ordinary Safari/Chrome do not expose Web Bluetooth. Bluefy is an option for opening the hosted app with Web Bluetooth support. This release's browser checks use the practice machine, not physical iPad/Bluefy/Skitch validation.
 
 ## Installation
 

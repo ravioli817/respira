@@ -114,3 +114,36 @@ describe("Create output readiness", () => {
     expectBlocked();
   });
 });
+
+it("adds sized shapes to the saved drawing and supports undo/redo", () => {
+  const before = studio.snapshot().draw.strokes.length;
+  button("#shape-kind").value = "rectangle";
+  button("#shape-width").value = "30";
+  button("#shape-height").value = "20";
+  button("#add-shape").click();
+  const saved = studio.snapshot();
+  expect(saved.draw.strokes).toHaveLength(before + 1);
+  const points = saved.draw.strokes.at(-1).p;
+  expect(
+    Math.max(...points.map((p) => p[0])) - Math.min(...points.map((p) => p[0])),
+  ).toBe(30);
+  expect(
+    Math.max(...points.map((p) => p[1])) - Math.min(...points.map((p) => p[1])),
+  ).toBe(20);
+  button("#undo").click();
+  expect(studio.snapshot().draw.strokes).toHaveLength(before);
+  button("#redo").click();
+  expect(studio.snapshot().draw.strokes).toEqual(saved.draw.strokes);
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  expect(studio.snapshot().draw.strokes).toEqual(saved.draw.strokes);
+});
+
+it("rejects shapes crossing the hoop without modifying the drawing", () => {
+  const before = studio.snapshot().draw.strokes;
+  button("#shape-width").value = "98";
+  button("#shape-style").value = "satin";
+  button("#add-shape").click();
+  expect(button("#shape-status").textContent).toMatch(/hoop/);
+  expect(studio.snapshot().draw.strokes).toEqual(before);
+});
