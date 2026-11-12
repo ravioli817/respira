@@ -15,7 +15,7 @@ This is a fork of [jhbruhn/respira](https://github.com/jhbruhn/respira). Respira
 - **Practice machine** (`src/practice/`): open the app with `?practice` in the address to try the whole flow against a pretend Skitch. Its behaviour is a best guess from the code, not a recording of a real machine.
 - The pattern preview now has a height on screens narrower than 1024 px (a tablet held upright).
 
-**Files of Respira's that this fork changes** carry a note on their first line pointing here: the app shell and header, the upload card, the trace button label, the pattern store, the two hooks that prepare a pattern for upload and check it against the hoop, the pattern preview card, `main.tsx`, the build workflow and the test configuration. `package.json` and `package-lock.json` (bundled lettering fonts and a test helper) cannot carry a note. This README is changed too.
+**Files of Respira's that this fork changes** carry a note on their first line pointing here: the app shell and header, the upload card, the trace button label, the pattern store, the two hooks that prepare a pattern for upload and check it against the hoop, the pattern preview card, `main.tsx` and the test configuration. `package.json` and `package-lock.json` (bundled lettering fonts and a test helper) cannot carry a note. This README is changed too.
 
 **Thread cuts.** A design from the Create screen is handed to Respira's encoder as the same clean stitch list Respira builds from a PES file, so the machine receives what Respira would send for that file: lock stitches and one cut on jumps longer than 5 mm and at each color change, and a plain jump across shorter gaps.
 

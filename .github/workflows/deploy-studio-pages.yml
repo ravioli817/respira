@@ -1,9 +1,9 @@
 name: Deploy Studio to GitHub Pages
 
-# Fork only: builds the web app from the studio branch and publishes it, so a tablet can open it over https.
+# Fork only: builds the web app from the main branch and publishes it, so a tablet can open it over https.
 on:
   push:
-    branches: [studio]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
