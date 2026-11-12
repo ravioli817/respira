@@ -140,9 +140,9 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     return hasPattern
       ? {
           tone: "action",
-          title: "Place the design, then tap Upload",
+          title: "Upload your prepared design",
           lines: [
-            "Drag the design in the preview to where you want it in the hoop.",
+            "Review placement and stitch playback on Prepare, then tap Upload here.",
           ],
           needsPerson: false,
         }
@@ -150,7 +150,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
           tone: "info",
           title: "Pick a design",
           lines: [
-            "Make one on the Create screen, or choose a PES file you already have.",
+            "Make one on Create and tap Prepare to stitch, or import a PES file on Prepare.",
           ],
           needsPerson: false,
         };
@@ -203,7 +203,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
             title: `Press ${START_STOP} to begin`,
             lines: [
               `The machine should be threaded with ${firstThread}.`,
-              "Not checked the position yet? Tap Start Mask Trace first.",
+              "Not checked the position yet? Tap Trace outline first.",
             ],
             needsPerson: false,
           };
@@ -282,7 +282,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     default:
       return {
         tone: "action",
-        title: "Check where it will stitch: tap Start Mask Trace",
+        title: "Check the position: tap Trace outline",
         lines: [
           "The machine will ask you to press Accept, then move the frame around the edge of the design without stitching.",
         ],

@@ -2,7 +2,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore, usePatternUploaded } from "../stores/useMachineStore";
 import { usePatternStore } from "../stores/usePatternStore";
-import { ConnectionPrompt } from "./ConnectionPrompt";
 import { FileUpload } from "./FileUpload";
 import { PatternSummaryCard } from "./PatternSummaryCard";
 import { ProgressMonitor } from "./ProgressMonitor";
@@ -30,9 +29,6 @@ export function LeftSidebar() {
     <div className="flex flex-col gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
       {/* What to do now, in plain words */}
       <NextStepCard />
-
-      {/* Connect Button or Browser Hint - Show when disconnected */}
-      {!isConnected && <ConnectionPrompt />}
 
       {/* Pattern File - Show during upload stage (before pattern is uploaded) */}
       {isConnected && !patternUploaded && <FileUpload />}

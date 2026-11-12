@@ -84,6 +84,21 @@ export const STUDIO_MARKUP = `
         <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
         <div class="palette" id="draw-palette-bench"></div>
       </div>
+      <details class="shape-tools">
+        <summary>Preset shapes</summary>
+        <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>
+        <div class="shape-grid">
+          <label class="stack">Width (mm)<input id="shape-width" type="number" min="2" max="98" value="30"></label>
+          <label class="stack">Height (mm)<input id="shape-height" type="number" min="2" max="98" value="30"></label>
+          <label class="stack">Center X (mm)<input id="shape-x" type="number" min="0" max="100" value="50"></label>
+          <label class="stack">Center Y (mm)<input id="shape-y" type="number" min="0" max="100" value="50"></label>
+        </div>
+        <label class="stack">Stitch style<select id="shape-style"><option value="run">Line outline</option><option value="satin">Satin outline</option><option value="fill">Filled</option></select></label>
+        <label class="stack">Satin width (mm)<input id="shape-line-width" type="number" min="1.5" max="6" step="0.1" value="3"></label>
+        <p class="hint">Uses the selected thread. X and Y are measured from the top-left of the hoop. Equal width and height make a circle or square.</p>
+        <button class="btn" id="add-shape">Add shape</button>
+        <p id="shape-status" role="status" class="hint"></p>
+      </details>
       <dl class="legend">
         <dt>Line</dt><dd>A bold outline stitch.</dd>
         <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
@@ -118,7 +133,7 @@ export const STUDIO_MARKUP = `
 
     <section class="panel first" id="panel-text" hidden>
       <h2>Text</h2>
-      <label class="stack">Words<textarea id="txt" rows="2" spellcheck="false"></textarea></label>
+      <label class="stack">Words<textarea id="txt" rows="2" maxlength="2000" spellcheck="false"></textarea></label>
       <label class="stack">Font<select id="txt-font"></select></label>
       <label class="range"><span>Width</span><input type="range" id="txt-w" min="20" max="100" step="1" value="80"><output id="txt-w-out" for="txt-w">80 mm</output></label>
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
@@ -146,8 +161,8 @@ export const STUDIO_MARKUP = `
 
     <section class="panel save mid" id="save-panel">
       <label class="stack">Design name<input id="fname" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24"></label>
-      <button class="btn-primary" id="send">Send to Skitch</button>
-      <p class="muted small">Opens the Stitch screen with this design, ready to go to the machine.</p>
+      <button class="btn-primary" id="send">Prepare to stitch</button>
+      <p class="muted small">Review placement and play the stitches before uploading.</p>
       <p class="status" id="save-status" role="status" aria-live="polite"></p>
       <div class="save-files"><button class="link" id="save">Save a .pes file</button><button class="link" id="save-dst">Save a .dst file</button></div>
     </section>
@@ -155,8 +170,8 @@ export const STUDIO_MARKUP = `
     <details class="panel howto">
       <summary>Getting it onto your Skitch</summary>
       <ol>
-        <li>Tap <strong>Send to Skitch</strong>. The Stitch screen opens with your design in the hoop.</li>
-        <li>Connect to the machine, then tap <strong>Upload</strong>.</li>
+        <li>Tap <strong>Prepare to stitch</strong>. Prepare opens with your design in the hoop. Review its placement and playback.</li>
+        <li>Continue to <strong>Stitch</strong>, connect to the machine, then tap <strong>Upload</strong>.</li>
         <li>Let the machine trace the outline so you can see where it will stitch, then start.</li>
       </ol>
       <p>You can also save a .pes file and bring it into Brother's Artspira app.</p>

@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export function AppHeader() {
+export function AppHeader({ showWorkflow = true }: { showWorkflow?: boolean }) {
   const {
     isConnected,
     machineInfo,
@@ -248,9 +248,7 @@ export function AppHeader() {
           </div>
 
           {/* Workflow Stepper - Flexible width column */}
-          <div>
-            <WorkflowStepper />
-          </div>
+          <div>{showWorkflow && <WorkflowStepper />}</div>
         </div>
       </header>
     </TooltipProvider>

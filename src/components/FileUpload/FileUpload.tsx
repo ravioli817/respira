@@ -34,7 +34,11 @@ import { UploadButton } from "./UploadButton";
 import { UploadProgress } from "./UploadProgress";
 import { BoundsValidator } from "./BoundsValidator";
 
-export function FileUpload() {
+export function FileUpload({
+  preparationOnly = false,
+}: {
+  preparationOnly?: boolean;
+}) {
   // Machine store
   const { isConnected, machineStatus, machineInfo } = useMachineStore(
     useShallow((state) => ({
@@ -180,7 +184,9 @@ export function FileUpload() {
           />
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-              Pattern File
+              {preparationOnly
+                ? "Design details / import PES"
+                : "Upload the prepared design"}
             </h3>
             {pesData && displayFileName ? (
               <p
@@ -223,17 +229,19 @@ export function FileUpload() {
             patternUploaded={patternUploaded}
           />
 
-          <UploadButton
-            pesData={pesData}
-            machineStatus={machineStatus}
-            isConnected={isConnected}
-            isUploading={isUploading}
-            uploadProgress={uploadProgress}
-            boundsFits={boundsCheck.fits}
-            boundsError={boundsCheck.error}
-            onUpload={handleUpload}
-            patternUploaded={patternUploaded}
-          />
+          {!preparationOnly && (
+            <UploadButton
+              pesData={pesData}
+              machineStatus={machineStatus}
+              isConnected={isConnected}
+              isUploading={isUploading}
+              uploadProgress={uploadProgress}
+              boundsFits={boundsCheck.fits}
+              boundsError={boundsCheck.error}
+              onUpload={handleUpload}
+              patternUploaded={patternUploaded}
+            />
+          )}
         </div>
 
         <PyodideProgress
@@ -243,11 +251,13 @@ export function FileUpload() {
           isFileLoading={isLoading}
         />
 
-        <BoundsValidator
-          pesData={pesData}
-          machineStatus={machineStatus}
-          boundsError={boundsCheck.error}
-        />
+        {!preparationOnly && isConnected && (
+          <BoundsValidator
+            pesData={pesData}
+            machineStatus={machineStatus}
+            boundsError={boundsCheck.error}
+          />
+        )}
 
         <UploadProgress
           isUploading={isUploading}
