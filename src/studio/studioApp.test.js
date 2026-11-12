@@ -65,9 +65,17 @@ afterEach(() => {
   delete document.fonts;
 });
 
+function enterDecorativeText() {
+  // Select the legacy decorative font to exercise asynchronous browser font loading.
+  button("#mode-text").click();
+  button("#txt-font").value = "Lobster";
+  button("#txt-font").dispatchEvent(new Event("change", { bubbles: true }));
+  input("#txt-w", "20");
+  vi.advanceTimersByTime(180);
+}
 describe("Create output readiness", () => {
   it("blocks Send and both exports until the latest text and fonts are ready", async () => {
-    button("#mode-text").click();
+    enterDecorativeText();
     fontRequests.shift()([]);
     await vi.advanceTimersByTimeAsync(60);
     expect(button("#send").disabled).toBe(false);
@@ -86,7 +94,7 @@ describe("Create output readiness", () => {
   });
 
   it("ignores a previous font result arriving during the next edit debounce", async () => {
-    button("#mode-text").click();
+    enterDecorativeText();
     input("#txt", "Latest");
     fontRequests.shift()([]);
     await vi.advanceTimersByTimeAsync(100);
@@ -106,9 +114,15 @@ describe("Create output readiness", () => {
   });
 
   it("leaves all output disabled when text becomes empty", async () => {
-    button("#mode-text").click();
+    enterDecorativeText();
     fontRequests.shift()([]);
     await vi.advanceTimersByTimeAsync(60);
+    // Hide the existing drawing: empty text alone must not suppress other layers.
+    const drawing = root.querySelector("#layers button");
+    drawing.click();
+    button("#layer-visible").checked = false;
+    button("#layer-visible").dispatchEvent(new Event("change"));
+    root.querySelectorAll("#layers button")[1].click();
     input("#txt", "");
     await vi.advanceTimersByTimeAsync(240);
     expectBlocked();
@@ -146,4 +160,73 @@ it("rejects shapes crossing the hoop without modifying the drawing", () => {
   button("#add-shape").click();
   expect(button("#shape-status").textContent).toMatch(/hoop/);
   expect(studio.snapshot().draw.strokes).toEqual(before);
+});
+
+it("combines drawing and satin text, preserving geometry through reorder, hide, undo and reopen", async () => {
+  const baseline = studio.snapshot();
+  button("#add-text-layer").click();
+  input("#txt", "Ravi");
+  input("#layer-y", "30");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(button("#note").textContent).toBe("");
+  expect(button("#send").disabled).toBe(false);
+  button("#send").click();
+  const mixed = onSend.mock.calls.at(-1)[0];
+  expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
+  const saved = studio.snapshot();
+  expect(saved.v).toBe(2);
+  expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
+  expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
+  expect(saved.layers.at(-1).transform.y).toBe(30);
+  button("#layer-earlier").click();
+  expect(studio.snapshot().layers[1].id).toBe(saved.activeLayerId);
+  button("#layer-undo").click();
+  expect(studio.snapshot().layers.map((l) => l.id)).toEqual(
+    saved.layers.map((l) => l.id),
+  );
+  button("#layer-visible").checked = false;
+  button("#layer-visible").dispatchEvent(new Event("change"));
+  await vi.advanceTimersByTimeAsync(60);
+  button("#send").click();
+  expect(onSend.mock.calls.at(-1)[0].stitches.length).toBeLessThan(
+    mixed.stitches.length,
+  );
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  await vi.advanceTimersByTimeAsync(60);
+  button("#send").click();
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(mixed.stitches);
+  expect(baseline.layers[0].source.strokes).toEqual(
+    saved.layers[0].source.strokes,
+  );
+});
+
+it("blocks output for unsupported lettering and an out-of-range final letter size", async () => {
+  button("#add-text-layer").click();
+  input("#txt", "Ravi 😀");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(button("#send").disabled).toBe(true);
+  expect(button("#note").textContent).toContain("😀");
+  input("#txt", "Ravi");
+  input("#layer-size", "200");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(button("#send").disabled).toBe(true);
+  expect(button("#note").textContent).toContain("4 and 15");
+  input("#layer-size", "100");
+  await vi.advanceTimersByTimeAsync(60);
+  expect(button("#send").disabled).toBe(false);
+});
+
+it("does not treat a tap on text as a move or reset prepared placement", () => {
+  button("#add-text-layer").click();
+  studio.setPlacement({ x: 20, y: 30, rotation: 15 });
+  const before = studio.snapshot();
+  button("#overlay").dispatchEvent(
+    new MouseEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true }),
+  );
+  button("#overlay").dispatchEvent(
+    new MouseEvent("pointerup", { clientX: 50, clientY: 50, bubbles: true }),
+  );
+  expect(studio.snapshot().placement).toEqual(before.placement);
+  expect(studio.snapshot().layers).toEqual(before.layers);
 });

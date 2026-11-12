@@ -6,6 +6,7 @@ export interface StudioPlan {
 export interface StudioDesignInput {
   /** GRID x GRID cells of thread index (0 = empty), row by row. */
   labels?: Uint8Array | null;
+  paths?: Array<{ color: number; pts: number[][] }>;
   /** Thread indices in the order their filled areas are stitched. */
   order?: number[];
   /** Pen strokes: satin columns or running-stitch lines; points are [x mm, y mm, width mm]. */

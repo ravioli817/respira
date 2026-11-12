@@ -67,3 +67,61 @@ describe("editable project files", () => {
       expect(() => importProject(text)).toThrow();
   });
 });
+
+it("round trips a v2 mixed composition without duplicating image payloads", () => {
+  const base = emptyProject();
+  const data: import("./projectFile").ProjectData = {
+    ...base,
+    v: 2,
+    activeLayerId: "text",
+    layers: [
+      {
+        id: "drawing",
+        name: "Border",
+        kind: "draw",
+        source: base.draw,
+        visible: true,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      },
+      {
+        id: "photo",
+        name: "Picture",
+        kind: "image",
+        source: {
+          ...base.image,
+          sourceDataURL: "data:image/png;base64,AAAA",
+          fileName: "flower.png",
+          clusters: [],
+        },
+        visible: true,
+        transform: { x: -20, y: -20, scale: 0.5, rotation: 15 },
+      },
+      {
+        id: "text",
+        name: "Name",
+        kind: "text",
+        source: {
+          ...base.text,
+          font: "SmallSatin",
+          value: "Ravi",
+          heightMM: 8,
+          letterSpacing: 0.6,
+          lineGap: 2,
+          align: "center",
+        },
+        visible: true,
+        transform: { x: 0, y: 30, scale: 1, rotation: 0 },
+      },
+    ],
+  };
+  expect(importProject(exportProject(data)).layers).toEqual(data.layers);
+  const duplicate = structuredClone(data);
+  duplicate.layers![1].id = "drawing";
+  expect(() => exportProject(duplicate)).toThrow();
+  const badScale = structuredClone(data);
+  badScale.layers![0].transform.scale = 0;
+  expect(() => exportProject(badScale)).toThrow();
+  const badSelection = structuredClone(data);
+  badSelection.activeLayerId = "missing";
+  expect(() => exportProject(badSelection)).toThrow();
+});

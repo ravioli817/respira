@@ -465,6 +465,14 @@ const holder = {};
       var lp = paths[paths.length - 1].pts;
       pos = lp[lp.length - 1];
     });
+    // Pre-digitized lettering paths retain their authored column/character order.
+    (design.paths || []).forEach(function (p) {
+      if (!p.pts.length) return;
+      var previous = blocks[blocks.length - 1];
+      var path = { pts: p.pts, inside: null };
+      if (previous && previous.color === p.color) previous.paths.push(path);
+      else blocks.push({ color: p.color, paths: [path] });
+    });
     var out = blocks.map(function (b) { return { color: b.color, ops: buildOps(b.paths, s) }; });
     return { blocks: out };
   }
