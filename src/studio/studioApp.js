@@ -2,6 +2,8 @@
    interface, mounted into a shadow root so its styles and Respira's stay out of each other's way.
    Plain JavaScript on purpose; the typed surface is in studioApp.d.ts. */
 import { StitchEngine as E } from './engine.js';
+import { drawingColors, recolorDrawing } from './recolor.js';
+import { pictureDetailWarnings } from './pictureWarnings.js';
 import { engineSettings, stitchDefaults } from './stitchSettings.js';
 import { hitTestLayer } from './selection.js';
 import { transformPoint, transformDesign, composePlans, identityTransform } from './composition.js';
@@ -769,12 +771,13 @@ export function mountStudio(root, opts) {
   function updateDesign() {
     invalidateDesign();
     if (S.layers.some(function (l) { return l.source.loading; })) return;
-    var token = textToken, parts = new Array(S.layers.length), pending = 0;
+    var token = textToken, parts = new Array(S.layers.length), pending = 0, collecting = true;
     S.note = '';
     function ready() {
-      if (pending || token !== textToken || destroyed) return;
+      if (collecting || pending || token !== textToken || destroyed) return;
       try {
         S.parts = parts.filter(Boolean).map(function (part) { return { layer: part.layer, design: transformDesign(part.design, part.layer.transform) }; });
+        S.note = [S.note].concat(pictureDetailWarnings(S.parts)).filter(Boolean).join('\n');
         S.design = { labels: new Uint8Array(GRID * GRID), lines: [] };
         designReady();
       } catch (error) { failDesign(error.message); }
@@ -795,7 +798,7 @@ export function mountStudio(root, opts) {
         }
         parts[index] = { layer: layer, design: design };
       });
-      ready();
+      collecting = false; ready();
     } catch (error) { textToken++; failDesign(error.message); }
   }
   function failDesign(message) {
@@ -836,6 +839,7 @@ export function mountStudio(root, opts) {
     scheduleSave();
   }
   function afterDrawChange() {
+    syncDrawingRecolor();
     S.placement = undefined;
     syncHistory();
     $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example);
@@ -913,7 +917,7 @@ export function mountStudio(root, opts) {
     $('#txt').value=S.text.value; fontSel.value=S.text.font; $('#txt-w').value=S.text.widthMM; $('#txt-w-out').textContent=S.text.widthMM+' mm';
     $('#txt-height').value=S.text.heightMM ?? 8; $('#txt-spacing').value=S.text.letterSpacing ?? 0.5; $('#txt-linegap').value=S.text.lineGap ?? 2; $('#txt-align').value=S.text.align || 'center';
     syncLettering(); if (textPalette) textPalette.draw();
-    syncView(); syncLayers(); syncStitchSettings(); updateDesign(); scheduleSave();
+    syncView(); syncLayers(); syncStitchSettings(); syncDrawingRecolor(); updateDesign(); scheduleSave();
   }
   function setMode(m) {
     // Stay on the selected object when it is already of this kind, else return to the one last used.
@@ -982,10 +986,28 @@ export function mountStudio(root, opts) {
   $('#pressure').addEventListener('change', function (e) { S.draw.pressure = e.target.checked; scheduleSave(); });
 
   var drawPalettes = [];
-  function pickDrawColor(i) { S.draw.color = i; syncThreadName(); drawPalettes.forEach(function (p) { p.draw(); }); scheduleSave(); }
+  function pickDrawColor(i) { S.draw.color = i; syncThreadName(); syncDrawingRecolor(); drawPalettes.forEach(function (p) { p.draw(); }); scheduleSave(); }
   drawPalettes.push(Palette($('#draw-palette'), function () { return S.draw.color; }, pickDrawColor));
   drawPalettes.push(Palette($('#draw-palette-bench'), function () { return S.draw.color; }, pickDrawColor));
   function syncThreadName() { $$('.thread-name').forEach(function (el) { el.textContent = threadName(S.draw.color) + ' · #' + S.draw.color; }); }
+
+  function syncDrawingRecolor() {
+    var select=$('#recolor-from'), old=select.value, colors=drawingColors(S.draw);
+    select.innerHTML='';
+    var all=document.createElement('option');all.value='all';all.textContent='All existing colors';select.appendChild(all);
+    colors.forEach(function(c){var option=document.createElement('option');option.value=String(c);option.textContent=threadName(c);select.appendChild(option);});
+    select.value=colors.indexOf(+old)>=0?old:'all';
+    $('#recolor-drawing').textContent='Recolor marks to '+threadName(S.draw.color);
+    $('#recolor-drawing').disabled=!colors.some(function(c){return c!==S.draw.color && (select.value==='all'||c===+select.value);});
+  }
+  $('#recolor-from').addEventListener('change',syncDrawingRecolor);
+  $('#recolor-drawing').addEventListener('click',function(){
+    if(S.mode!=='draw'||$('#recolor-drawing').disabled)return;
+    pushUndo();
+    var source=$('#recolor-from').value;
+    S.draw=recolorDrawing(S.draw,S.draw.color,source==='all'?null:+source);currentLayer().source=S.draw;
+    afterDrawChange();
+  });
 
   // picture controls
   function handlePictureFile(e, asNew) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   BellAlertIcon,
   CheckCircleIcon,
@@ -58,7 +58,13 @@ const REMIND_MS = 20000;
  * A plain-words card saying what to do now, with a chime when the machine needs someone
  * (thread change, a fault, finished). Also keeps the screen awake while connected.
  */
-export function NextStepCard() {
+export function NextStepCard({
+  children,
+  embedded = false,
+}: {
+  children?: ReactNode;
+  embedded?: boolean;
+}) {
   const step = useNextStep();
   const isConnected = useMachineStore((state) => state.isConnected);
   const [sound, setSound] = useState(soundEnabled);
@@ -103,7 +109,8 @@ export function NextStepCard() {
       aria-live="polite"
       aria-label="What to do now"
       className={cn(
-        "flex-shrink-0 rounded-xl border-l-8 border-y border-r px-4 py-3 shadow-sm flex gap-3",
+        "flex-shrink-0 px-4 py-3 flex gap-3",
+        embedded ? "" : "rounded-xl border-l-8 border-y border-r shadow-sm",
         card,
       )}
     >
@@ -124,6 +131,7 @@ export function NextStepCard() {
             ))}
           </ol>
         )}
+        {children}
       </div>
       <button
         type="button"

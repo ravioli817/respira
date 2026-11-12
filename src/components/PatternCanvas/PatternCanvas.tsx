@@ -1,4 +1,5 @@
 // Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
+import { formatPatternDimensions } from "../../prepare/patternDimensions";
 import { useRef, useMemo, useState, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -140,16 +141,11 @@ export function PatternCanvas() {
   // Memoize pattern dimensions calculation
   const patternDimensions = useMemo(() => {
     if (!displayPattern) return null;
-    const width = (
-      (displayPattern.bounds.maxX - displayPattern.bounds.minX) /
-      10
-    ).toFixed(1);
-    const height = (
-      (displayPattern.bounds.maxY - displayPattern.bounds.minY) /
-      10
-    ).toFixed(1);
-    return `${width} × ${height} mm`;
-  }, [displayPattern]);
+    return formatPatternDimensions(
+      displayPattern,
+      uploadedPesData ? 0 : localPatternRotation,
+    );
+  }, [displayPattern, uploadedPesData, localPatternRotation]);
 
   return (
     <Card

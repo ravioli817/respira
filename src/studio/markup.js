@@ -90,6 +90,12 @@ export const STUDIO_MARKUP = `
         <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
         <div class="palette" id="draw-palette-bench"></div>
       </div>
+      <details class="drawing-recolor">
+        <summary>Recolor existing marks</summary>
+        <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
+        <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
+        <button class="btn" id="recolor-drawing">Recolor marks</button>
+      </details>
       <details class="shape-tools">
         <summary>Preset shapes</summary>
         <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>

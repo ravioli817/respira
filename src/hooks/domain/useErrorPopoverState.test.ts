@@ -278,3 +278,29 @@ describe("useErrorPopoverState", () => {
     expect(result.current.isOpen).toBe(false);
   });
 });
+
+it("keeps inline Stitch errors from auto-opening a second overlay, while allowing manual details", () => {
+  const hasError = (code: number | undefined) =>
+    code !== undefined && code !== 0;
+  const { result, rerender } = renderHook(
+    ({ autoOpen, machineError }) =>
+      useErrorPopoverState({
+        autoOpen,
+        machineError,
+        machineErrorMessage: null,
+        pyodideError: null,
+        hasError,
+      }),
+    { initialProps: { autoOpen: false, machineError: 0 } },
+  );
+  rerender({ autoOpen: false, machineError: 1 });
+  expect(result.current.isOpen).toBe(false);
+  act(() => result.current.handleOpenChange(true));
+  expect(result.current.isOpen).toBe(true);
+  rerender({ autoOpen: false, machineError: 0 });
+  expect(result.current.isOpen).toBe(false);
+  rerender({ autoOpen: true, machineError: 2 });
+  expect(result.current.isOpen).toBe(true);
+  rerender({ autoOpen: false, machineError: 2 });
+  expect(result.current.isOpen).toBe(false);
+});

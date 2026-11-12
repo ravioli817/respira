@@ -216,7 +216,11 @@ export function FileUpload({
 
         {!isLoading && pesData && (
           <div className="mb-3">
-            <PatternInfo pesData={pesData} showThreadBlocks />
+            <PatternInfo
+              pesData={pesData}
+              rotation={patternRotation}
+              showThreadBlocks
+            />
           </div>
         )}
 

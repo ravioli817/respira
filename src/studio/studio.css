@@ -293,3 +293,9 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size:1
 #stitch-fields .stack { margin-block:10px; }
 #stitch-fields input { width:100%; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
 #stitch-fields:disabled { opacity:0.6; }
+
+.drawing-recolor { padding-block:12px; border-block:1px solid var(--line); }
+.drawing-recolor summary { cursor:pointer; font-weight:600; padding-block:8px; }
+.drawing-recolor .stack { margin-block:10px; }
+.drawing-recolor button { width:100%; min-height:44px; }
+.note { white-space:pre-line; }

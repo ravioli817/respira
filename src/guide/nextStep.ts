@@ -48,7 +48,7 @@ export function currentBlockIndex(
   currentStitch: number,
 ): number {
   const index = colorBlocks.findIndex(
-    (block) => currentStitch < block.endStitch,
+    (block) => currentStitch <= block.endStitch,
   );
   return index === -1 ? colorBlocks.length - 1 : index;
 }
@@ -136,6 +136,40 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     };
   }
 
+  if (status === MachineStatus.None || status === MachineStatus.TryConnecting) {
+    return {
+      tone: "progress",
+      title: "Reading machine status",
+      lines: ["Wait for the machine to report its state."],
+      needsPerson: false,
+    };
+  }
+  if (
+    status === MachineStatus.HOOP_AVOIDANCE ||
+    status === MachineStatus.HOOP_AVOIDANCEING
+  ) {
+    return {
+      tone: "progress",
+      title: "The machine is moving the frame",
+      lines: ["Wait for it to stop."],
+      needsPerson: false,
+    };
+  }
+  if (
+    patternUploaded &&
+    status === MachineStatus.IDLE &&
+    colorBlocks.length &&
+    currentStitch > colorBlocks[colorBlocks.length - 1].endStitch
+  ) {
+    return {
+      tone: "done",
+      title: "Ready for a new design",
+      lines: [
+        "Delete the finished pattern from the machine to prepare another design.",
+      ],
+      needsPerson: false,
+    };
+  }
   if (!patternUploaded) {
     return hasPattern
       ? {
@@ -212,7 +246,9 @@ export function getNextStep(input: NextStepInput): NextStep | null {
       const index = currentBlockIndex(colorBlocks, currentStitch);
       return {
         tone: "progress",
-        title: `Stitching ${threadLabel(colorBlocks[index])}`,
+        title: colorBlocks[index]
+          ? `Stitching ${threadLabel(colorBlocks[index])}`
+          : "Stitching the machine’s loaded design",
         lines: [
           blockCount > 1
             ? `Thread ${index + 1} of ${blockCount}. The machine stops by itself when it is time to change thread.`
@@ -226,9 +262,13 @@ export function getNextStep(input: NextStepInput): NextStep | null {
       const index = upcomingBlockIndex(colorBlocks, currentStitch);
       return {
         tone: "action",
-        title: `Change the thread to ${threadLabel(colorBlocks[index])}`,
+        title: colorBlocks[index]
+          ? `Change the thread to ${threadLabel(colorBlocks[index])}`
+          : "Change the thread on the machine",
         lines: [
-          `Thread ${index + 1} of ${blockCount}.`,
+          blockCount
+            ? `Thread ${index + 1} of ${blockCount}.`
+            : "Use the thread sequence for the design loaded on the machine.",
           `Then press ${START_STOP}.`,
         ],
         needsPerson: true,
@@ -268,15 +308,6 @@ export function getNextStep(input: NextStepInput): NextStep | null {
           "Tap Delete Pattern to start something new.",
         ],
         needsPerson: true,
-      };
-
-    case MachineStatus.HOOP_AVOIDANCE:
-    case MachineStatus.HOOP_AVOIDANCEING:
-      return {
-        tone: "progress",
-        title: "The machine is moving the frame",
-        lines: ["Wait for it to stop."],
-        needsPerson: false,
       };
 
     default:
