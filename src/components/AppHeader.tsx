@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore } from "../stores/useMachineStore";
 import { useUIStore } from "../stores/useUIStore";
@@ -29,7 +30,11 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export function AppHeader({ showWorkflow = true }: { showWorkflow?: boolean }) {
+/**
+ * `compact` is used off the Stitch screen: the name, status and error badge share one short line
+ * and the workflow steps are left out, so the Create screen keeps its height for the hoop.
+ */
+export function AppHeader({ compact = false }: { compact?: boolean }) {
   const {
     isConnected,
     machineInfo,
@@ -90,12 +95,32 @@ export function AppHeader({ showWorkflow = true }: { showWorkflow?: boolean }) {
 
   return (
     <TooltipProvider>
-      <header className="bg-gradient-to-r from-primary-600 via-primary-700 to-primary-800 dark:from-primary-700 dark:via-primary-800 dark:to-primary-900 px-4 sm:px-6 lg:px-8 py-3 shadow-lg border-b-2 border-primary-900/20 dark:border-primary-800/30 flex-shrink-0">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 lg:gap-8 items-center">
+      <header
+        className={cn(
+          "bg-gradient-to-r from-primary-600 via-primary-700 to-primary-800 dark:from-primary-700 dark:via-primary-800 dark:to-primary-900 px-4 sm:px-6 lg:px-8 shadow-lg border-b-2 border-primary-900/20 dark:border-primary-800/30 flex-shrink-0",
+          compact ? "py-1.5" : "py-3",
+        )}
+      >
+        <div
+          className={cn(
+            "grid grid-cols-1 items-center",
+            !compact && "lg:grid-cols-[280px_1fr] gap-4 lg:gap-8",
+          )}
+        >
           {/* Machine Connection Status - Responsive width column */}
-          <div className="flex items-center gap-3 w-full lg:w-[280px]">
+          <div
+            className={cn(
+              "flex items-center gap-3 w-full",
+              !compact && "lg:w-[280px]",
+            )}
+          >
             <StatusIndicator state={connectionIndicatorState} size="sm" />
-            <div className="flex-1 min-w-0">
+            <div
+              className={cn(
+                "flex-1 min-w-0",
+                compact && "flex flex-wrap items-center gap-x-4",
+              )}
+            >
               <div className="flex items-center gap-2">
                 <h1 className="text-lg lg:text-xl font-bold text-white leading-tight">
                   Respira
@@ -146,7 +171,12 @@ export function AppHeader({ showWorkflow = true }: { showWorkflow?: boolean }) {
                   </Tooltip>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-1 min-h-[32px]">
+              <div
+                className={cn(
+                  "flex items-center gap-2 min-h-[32px]",
+                  !compact && "mt-1",
+                )}
+              >
                 {isConnected ? (
                   <>
                     <Button
@@ -248,7 +278,11 @@ export function AppHeader({ showWorkflow = true }: { showWorkflow?: boolean }) {
           </div>
 
           {/* Workflow Stepper - Flexible width column */}
-          <div>{showWorkflow && <WorkflowStepper />}</div>
+          {!compact && (
+            <div>
+              <WorkflowStepper />
+            </div>
+          )}
         </div>
       </header>
     </TooltipProvider>

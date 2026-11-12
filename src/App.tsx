@@ -220,12 +220,13 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
-      <AppHeader showWorkflow={screen === "stitch"} />
-      <ConnectionBar onStitch={() => setScreen("stitch")} />
+      {/* Full header with the workflow steps on Stitch; one short line elsewhere, so the hoop has room */}
+      <AppHeader compact={screen !== "stitch"} />
       <ScreenTabs
         screen={screen}
         onChange={setScreen}
         patternName={pesData || uploadedPesData ? currentFileName : undefined}
+        trailing={<ConnectionBar />}
       />
 
       {/* Create screen - stays mounted so a drawing in progress survives a visit to the Stitch screen */}

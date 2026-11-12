@@ -59,13 +59,11 @@ describe("toRespiraStitches", () => {
     expect(design.threads.map((t) => t.index)).toEqual([5, 37]);
   });
 
-  it("only repeats a point for a trim or a new color", () => {
+  it("never repeats the previous point, as a PES read by Respira never does", () => {
     for (let i = 1; i < design.stitches.length; i++) {
-      const [x, y, cmd, color] = design.stitches[i];
-      const [px, py, , previousColor] = design.stitches[i - 1];
-      if (x === px && y === py) {
-        expect(cmd === TRIM || color !== previousColor).toBe(true);
-      }
+      const [x, y] = design.stitches[i];
+      const [px, py] = design.stitches[i - 1];
+      expect(x === px && y === py).toBe(false);
     }
   });
 
@@ -154,8 +152,9 @@ describe("studioDesignToPattern", () => {
     expect(data.uniqueColors[0].threadIndices).toEqual([0, 2]);
   });
 
-  it("preserves a planned cut across a short same-color gap in machine bytes", () => {
-    const design = designFrom(
+  /** Two straight lines of one thread, the second starting `gapMm` after the first ends. */
+  function twoLines(gapMm: number) {
+    return designFrom(
       new Uint8Array(GRID * GRID),
       [],
       [
@@ -171,26 +170,61 @@ describe("studioDesignToPattern", () => {
           kind: "run",
           color: 5,
           pts: [
-            [53, 40, 0],
-            [63, 40, 0],
+            [50 + gapMm, 40, 0],
+            [60 + gapMm, 40, 0],
           ],
         },
       ],
     );
-    expect(design.stitches.filter((s) => s[2] === TRIM)).toHaveLength(1);
-    const { data } = studioDesignToPattern(design);
-    const cutOffsets = [];
-    for (let i = 0; i < data.penData.length; i += 4) {
-      if (data.penData[i + 2] & 2) cutOffsets.push(i);
+  }
+  /** Decoded machine points: position in 0.1 mm plus the jump and cut flags. */
+  function penPoints(penData: Uint8Array) {
+    const view = new DataView(
+      penData.buffer,
+      penData.byteOffset,
+      penData.byteLength,
+    );
+    const points = [];
+    for (let i = 0; i < penData.length; i += 4) {
+      points.push({
+        x: view.getInt16(i, true) >> 3,
+        y: view.getInt16(i + 2, true) >> 3,
+        feed: (penData[i + 2] & 1) === 1,
+        cut: (penData[i + 2] & 2) === 2,
+      });
     }
-    expect(cutOffsets).toHaveLength(1);
-    // Standalone cut at the previous endpoint, followed by the 3 mm jump.
-    const offset = cutOffsets[0];
-    const point = (i: number) =>
-      new DataView(data.penData.buffer).getInt16(i, true) >> 3;
-    expect(point(offset)).toBe(0);
-    expect(point(offset + 4)).toBe(30);
-    expect(data.penData[offset + 6] & 1).toBe(1);
+    return points;
+  }
+
+  it("hands Respira no trim rows: its encoder decides where the thread is cut", () => {
+    expect(twoLines(3).stitches.filter((s) => s[2] === TRIM)).toHaveLength(0);
+    expect(twoLines(20).stitches.filter((s) => s[2] === TRIM)).toHaveLength(0);
+  });
+
+  it("crosses a short same-color gap with a plain jump and no cut", () => {
+    const points = penPoints(studioDesignToPattern(twoLines(3)).data.penData);
+    expect(points.filter((p) => p.cut)).toHaveLength(0);
+    const jumps = points.filter((p) => p.feed);
+    expect(jumps).toHaveLength(1);
+    // First line ends at x = 0 (hoop centre); the second starts 3 mm on.
+    expect(jumps[0].x).toBe(30);
+  });
+
+  it("cuts exactly once across a long same-color gap, on the jump itself", () => {
+    const points = penPoints(studioDesignToPattern(twoLines(20)).data.penData);
+    const cuts = points.filter((p) => p.cut);
+    expect(cuts).toHaveLength(1);
+    const at = points.indexOf(cuts[0]);
+    expect(points[at]).toMatchObject({ x: 200, feed: true, cut: true });
+    // Respira ties off with 8 lock stitches before the cut and ties in with 8 after it.
+    for (const p of points.slice(at - 8, at)) {
+      expect(p.feed || p.cut).toBe(false);
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(2);
+    }
+    for (const p of points.slice(at + 1, at + 9)) {
+      expect(p.feed || p.cut).toBe(false);
+      expect(Math.abs(p.x - 200)).toBeLessThanOrEqual(2);
+    }
   });
 
   it("keeps a color change when the next color starts at the same point", () => {
@@ -203,7 +237,12 @@ describe("studioDesignToPattern", () => {
       [20, 0, STITCH],
       [20, 0, END],
     ]);
-    expect(stitches).toContainEqual([10, 0, 0, 1]);
+    // The repeated point goes, as it does when Respira reads a PES; the color index still changes.
+    expect(stitches).toEqual([
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+      [20, 0, 0, 1],
+    ]);
     const { penBytes } = encodeStitchesToPen(stitches);
     expect(
       penBytes.filter((b, i) => i % 4 === 0 && (b & 7) === 3),

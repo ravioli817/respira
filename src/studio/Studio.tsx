@@ -93,6 +93,8 @@ export function Studio({ className, onSend }: StudioProps) {
   const [status, setStatus] = useState("Opening projects…");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // The Projects panel holds the gallery and every project action. `gallery` is null while it loads.
+  const [panelOpen, setPanelOpen] = useState(false);
   const [gallery, setGallery] = useState<SavedProject[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -222,86 +224,50 @@ export function Studio({ className, onSend }: StudioProps) {
     await activateProject(record.id);
     setLegacy(false);
     setDocument(record);
+    setPanelOpen(false);
+  }
+  // Save first so the gallery shows this project as it is now. The panel opens either way:
+  // a storage failure must never hide Export, the one way left to keep the work.
+  function openPanel() {
+    setPanelOpen(true);
     setGallery(null);
+    flush()
+      .catch(() => {})
+      .then(listProjects)
+      .then(setGallery, () => {
+        setGallery([]);
+        setError(
+          "Saved projects could not be read on this device. Export a project file to keep your work.",
+        );
+      });
   }
 
   return (
     <div className={className}>
+      {/* One short row: the hoop needs the height, so project actions live in the Projects panel */}
       <section
         aria-label="Project files"
-        className="px-4 py-3 border-b bg-white dark:bg-gray-800 flex flex-wrap items-center gap-2"
+        className="px-4 sm:px-5 lg:px-6 py-1.5 border-b bg-white dark:bg-gray-800 flex flex-wrap items-center gap-x-3 gap-y-1"
       >
-        <Button
-          variant="outline"
-          disabled={busy || !document}
-          onClick={() =>
-            void perform(async () => {
-              await flush();
-              await open(newRecord());
-            })
-          }
+        <h2 className="text-lg font-bold leading-tight text-gray-900 dark:text-white">
+          Create a design
+        </h2>
+        <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">
+          4 × 4 in hoop · 100 × 100 mm
+        </span>
+        <span
+          role="status"
+          className="ml-auto text-sm text-gray-600 dark:text-gray-300"
         >
-          New project
-        </Button>
+          {status}
+        </span>
         <Button
           variant="outline"
-          disabled={busy || !document}
-          onClick={() =>
-            void perform(async () => {
-              await flush();
-              setGallery(await listProjects());
-            })
-          }
+          size="sm"
+          disabled={!document}
+          onClick={openPanel}
         >
           Projects
-        </Button>
-        <Button
-          variant="outline"
-          disabled={busy || !document}
-          onClick={() =>
-            void perform(async () => {
-              const current = await flush();
-              const data = {
-                ...current.data,
-                name: `${current.data.name || "Design"} copy`.slice(0, 24),
-              };
-              await open({ ...newRecord(data), thumbnail: current.thumbnail });
-            })
-          }
-        >
-          Save a copy
-        </Button>
-        <Button
-          variant="outline"
-          disabled={busy || !document}
-          onClick={() =>
-            void perform(async () => {
-              if (!editor.current) return;
-              const data = editor.current.snapshot();
-              const contents = exportProject(data);
-              // Finish the local save before offering the download when storage works.
-              // A failed local save must never prevent the user making a backup.
-              if (document)
-                await persist(
-                  document.id,
-                  data,
-                  editor.current.thumbnail(),
-                ).catch(() => {});
-              download(
-                contents,
-                `${(data.name || "design").replace(/[^a-z0-9_-]/gi, "-")}.respira.json`,
-              );
-            })
-          }
-        >
-          Export project
-        </Button>
-        <Button
-          variant="outline"
-          disabled={busy || !document}
-          onClick={() => importRef.current?.click()}
-        >
-          Import project
         </Button>
         <input
           ref={importRef}
@@ -322,17 +288,7 @@ export function Studio({ className, onSend }: StudioProps) {
               });
           }}
         />
-        <span
-          role="status"
-          className="text-sm text-gray-600 dark:text-gray-300"
-        >
-          {status}
-        </span>
-        <span className="w-full text-xs text-gray-500 dark:text-gray-400">
-          Projects stay in this browser on this device. Export to Files for
-          backup or to use another device.
-        </span>
-        {error && (
+        {error && !panelOpen && (
           <p
             role="alert"
             className="w-full text-sm text-red-700 dark:text-red-300"
@@ -342,52 +298,124 @@ export function Studio({ className, onSend }: StudioProps) {
         )}
       </section>
       <div ref={hostRef} />
-      <Dialog
-        open={gallery !== null}
-        onOpenChange={(value) => {
-          if (!value) setGallery(null);
-        }}
-      >
+      <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[85dvh] overflow-y-auto">
           <DialogTitle>Your projects</DialogTitle>
           <DialogDescription>
-            Open an editable design. This does not change the pattern held by
-            the machine.
+            Projects stay in this browser on this device. Export to Files for
+            backup or to use another device. Opening a project does not change
+            the pattern held by the machine.
           </DialogDescription>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {gallery?.map((record) => (
-              <button
-                key={record.id}
-                disabled={busy}
-                className="border rounded-xl p-2 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() =>
-                  void perform(async () => {
-                    await flush();
-                    await open({
-                      ...record,
-                      data: validateProject(record.data),
-                    });
-                  })
-                }
-              >
-                {record.thumbnail ? (
-                  <img
-                    src={record.thumbnail}
-                    alt=""
-                    className="w-full aspect-square rounded-lg object-contain bg-gray-100"
-                  />
-                ) : (
-                  <div className="aspect-square bg-gray-100 rounded-lg" />
-                )}
-                <strong className="block truncate mt-2">
-                  {record.data.name || "Untitled"}
-                </strong>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {new Date(record.updatedAt).toLocaleString()}
-                </span>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Button
+              variant="outline"
+              disabled={busy || !document}
+              onClick={() =>
+                void perform(async () => {
+                  await flush();
+                  await open(newRecord());
+                })
+              }
+            >
+              New project
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !document}
+              onClick={() =>
+                void perform(async () => {
+                  const current = await flush();
+                  const data = {
+                    ...current.data,
+                    name: `${current.data.name || "Design"} copy`.slice(0, 24),
+                  };
+                  await open({
+                    ...newRecord(data),
+                    thumbnail: current.thumbnail,
+                  });
+                })
+              }
+            >
+              Save a copy
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !document}
+              onClick={() =>
+                void perform(async () => {
+                  if (!editor.current) return;
+                  const data = editor.current.snapshot();
+                  const contents = exportProject(data);
+                  // Finish the local save before offering the download when storage works.
+                  // A failed local save must never prevent the user making a backup.
+                  if (document)
+                    await persist(
+                      document.id,
+                      data,
+                      editor.current.thumbnail(),
+                    ).catch(() => {});
+                  download(
+                    contents,
+                    `${(data.name || "design").replace(/[^a-z0-9_-]/gi, "-")}.respira.json`,
+                  );
+                })
+              }
+            >
+              Export project
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !document}
+              onClick={() => importRef.current?.click()}
+            >
+              Import project
+            </Button>
           </div>
+          {error && (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+              {error}
+            </p>
+          )}
+          {gallery === null ? (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Opening your projects…
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {gallery.map((record) => (
+                <button
+                  key={record.id}
+                  disabled={busy}
+                  className="border rounded-xl p-2 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
+                  onClick={() =>
+                    void perform(async () => {
+                      await flush();
+                      await open({
+                        ...record,
+                        data: validateProject(record.data),
+                      });
+                    })
+                  }
+                >
+                  {record.thumbnail ? (
+                    <img
+                      src={record.thumbnail}
+                      alt=""
+                      className="w-full aspect-square rounded-lg object-contain bg-gray-100"
+                    />
+                  ) : (
+                    <div className="aspect-square bg-gray-100 rounded-lg" />
+                  )}
+                  <strong className="block truncate mt-2">
+                    {record.data.name || "Untitled"}
+                  </strong>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {new Date(record.updatedAt).toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

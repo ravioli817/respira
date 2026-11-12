@@ -1,12 +1,5 @@
 // The Create screen's markup. Mounted into a shadow root by mountStudio().
 export const STUDIO_MARKUP = `
-<header class="top">
-  <div class="brand">
-    <span class="brand-name">Create a design</span>
-    <span class="brand-sub">4 × 4 in hoop · 100 × 100 mm</span>
-  </div>
-</header>
-
 <main class="studio">
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-actions" role="group" aria-label="Canvas tools"><button class="btn" id="add-draw-layer" aria-pressed="true">Draw</button><button class="btn" id="add-image-layer">Add picture</button><input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas"><button class="btn" id="add-text-layer">Add text</button><button class="btn" id="move-layer" aria-pressed="false">Move</button></div>

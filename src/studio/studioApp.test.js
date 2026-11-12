@@ -305,3 +305,66 @@ it("Draw does not silently include an excluded legacy drawing", () => {
     saved.layers.find((l) => l.id === saved.activeLayerId).source.strokes,
   ).toEqual([]);
 });
+
+it("keeps a burst of typing as one undo step, so earlier edits stay undoable", async () => {
+  const strokes = () => studio.snapshot().layers[0].source.strokes.length;
+  const before = strokes();
+  const layersBefore = studio.snapshot().layers.length;
+  button("#add-shape").click();
+  button("#add-text-layer").click();
+  // Far more keystrokes than the 40 steps the history keeps.
+  let words = "";
+  for (let i = 0; i < 60; i++) {
+    words += "a";
+    input("#txt", words.slice(0, 12));
+    vi.advanceTimersByTime(100);
+  }
+  await vi.advanceTimersByTimeAsync(250);
+  expect(studio.snapshot().layers.at(-1).source.value).toBe("aaaaaaaaaaaa");
+
+  button("#layer-undo").click(); // the typing
+  expect(studio.snapshot().layers.at(-1).source.value).toBe("Hello");
+  button("#layer-undo").click(); // the text object
+  expect(studio.snapshot().layers).toHaveLength(layersBefore);
+  button("#layer-undo").click(); // the shape
+  expect(strokes()).toBe(before);
+});
+
+it("starts a new undo step after a pause or once a control reports its final value", async () => {
+  button("#add-text-layer").click();
+  const value = () => studio.snapshot().layers.at(-1).source.value;
+  input("#txt", "One");
+  vi.advanceTimersByTime(2000);
+  input("#txt", "One two");
+  await vi.advanceTimersByTimeAsync(250);
+  button("#layer-undo").click();
+  expect(value()).toBe("One");
+
+  // A slider drag is one step; letting go ("change") closes it.
+  const y = () => studio.snapshot().layers.at(-1).transform.y;
+  for (const v of ["5", "10", "15"]) input("#layer-y", v);
+  button("#layer-y").dispatchEvent(new Event("change", { bubbles: true }));
+  for (const v of ["20", "25"]) input("#layer-y", v);
+  await vi.advanceTimersByTimeAsync(250);
+  expect(y()).toBe(25);
+  button("#layer-undo").click();
+  expect(y()).toBe(15);
+  button("#layer-undo").click();
+  expect(y()).toBe(0);
+});
+
+it("Draw stays on the selected drawing, and objects of one kind get distinct names", () => {
+  button("#new-drawing-object").click();
+  const second = studio.snapshot().activeLayerId;
+  expect(studio.snapshot().layers.at(-1).name).toBe("Drawing 2");
+
+  button("#move-layer").click();
+  button("#add-draw-layer").click();
+  expect(studio.snapshot().activeLayerId).toBe(second);
+
+  // From another kind of object, Draw goes back to the drawing last used, not the first one.
+  button("#add-text-layer").click();
+  expect(studio.snapshot().activeLayerId).not.toBe(second);
+  button("#add-draw-layer").click();
+  expect(studio.snapshot().activeLayerId).toBe(second);
+});

@@ -449,9 +449,21 @@ export function mountStudio(root, opts) {
   }
   function snap() { return { layers:S.layers.map(cloneLayer), activeId:S.activeId }; }
   function restore(saved) { S.layers=saved.layers.map(cloneLayer); hydrateImages(); selectLayer(saved.activeId); }
-  function pushUndo() { undoStack.push(snap()); if (undoStack.length > 40) undoStack.shift(); redoStack = []; syncHistory(); }
-  function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); afterDrawChange(); }
-  function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); afterDrawChange(); }
+  // Typing in a box or dragging a slider is one edit, not one per keystroke or tick: pass the control's
+  // name as `group` and only the step taken when the burst began is kept. A burst ends when a different
+  // edit is made, the control reports its final value ("change"), undo or redo is used, or after a pause.
+  var undoGroup = null, undoGroupAt = 0;
+  function pushUndo(group) {
+    var now = Date.now();
+    if (group) group += ':' + S.activeId;
+    if (group && group === undoGroup && now - undoGroupAt < 1500) { undoGroupAt = now; return; }
+    undoGroup = group || null; undoGroupAt = now;
+    undoStack.push(snap()); if (undoStack.length > 40) undoStack.shift(); redoStack = []; syncHistory();
+  }
+  function endUndoGroup() { undoGroup = null; }
+  holder.addEventListener('change', endUndoGroup);
+  function undo() { if (!undoStack.length) return; endUndoGroup(); redoStack.push(snap()); restore(undoStack.pop()); afterDrawChange(); }
+  function redo() { if (!redoStack.length) return; endUndoGroup(); undoStack.push(snap()); restore(redoStack.pop()); afterDrawChange(); }
   function syncHistory() { ['#undo','#layer-undo'].forEach(function(id){$(id).disabled=!undoStack.length;}); ['#redo','#layer-redo'].forEach(function(id){$(id).disabled=!redoStack.length;}); }
 
   var clearArmed = null;
@@ -869,13 +881,23 @@ export function mountStudio(root, opts) {
     if (kind === 'image') return { source:null, fileName:'', sizeMM:50,k:4,removeBg:true,clean:2,proc:null,clusters:[] };
     return { value:'Hello',font:EMBROIDERY_FONT,widthMM:60,color:5,heightMM:8,letterSpacing:0.5,lineGap:2,align:'center' };
   }
-  function makeLayer(kind, source) { return { id: crypto.randomUUID(), name: kind === 'draw' ? 'Drawing' : kind === 'image' ? 'Picture' : 'Text', kind:kind,visible:true,transform:identityTransform(),source:source || freshSource(kind) }; }
+  // "Drawing", then "Drawing 2", "Drawing 3": two objects of one kind must be told apart in the list.
+  function layerName(kind) {
+    var base = kind === 'draw' ? 'Drawing' : kind === 'image' ? 'Picture' : 'Text';
+    var taken = S.layers.map(function (l) { return l.name; });
+    if (taken.indexOf(base) < 0) return base;
+    var n = 2; while (taken.indexOf(base + ' ' + n) >= 0) n++;
+    return base + ' ' + n;
+  }
+  var lastOfKind = {};
+  function makeLayer(kind, source) { return { id: crypto.randomUUID(), name: layerName(kind), kind:kind,visible:true,transform:identityTransform(),source:source || freshSource(kind) }; }
   function selectLayer(id) {
     // Finish queued processing on its original source before rebinding controls.
     clearTimeout(txtTimer); clearTimeout(imgTimer);
     if(S.mode==='image' && S.image.source) processImage(S.image);
-    S.activeId = id;
+    S.activeId = id; endUndoGroup();
     var layer = currentLayer(); if (!layer) return;
+    lastOfKind[layer.kind] = id;
     S.mode = layer.kind; S[S.mode] = layer.source;
     if (S.mode === 'image' && S.image.source) processImage(S.image);
     ['draw','image','text'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
@@ -894,7 +916,10 @@ export function mountStudio(root, opts) {
     syncView(); syncLayers(); syncStitchSettings(); updateDesign(); scheduleSave();
   }
   function setMode(m) {
-    var layer=S.layers.find(function (l) { return l.kind===m && l.visible; });
+    // Stay on the selected object when it is already of this kind, else return to the one last used.
+    var current=currentLayer(), layer=current&&current.kind===m&&current.visible?current:null;
+    if(!layer) layer=S.layers.find(function (l) { return l.id===lastOfKind[m] && l.kind===m && l.visible; });
+    if(!layer) layer=S.layers.find(function (l) { return l.kind===m && l.visible; });
     if(!layer) { if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
     if(!layer.visible) { pushUndo(); S.placement=undefined; layer.visible=true; }
     selectLayer(layer.id);
@@ -904,6 +929,7 @@ export function mountStudio(root, opts) {
     $('#add-draw-layer').setAttribute('aria-pressed',String(S.mode==='draw'&&!moveDrawing));
     $('#move-layer').setAttribute('aria-pressed',String(S.mode!=='draw'||moveDrawing));
     $('#editing-object').textContent=selected ? 'Editing: '+selected.name : '';
+    $('#editing-object').hidden=S.layers.length<2; // with one object there is nothing to tell apart
     $('#object-count').textContent='('+S.layers.length+')';
     var list=$('#layers'); list.innerHTML='';
     S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (excluded)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){selectLayer(layer.id);}); list.appendChild(button); });
@@ -996,8 +1022,8 @@ export function mountStudio(root, opts) {
   }
   var imgTimer = null;
   function reprocessSoon() { S.placement=undefined; invalidateDesign(); clearTimeout(imgTimer); var im=S.image; imgTimer=setTimeout(function(){processImage(im); if(S.image===im) renderClusters(); updateDesign(); scheduleSave();},120); }
-  $('#img-size').addEventListener('input', function (e) { pushUndo(); S.image.sizeMM = +e.target.value; $('#img-size-out').textContent = e.target.value + ' mm'; reprocessSoon(); });
-  $('#img-k').addEventListener('input', function (e) { pushUndo(); S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; S.image.clusters = []; reprocessSoon(); });
+  $('#img-size').addEventListener('input', function (e) { pushUndo('img-size'); S.image.sizeMM = +e.target.value; $('#img-size-out').textContent = e.target.value + ' mm'; reprocessSoon(); });
+  $('#img-k').addEventListener('input', function (e) { pushUndo('img-k'); S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; S.image.clusters = []; reprocessSoon(); });
   $('#img-bg').addEventListener('change', function (e) { pushUndo(); S.image.removeBg = e.target.checked; reprocessSoon(); });
   $$('#img-clean button').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -1047,15 +1073,15 @@ export function mountStudio(root, opts) {
   Object.keys(FONTS).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = FONTS[k].label + (FONTS[k].embroidery ? '' : ' · decorative fill'); fontSel.appendChild(o); });
   var txtTimer = null;
   function textChanged() { S.placement=undefined; invalidateDesign(); clearTimeout(txtTimer); txtTimer = setTimeout(function () { autoName(); updateDesign(); scheduleSave(); }, 180); }
-  $('#txt').addEventListener('input', function (e) { pushUndo(); S.text.value = e.target.value; textChanged(); });
+  $('#txt').addEventListener('input', function (e) { pushUndo('txt'); S.text.value = e.target.value; textChanged(); });
   fontSel.addEventListener('change', function (e) { pushUndo(); S.text.font = e.target.value; syncLettering(); syncStitchSettings(); textChanged(); });
-  $('#txt-w').addEventListener('input', function (e) { pushUndo(); S.text.widthMM = +e.target.value; $('#txt-w-out').textContent = e.target.value + ' mm'; textChanged(); });
+  $('#txt-w').addEventListener('input', function (e) { pushUndo('txt-w'); S.text.widthMM = +e.target.value; $('#txt-w-out').textContent = e.target.value + ' mm'; textChanged(); });
   function syncLettering() {
     var embroidery=S.text.font===EMBROIDERY_FONT;
     $('#lettering-controls').hidden=!embroidery; $('#decorative-width').hidden=embroidery;
     $('#font-note').textContent=embroidery?'Satin embroidery lettering. Final cap height must stay between 4 and 15 mm, including layer scaling.':'Decorative fill lettering: ordinary font shapes filled with stitches.';
   }
-  ['height','spacing','linegap'].forEach(function(key){$('#txt-'+key).addEventListener('input',function(e){var value=+e.target.value;var field=key==='height'?'heightMM':key==='spacing'?'letterSpacing':'lineGap'; if(!Number.isFinite(value) || value < +e.target.min || value > +e.target.max) {failDesign('Enter a lettering value within the displayed range.');return;} pushUndo();S.text[field]=value;textChanged();});});
+  ['height','spacing','linegap'].forEach(function(key){$('#txt-'+key).addEventListener('input',function(e){var value=+e.target.value;var field=key==='height'?'heightMM':key==='spacing'?'letterSpacing':'lineGap'; if(!Number.isFinite(value) || value < +e.target.min || value > +e.target.max) {failDesign('Enter a lettering value within the displayed range.');return;} pushUndo('txt-'+key);S.text[field]=value;textChanged();});});
   $('#txt-align').addEventListener('change',function(e){pushUndo();S.text.align=e.target.value;textChanged();});
   $('#font-license').textContent=FONT_LICENSE;
   var textPalette = null;
@@ -1088,7 +1114,7 @@ export function mountStudio(root, opts) {
       if(!currentLayer().stitchSettings)return;
       var value=e.target.tagName==='SELECT'?e.target.value:+e.target.value;
       if(typeof value==='number' && (!Number.isFinite(value)||value<+e.target.min||value>+e.target.max)){failDesign('Use a stitch setting within the displayed range.');return;}
-      pushUndo();currentLayer().stitchSettings[key]=value;S.placement=undefined;updateDesign();scheduleSave();
+      pushUndo('stitch-'+key);currentLayer().stitchSettings[key]=value;S.placement=undefined;updateDesign();scheduleSave();
     });
   });
 
@@ -1230,9 +1256,9 @@ export function mountStudio(root, opts) {
   $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
   $('#add-text-layer').addEventListener('click',function(){addObject('text');});
   $('#move-layer').addEventListener('click',function(){moveDrawing=true;syncLayers();});
-  $('#layer-name').addEventListener('input',function(e){pushUndo();currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
+  $('#layer-name').addEventListener('input',function(e){pushUndo('layer-name');currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
   $('#layer-visible').addEventListener('change',function(e){pushUndo();S.placement=undefined;currentLayer().visible=e.target.checked;syncLayers();updateDesign();scheduleSave();});
-  ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo();S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
+  ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo('layer-'+key);S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
   $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
   $('#layer-remove').addEventListener('click',function(){if(S.layers.length<2)return;pushUndo();S.placement=undefined;S.layers=S.layers.filter(function(l){return l.id!==S.activeId;});selectLayer(S.layers[0].id);});
   [-1,1].forEach(function(direction){$(direction===-1?'#layer-earlier':'#layer-later').addEventListener('click',function(){var i=S.layers.indexOf(currentLayer()),j=i+direction;if(j<0||j>=S.layers.length)return;pushUndo();S.placement=undefined;var layer=S.layers.splice(i,1)[0];S.layers.splice(j,0,layer);syncLayers();updateDesign();scheduleSave();});});

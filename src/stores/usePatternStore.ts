@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import type { PesPatternData } from "../formats/import/pesImporter";

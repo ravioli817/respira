@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 

@@ -534,8 +534,11 @@ const holder = {};
   }
 
   // ---------- machine stream -> the stitch list Respira's PEN encoder takes ----------
-  // Colour changes become a colour index, and the leading jump and END marker go.
-  // Drop redundant points, but keep explicit trims and the start of a new colour at the same position.
+  // Same clean-up Respira applies to a PES file it has read (src/formats/import/worker.ts): colour changes
+  // become a colour index, the leading jump and the END marker go, and a command that lands on the previous
+  // point is dropped. That includes the engine's own TRIM rows, on purpose: Respira's encoder decides where
+  // the thread is cut (a lock, then jump + cut, for jumps over 5 mm, and at every colour change), which is
+  // the only cut the machine is known to accept. Keeping TRIM rows here sent a second, bare cut.
   // Result rows are [x, y, command, colourIndex] in 0.1 mm, centred on the hoop.
   function toRespiraStitches(S) {
     var out = [], color = 0;
@@ -545,7 +548,7 @@ const holder = {};
       if (s[2] === CMD.END) continue;
       if (!out.length && s[2] !== CMD.STITCH) continue;
       var last = out[out.length - 1];
-      if (s[2] !== CMD.TRIM && last && last[0] === s[0] && last[1] === s[1] && last[3] === color) continue;
+      if (last && last[0] === s[0] && last[1] === s[1]) continue;
       out.push([s[0], s[1], s[2] === CMD.JUMP ? 0x10 : s[2] === CMD.TRIM ? 0x20 : 0x00, color]);
     }
     return out;
