@@ -164,7 +164,7 @@ describe("getNextStep", () => {
 
   it("offers the outline trace once a design is on the machine", () => {
     expect(step({ machineStatus: MachineStatus.IDLE }).title).toMatch(
-      /Start Mask Trace/,
+      /Trace outline/,
     );
   });
 });

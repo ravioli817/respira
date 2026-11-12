@@ -266,3 +266,9 @@ details.panel[open] { gap: 14px; }
   .tools > .tool { min-width: 48px; padding: 5px 6px 4px; }
   .brand-name { font-size: 22px; }
 }
+
+.shape-tools { margin-top: 16px; padding-block: 12px; border-block: 1px solid var(--line); }
+.shape-tools summary { cursor: pointer; font-weight: 650; padding-block: 8px; }
+.shape-tools .stack { margin-block: 10px; }
+.shape-tools input { width: 100%; min-height: 42px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.shape-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

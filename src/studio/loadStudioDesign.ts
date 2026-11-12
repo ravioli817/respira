@@ -13,14 +13,18 @@ export function loadStudioDesign(design: StudioDesign): string | null {
     return "A design is being sent to the machine right now. Wait for it to finish.";
   }
   if (useMachineStore.getState().patternInfo !== null) {
-    return "The machine already holds a design. Finish it or delete it on the Stitch screen, then send this one.";
+    return "The machine already holds a design. Finish it or delete it on the Stitch screen, then prepare this one.";
   }
 
   try {
     const { data, center } = studioDesignToPattern(design);
     const pattern = usePatternStore.getState();
-    pattern.setPattern(data, `${design.name}.pes`);
-    pattern.setPatternOffset(center.x, center.y);
+    pattern.setPattern(data, `${design.name}.pes`, design.projectId);
+    pattern.setPatternOffset(
+      design.placement?.x ?? center.x,
+      design.placement?.y ?? center.y,
+    );
+    if (design.placement) pattern.setPatternRotation(design.placement.rotation);
     return null;
   } catch (err) {
     return err instanceof Error
