@@ -397,7 +397,7 @@ const holder = {};
   function buildOps(paths, s) {
     var ops = [], cur = null, prev = null;
     var minStitch = 0.3, maxStitch = s.maxStitch || 7.0, tie = 0.6;
-    function put(p, cmd) { ops.push([p[0], p[1], cmd]); }
+    function put(p, cmd, requested) { ops.push(requested ? [p[0], p[1], cmd, 1] : [p[0], p[1], cmd]); }
     function st(p) { put(p, CMD.STITCH); if (!cur || dist(cur, p) > 1e-6) { prev = cur; cur = p; } }
     function stitchTo(p, maxLen) {
       var a = cur, d = dist(a, p);
@@ -432,8 +432,8 @@ const holder = {};
       else {
         var d = dist(cur, p0), fn = paths[i].inside;
         var near = fn ? (d <= 0.6 || (d <= 6 && segInside(cur, p0, fn))) : d <= 1.0;
-        if (near) stitchTo(p0, 3.0);
-        else { tieOff(); put(cur, CMD.TRIM); startAt(p0, next); }
+        if (near && !paths[i].trimBefore) stitchTo(p0, 3.0);
+        else { tieOff(); put(cur, CMD.TRIM, paths[i].trimBefore); startAt(p0, next); }
       }
       for (var j = 1; j < pts.length; j++) stitchTo(pts[j], maxStitch);
     }
@@ -485,7 +485,7 @@ const holder = {};
     (design.paths || []).forEach(function (p) {
       if (!p.pts.length) return;
       var previous = blocks[blocks.length - 1];
-      var path = { pts: p.pts, inside: null };
+      var path = { pts: p.pts, inside: null, trimBefore: p.trimBefore };
       if (previous && previous.color === p.color) previous.paths.push(path);
       else blocks.push({ color: p.color, paths: [path] });
     });
@@ -524,7 +524,7 @@ const holder = {};
       colors.push(b.color);
       b.ops.forEach(function (op) {
         var X = R(op[0]), Y = R(op[1]), last = S[S.length - 1];
-        if (op[2] === CMD.TRIM) { S.push([last[0], last[1], CMD.TRIM]); return; }
+        if (op[2] === CMD.TRIM) { S.push(op[3] ? [last[0], last[1], CMD.TRIM, 1] : [last[0], last[1], CMD.TRIM]); return; }
         if (op[2] === CMD.STITCH && last && last[2] === CMD.STITCH && last[0] === X && last[1] === Y) return;
         S.push([X, Y, op[2]]);
       });
@@ -539,14 +539,19 @@ const holder = {};
   // point is dropped. That includes the engine's own TRIM rows, on purpose: Respira's encoder decides where
   // the thread is cut (a lock, then jump + cut, for jumps over 5 mm, and at every colour change), which is
   // the only cut the machine is known to accept. Keeping TRIM rows here sent a second, bare cut.
+  // User-requested lettering cuts are the exception: a tagged trim is folded into the following
+  // jump, letting the PEN encoder use the same lock + jump/cut + lock sequence even for a short jump.
   // Result rows are [x, y, command, colourIndex] in 0.1 mm, centred on the hoop.
   function toRespiraStitches(S) {
-    var out = [], color = 0;
+    var out = [], color = 0, requestedCut = false;
     for (var i = 0; i < S.length; i++) {
       var s = S[i];
-      if (s[2] === CMD.COLOR_CHANGE) { color++; continue; }
+      if (s[2] === CMD.COLOR_CHANGE) { color++; requestedCut=false; continue; }
       if (s[2] === CMD.END) continue;
       if (!out.length && s[2] !== CMD.STITCH) continue;
+      // Explicit lettering trims ride on the following jump. Never send a bare cut.
+      if(s[2]===CMD.TRIM && s[3]===1){requestedCut=true;continue;}
+      if(s[2]===CMD.JUMP && requestedCut){out.push([s[0],s[1],0x10|0x20,color]);requestedCut=false;continue;}
       var last = out[out.length - 1];
       if (last && last[0] === s[0] && last[1] === s[1]) continue;
       out.push([s[0], s[1], s[2] === CMD.JUMP ? 0x10 : s[2] === CMD.TRIM ? 0x20 : 0x00, color]);

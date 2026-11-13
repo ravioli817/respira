@@ -183,8 +183,12 @@ export const STUDIO_MARKUP = `
         <label class="stack">Extra line gap (mm)<input id="txt-linegap" type="number" min="0" max="10" step="0.5" value="2"></label>
         <label class="stack">Align lines<select id="txt-align"><option value="left">Left</option><option value="center" selected>Center</option><option value="right">Right</option></select></label>
       </div>
+      <div id="lettering-trims">
+        <label class="stack">Thread trims<select id="txt-trim"><option value="auto">Automatic</option><option value="word">Between words</option><option value="letter">Between letters</option></select></label>
+        <p class="hint">Word and letter rules add cuts at those boundaries. Automatic cuts for long jumps and thread changes still apply. Extra cuts add sewing time; check them in Prepare.</p>
+      </div>
       <p id="font-note" class="hint"></p>
-      <details><summary>Embroidery font credit and license</summary><p class="hint">Small Satin is adapted from Ink/Stitch Small Font © 2017 Lex Neva. The satin rails are pre-digitized; this app generates its own stitches. Test on your fabric before a garment.</p><pre id="font-license" class="license-text"></pre></details>
+      <details id="font-credit-panel"><summary>Embroidery font credit and license</summary><p class="hint" id="font-credit"></p><pre id="font-license" class="license-text"></pre></details>
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
     </section>
 

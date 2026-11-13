@@ -7,7 +7,8 @@ import { pictureDetailWarnings } from './pictureWarnings.js';
 import { engineSettings, stitchDefaults } from './stitchSettings.js';
 import { hitTestLayer, designBounds, scaleAbout, resizeFromCorner } from './selection.js';
 import { transformPoint, transformDesign, composePlans, identityTransform } from './composition.js';
-import { letteringDesign, EMBROIDERY_FONT, FONT_LICENSE } from './lettering.js';
+import { letteringDesign, EMBROIDERY_FONT } from './lettering.js';
+import { EMBROIDERY_FONTS, isEmbroideryFont } from './embroideryFonts.js';
 import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
 
@@ -32,7 +33,7 @@ export function mountStudio(root, opts) {
   var ALL = []; for (var ti = 1; ti < 64; ti++) ALL.push(ti);
   var FABRICS = [['#FFFFFF', 'White'], ['#E9E1CF', 'Natural linen'], ['#B8BCC4', 'Heather gray'], ['#1F2944', 'Navy'], ['#181818', 'Black']];
   var FONTS = {
-    SmallSatin: { label: 'Small Satin · embroidery', embroidery: true },
+    ...Object.fromEntries(Object.entries(EMBROIDERY_FONTS).map(([id,font])=>[id,{label:font.label+' · embroidery',embroidery:true}])),
     'Lobster': { css: '"Lobster", cursive', weight: 400, label: 'Lobster (script)' },
     'Pacifico': { css: '"Pacifico", cursive', weight: 400, label: 'Pacifico (script)' },
     'Fredoka': { css: '"Fredoka", sans-serif', weight: 600, label: 'Fredoka (rounded)' },
@@ -815,7 +816,7 @@ export function mountStudio(root, opts) {
       } catch (error) { failDesign(error.message); }
     }
     // Reserve all callbacks first: synchronous fonts must not finish the whole generation early.
-    pending = S.layers.filter(function (l) { return l.visible && l.kind === 'text' && l.source.font !== EMBROIDERY_FONT; }).length;
+    pending = S.layers.filter(function (l) { return l.visible && l.kind === 'text' && !isEmbroideryFont(l.source.font); }).length;
     try {
       S.layers.forEach(function (layer, index) {
         if (!layer.visible) return;
@@ -823,7 +824,7 @@ export function mountStudio(root, opts) {
         var source = layer.source, design;
         if (layer.kind === 'draw') design = { labels: source.labels, order: source.order, lines: source.strokes };
         else if (layer.kind === 'image') design = imageDesign(source);
-        else if (source.font === EMBROIDERY_FONT) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
+        else if (isEmbroideryFont(source.font)) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
         else {
           textDesign(source, function (d, thin) { if (token !== textToken) return; parts[index] = { layer: layer, design: d }; if (thin > 0.08) S.note = 'Some decorative letters are thin. Try Small Satin for embroidery lettering.'; pending--; ready(); }, token);
           return;
@@ -979,7 +980,7 @@ export function mountStudio(root, opts) {
     $('#layer-size').value=Math.round(selected.transform.scale*100); $('#layer-rotation').value=selected.transform.rotation;
     $('#layer-remove').disabled=S.layers.length===1;
     $('#layer-earlier').disabled=S.layers[0]===selected; $('#layer-later').disabled=S.layers[S.layers.length-1]===selected;
-    syncHistory(); renderSelection();
+    syncHistory(); if(S.mode==='text')syncLettering(); renderSelection();
   }
 
   function syncView() {
@@ -1131,16 +1132,25 @@ export function mountStudio(root, opts) {
   var txtTimer = null;
   function textChanged() { S.placement=undefined; invalidateDesign(); clearTimeout(txtTimer); txtTimer = setTimeout(function () { autoName(); updateDesign(); scheduleSave(); }, 180); }
   $('#txt').addEventListener('input', function (e) { pushUndo('txt'); S.text.value = e.target.value; textChanged(); });
-  fontSel.addEventListener('change', function (e) { pushUndo(); S.text.font = e.target.value; syncLettering(); syncStitchSettings(); textChanged(); });
+  fontSel.addEventListener('change', function (e) { pushUndo(); S.text.font = e.target.value; var font=EMBROIDERY_FONTS[S.text.font];if(font){var scale=currentLayer().transform.scale;S.text.heightMM=clamp((S.text.heightMM??8)*scale,font.min,font.max)/scale;} syncLettering(); syncStitchSettings(); textChanged(); });
   $('#txt-w').addEventListener('input', function (e) { pushUndo('txt-w'); S.text.widthMM = +e.target.value; $('#txt-w-out').textContent = e.target.value + ' mm'; textChanged(); });
   function syncLettering() {
-    var embroidery=S.text.font===EMBROIDERY_FONT;
+    var embroidery=isEmbroideryFont(S.text.font);
     $('#lettering-controls').hidden=!embroidery; $('#decorative-width').hidden=embroidery;
-    $('#font-note').textContent=embroidery?'Satin embroidery lettering. Final cap height must stay between 4 and 15 mm, including layer scaling.':'Decorative fill lettering: ordinary font shapes filled with stitches.';
+    $('#lettering-trims').hidden=!embroidery; $('#font-credit-panel').hidden=!embroidery;
+    var font=EMBROIDERY_FONTS[S.text.font];
+    if(font){
+      var scale=currentLayer()?.transform.scale || 1;
+      $('#txt-height').min=font.min/scale;$('#txt-height').max=font.max/scale;$('#txt-height').value=S.text.heightMM??8;
+      $('#font-credit').textContent=font.credit+' This app regenerates stitches from the authored geometry. Test on your fabric before sewing a garment.';
+      $('#font-license').textContent=font.license;
+    }
+    $('#txt-trim').value=S.text.trimRule || 'auto';
+    $('#font-note').textContent=embroidery?font.label+': final cap height '+font.min+'–'+font.max+' mm; '+Object.keys(font.geometry.glyphs).filter(c=>[...c].length===1).length+' supported characters. Size includes object scaling.':'Decorative fill lettering: ordinary font shapes filled with stitches.';
   }
   ['height','spacing','linegap'].forEach(function(key){$('#txt-'+key).addEventListener('input',function(e){var value=+e.target.value;var field=key==='height'?'heightMM':key==='spacing'?'letterSpacing':'lineGap'; if(!Number.isFinite(value) || value < +e.target.min || value > +e.target.max) {failDesign('Enter a lettering value within the displayed range.');return;} pushUndo('txt-'+key);S.text[field]=value;textChanged();});});
   $('#txt-align').addEventListener('change',function(e){pushUndo();S.text.align=e.target.value;textChanged();});
-  $('#font-license').textContent=FONT_LICENSE;
+  $('#txt-trim').addEventListener('change',function(e){pushUndo();S.text.trimRule=e.target.value;textChanged();});
   var textPalette = null;
 
   // stitch settings
@@ -1160,7 +1170,7 @@ export function mountStudio(root, opts) {
     var values=layer.stitchSettings || stitchDefaults(layer,S.settings);
     $('#stitch-custom').checked=!!layer.stitchSettings; $('#stitch-fields').disabled=!layer.stitchSettings;
     $('#stitch-object-name').textContent='Stitches for: '+layer.name+(layer.stitchSettings?' (custom)':' (project defaults)');
-    var lettering=layer.kind==='text'&&layer.source.font===EMBROIDERY_FONT;
+    var lettering=layer.kind==='text'&&isEmbroideryFont(layer.source.font);
     $('#fill-stitch-fields').hidden=lettering; $('#satin-stitch-fields').hidden=layer.kind==='image'||(layer.kind==='text'&&!lettering);
     Object.keys(values).forEach(function(key){$('#stitch-'+key).value=values[key];});
   }
@@ -1245,7 +1255,7 @@ export function mountStudio(root, opts) {
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:3,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:4,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
       activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
@@ -1263,7 +1273,7 @@ export function mountStudio(root, opts) {
     try {
       var s = opts.project;
       if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
-      if (!s || (s.v !== 1 && s.v !== 2 && s.v !== 3)) return false;
+      if (!s || (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4)) return false;
       loadedProject = s;
       S.placement = s.placement;
       if (s.view) S.view = Object.assign(S.view, s.view);
@@ -1412,7 +1422,7 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { pushUndo(); S.placement=undefined; S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
-  if(loadedProject && (loadedProject.v===2 || loadedProject.v===3) && loadedProject.layers) {
+  if(loadedProject && (loadedProject.v===2 || loadedProject.v===3 || loadedProject.v===4) && loadedProject.layers) {
     S.layers=loadedProject.layers.map(function(l){return Object.assign({},l,{transform:Object.assign({},l.transform),source:deserializeSource(l.kind,l.source)});});
     S.activeId=loadedProject.activeLayerId;
   } else {
