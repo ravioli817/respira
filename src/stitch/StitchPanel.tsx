@@ -19,7 +19,10 @@ import {
 import { preparePattern } from "../prepare/preparePattern";
 import { usePatternRotationUpload } from "../hooks/domain/usePatternRotationUpload";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
-import { calculateColorBlocks } from "../utils/colorBlockHelpers";
+import {
+  calculateColorBlocks,
+  classifyMachineStop,
+} from "../utils/colorBlockHelpers";
 import {
   canChooseStartBlock,
   canDeletePattern,
@@ -148,6 +151,16 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
   const blocks = useMemo(() => calculateColorBlocks(display), [display]);
   const total =
     display?.penStitches.stitches.length ?? m.patternInfo?.totalStitches ?? 0;
+  // With "Pause after each thread cut", some stops are pauses, which the machine reports as thread changes.
+  const trimStops = display?.penStitches.trimStops;
+  const pausedAfterCut =
+    m.status === MachineStatus.COLOR_CHANGE_WAIT &&
+    !!trimStops?.length &&
+    classifyMachineStop(
+      blocks,
+      m.adjusted ?? m.progress?.currentStitch ?? 0,
+      trimStops,
+    ).kind === "trim";
   // The last progress reading is taken just before the end; a job the machine calls complete is complete.
   const done = finished || m.status === MachineStatus.SEWING_COMPLETE;
   const current =
@@ -163,12 +176,13 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     current,
     total,
     finished,
+    pausedAfterCut,
   });
   const timing = useMemo(
     () => calculatePatternTime(blocks, current),
     [blocks, current],
   );
-  const focus = threadFocus(blocks, m.status, current);
+  const focus = threadFocus(blocks, m.status, current, pausedAfterCut);
   const bounds = usePatternValidation({
     pesData: p.data,
     machineInfo: m.machineInfo,

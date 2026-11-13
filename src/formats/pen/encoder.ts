@@ -1,4 +1,5 @@
-// Changed in this fork: explicit MOVE | TRIM requests use the existing locked jump/cut sequence.
+// Changed in this fork: explicit MOVE | TRIM requests use the existing locked jump/cut sequence, and
+// `stopAfterTrim` (from Jibbe23/respira, 2f17126 and 6f44986) can pause the machine at each thread cut.
 /**
  * PEN Format Encoder
  *
@@ -28,8 +29,17 @@ export interface StitchData {
   colorIndex: number;
 }
 
+export interface EncodeOptions {
+  // Pause after every thread cut (encoded as a color change to the same
+  // color), so the thread can be held when the needle starts again
+  stopAfterTrim?: boolean;
+}
+
 export interface PenEncodingResult {
   penBytes: number[];
+  // PEN stitch indices of the stops added by `stopAfterTrim` (COLOR_END
+  // without a new color)
+  trimStops: number[];
   bounds: {
     minX: number;
     maxX: number;
@@ -167,13 +177,47 @@ export function generateLockStitches(
   return lockBytes;
 }
 
+/** One PEN stitch with X flags (low 3 bits) and Y flags */
+function encodeFlagged(
+  x: number,
+  y: number,
+  xFlags: number,
+  yFlags: number,
+): number[] {
+  const xEncoded = ((x << 3) & 0xfff8) | xFlags;
+  const yEncoded = ((y << 3) & 0xffff) | yFlags;
+  return [
+    xEncoded & 0xff,
+    (xEncoded >> 8) & 0xff,
+    yEncoded & 0xff,
+    (yEncoded >> 8) & 0xff,
+  ];
+}
+
+/** Does the color change between stitch `from` and `count` stitches later? */
+function colorChangesWithin(
+  stitches: number[][],
+  from: number,
+  count: number,
+): boolean {
+  const last = Math.min(from + count, stitches.length - 1);
+  for (let k = from; k < last; k++) {
+    if (stitches[k + 1][3] !== stitches[k][3]) return true;
+  }
+  return false;
+}
+
 /**
  * Encode stitches array to PEN format bytes
  *
  * @param stitches Array of stitches in format [x, y, cmd, colorIndex]
- * @returns PEN encoding result with bytes and bounds
+ * @param options See EncodeOptions
+ * @returns PEN encoding result with bytes, added stops and bounds
  */
-export function encodeStitchesToPen(stitches: number[][]): PenEncodingResult {
+export function encodeStitchesToPen(
+  stitches: number[][],
+  { stopAfterTrim = false }: EncodeOptions = {},
+): PenEncodingResult {
   // Track bounds
   let minX = Infinity;
   let maxX = -Infinity;
@@ -181,6 +225,7 @@ export function encodeStitchesToPen(stitches: number[][]): PenEncodingResult {
   let maxY = -Infinity;
 
   const penStitches: number[] = [];
+  const trimStops: number[] = [];
 
   // Track position for calculating jump distances
   let prevX = 0;
@@ -217,17 +262,25 @@ export function encodeStitchesToPen(stitches: number[][]): PenEncodingResult {
           ...generateLockStitches(prevX, prevY, finishDir.dirX, finishDir.dirY),
         );
 
-        // Encode jump with both FEED and CUT flags
-        const xEncoded = (absX << 3) & 0xffff;
-        let yEncoded = (absY << 3) & 0xffff;
-        yEncoded |= PEN_FEED_DATA; // Jump flag
-        yEncoded |= PEN_CUT_DATA; // Cut flag for long jumps
+        // With stopAfterTrim the cut becomes a cut-and-pause at the current position,
+        // the same record a color change uses, and the jump that follows carries no
+        // second cut. No pause right before a color change: the machine stops there anyway.
+        const stop = stopAfterTrim && !colorChangesWithin(stitches, i, 2);
+        if (stop) {
+          trimStops.push(penStitches.length / 4);
+          penStitches.push(
+            ...encodeFlagged(prevX, prevY, PEN_COLOR_END, PEN_CUT_DATA),
+          );
+        }
 
+        // Jump with the FEED flag, and the CUT flag unless already cut at the stop
         penStitches.push(
-          xEncoded & 0xff,
-          (xEncoded >> 8) & 0xff,
-          yEncoded & 0xff,
-          (yEncoded >> 8) & 0xff,
+          ...encodeFlagged(
+            absX,
+            absY,
+            0,
+            PEN_FEED_DATA | (stop ? 0 : PEN_CUT_DATA),
+          ),
         );
 
         // Add starting lock stitches at new position
@@ -384,6 +437,7 @@ export function encodeStitchesToPen(stitches: number[][]): PenEncodingResult {
 
   return {
     penBytes: penStitches,
+    trimStops,
     bounds: {
       minX: minX === Infinity ? 0 : minX,
       maxX: maxX === -Infinity ? 0 : maxX,

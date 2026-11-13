@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * PEN Format Types
  *
@@ -42,6 +43,9 @@ export interface PenColorBlock {
 export interface DecodedPenData {
   stitches: DecodedPenStitch[];
   colorBlocks: PenColorBlock[];
+  // Stitch indices where the machine pauses after a cut without a new color
+  // (COLOR_END stitches that do not end a color block). Missing in patterns saved before.
+  trimStops?: number[];
   bounds: {
     minX: number;
     maxX: number;

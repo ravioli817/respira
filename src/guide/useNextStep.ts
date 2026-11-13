@@ -41,6 +41,7 @@ export function useNextStep(): NextStep | null {
         isUploading,
         colorBlocks,
         finished,
+        trimStops: displayPattern?.penStitches.trimStops,
       }),
     [machine, displayPattern, isUploading, colorBlocks, finished],
   );

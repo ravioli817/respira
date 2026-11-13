@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { app, BrowserWindow, ipcMain, dialog, protocol } from "electron";
 import { join, resolve, normalize, isAbsolute } from "path";
 import { promises as fs } from "fs";

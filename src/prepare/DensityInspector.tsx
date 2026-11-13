@@ -15,8 +15,8 @@ export function DensityInspector({
   hoopHeight = 1000,
 }: Props) {
   const decoded = useMemo(
-    () => decodePenData(pattern.penData),
-    [pattern.penData],
+    () => decodePenData(pattern.penData, pattern.penStitches.trimStops),
+    [pattern.penData, pattern.penStitches.trimStops],
   );
   const [cellMm, setCellMm] = useState(2),
     [block, setBlock] = useState(-1),

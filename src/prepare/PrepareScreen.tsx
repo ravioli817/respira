@@ -12,6 +12,8 @@ import { StitchPlayback } from "./StitchPlayback";
 import { Button } from "../components/ui/button";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
 import { HoopAlignment } from "../components/HoopAlignment";
+import { Switch } from "../components/ui/switch";
+import { usePrepareOptions } from "./prepareOptions";
 import { useHoopImageStore } from "../stores/useHoopImageStore";
 
 export function PrepareScreen({
@@ -41,12 +43,19 @@ export function PrepareScreen({
   const [view, setView] = useState<"placement" | "playback" | "density">(
     "placement",
   );
+  const pauseAfterCuts = usePrepareOptions((s) => s.pauseAfterCuts);
+  const setPauseAfterCuts = usePrepareOptions((s) => s.setPauseAfterCuts);
   const prepared = useMemo(
     () =>
       uploadedPesData
         ? { data: uploadedPesData, offset: uploadedPatternOffset }
         : pesData
-          ? preparePattern(pesData, patternOffset, patternRotation)
+          ? preparePattern(
+              pesData,
+              patternOffset,
+              patternRotation,
+              pauseAfterCuts,
+            )
           : null,
     [
       pesData,
@@ -54,6 +63,7 @@ export function PrepareScreen({
       patternOffset,
       uploadedPatternOffset,
       patternRotation,
+      pauseAfterCuts,
     ],
   );
   const validation = usePatternValidation({
@@ -99,10 +109,35 @@ export function PrepareScreen({
               <p className="text-sm">
                 {stats.needlePoints.toLocaleString()} needle points ·{" "}
                 {stats.colors} threads · {stats.cuts} cuts
+                {stats.pauses > 0 &&
+                  ` · ${stats.pauses} ${stats.pauses === 1 ? "pause" : "pauses"} after cuts`}
                 <br />
                 About {Math.max(1, Math.ceil(stats.needlePoints / 400))} min of
                 sewing at 400 stitches/min, plus thread changes and stops.
               </p>
+            )}
+            {/* From Jibbe23/respira (2f17126, 6f44986): each cut also stops the machine. */}
+            {prepared && !uploadedPesData && (
+              <div className="rounded-lg border p-3 space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="pause-after-cuts"
+                    className="text-sm font-medium"
+                  >
+                    Pause after each thread cut
+                  </label>
+                  <Switch
+                    id="pause-after-cuts"
+                    checked={pauseAfterCuts}
+                    onCheckedChange={setPauseAfterCuts}
+                  />
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  The machine stops after it cuts the thread, so you can hold
+                  the loose end while it starts again, then press Start/Stop.
+                  Turn this on if the thread pulls out of the needle after cuts.
+                </p>
+              </div>
             )}
             {validation.error && (
               <p role="alert" className="text-red-700 dark:text-red-300">

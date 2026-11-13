@@ -7,6 +7,7 @@ export function playbackStats(data: DecodedPenData) {
     ).length,
     jumps: data.stitches.filter((s) => s.isFeed).length,
     cuts: data.stitches.filter((s) => s.isCut).length,
+    pauses: data.trimStops?.length ?? 0,
     colors: data.colorBlocks.length,
   };
 }

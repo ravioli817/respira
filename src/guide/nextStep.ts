@@ -5,6 +5,7 @@
 import { MachineStatus } from "../types/machine";
 import { getErrorDetails, hasError } from "../utils/errorCodeHelpers";
 import type { ColorBlock } from "../components/ProgressMonitor/types";
+import { classifyMachineStop } from "../utils/colorBlockHelpers";
 
 export type NextStepTone = "info" | "action" | "progress" | "problem" | "done";
 
@@ -27,6 +28,8 @@ export interface NextStepInput {
   colorBlocks: ColorBlock[];
   /** The machine reported this job complete (see stitch/jobState.ts). */
   finished?: boolean;
+  /** Stitch indices where the machine pauses after a cut without a new thread. */
+  trimStops?: readonly number[];
 }
 
 const ACCEPT = "the Accept button on the machine";
@@ -86,6 +89,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     currentStitch,
     colorBlocks,
     finished = false,
+    trimStops = [],
   } = input;
 
   if (!isConnected) {
@@ -269,6 +273,26 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     }
 
     case MachineStatus.COLOR_CHANGE_WAIT: {
+      // The machine reports a pause after a cut exactly like a thread change.
+      if (
+        trimStops.length > 0 &&
+        classifyMachineStop(colorBlocks, currentStitch, trimStops).kind ===
+          "trim"
+      ) {
+        const block =
+          colorBlocks[currentBlockIndex(colorBlocks, currentStitch)];
+        return {
+          tone: "action",
+          title: `Hold the thread end, then press ${START_STOP}`,
+          lines: [
+            block
+              ? `The thread was cut. Keep ${threadLabel(block)} in the machine: no thread change here.`
+              : "The thread was cut. Keep the same thread in the machine.",
+            "Hold the loose end lightly for the first few stitches so it does not pull out of the needle.",
+          ],
+          needsPerson: true,
+        };
+      }
       const index = upcomingBlockIndex(colorBlocks, currentStitch);
       return {
         tone: "action",

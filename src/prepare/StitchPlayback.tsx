@@ -27,8 +27,8 @@ function PlaybackSession({
   hoopHeight = 1000,
 }: Props) {
   const decoded = useMemo(
-    () => decodePenData(pattern.penData),
-    [pattern.penData],
+    () => decodePenData(pattern.penData, pattern.penStitches.trimStops),
+    [pattern.penData, pattern.penStitches.trimStops],
   );
   const stats = useMemo(() => playbackStats(decoded), [decoded]);
   const [cursor, setCursor] = useState(0);

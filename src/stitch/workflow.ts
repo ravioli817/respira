@@ -27,6 +27,8 @@ export interface WorkflowState {
   total: number;
   /** The machine reported this job complete (see jobState.ts). */
   finished?: boolean;
+  /** The stop the machine waits at is a pause after a cut, not a thread change. */
+  pausedAfterCut?: boolean;
 }
 export interface StitchAction {
   kind: "app" | "machine" | "wait";
@@ -99,7 +101,9 @@ export function stitchAction(s: WorkflowState): StitchAction {
     case MachineStatus.COLOR_CHANGE_WAIT:
       return {
         kind: "machine",
-        label: "Change the thread, then press Start/Stop on the machine",
+        label: s.pausedAfterCut
+          ? "Hold the thread end, then press Start/Stop on the machine"
+          : "Change the thread, then press Start/Stop on the machine",
       };
     case MachineStatus.STOP:
       return {
@@ -132,7 +136,11 @@ export function threadFocus(
   blocks: ColorBlock[],
   status: MachineStatus,
   current: number,
+  pausedAfterCut = false,
 ) {
+  // A pause after a cut keeps the thread that is already in the machine.
+  if (pausedAfterCut && status === MachineStatus.COLOR_CHANGE_WAIT)
+    status = MachineStatus.SEWING;
   if (!blocks.length)
     return { index: -1, current: null, next: null, label: "Current thread" };
   const found = blocks.findIndex((b) => current <= b.endStitch);
