@@ -30,6 +30,8 @@ export interface NextStepInput {
   finished?: boolean;
   /** Stitch indices where the machine pauses after a cut without a new thread. */
   trimStops?: readonly number[];
+  /** Not connected, but a design was sent to the machine earlier in this session. */
+  connectionLost?: boolean;
 }
 
 const ACCEPT = "the Accept button on the machine";
@@ -90,8 +92,20 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     colorBlocks,
     finished = false,
     trimStops = [],
+    connectionLost = false,
   } = input;
 
+  if (!isConnected && connectionLost) {
+    return {
+      tone: "problem",
+      title: "The connection dropped. Tap Connect to Machine",
+      lines: [
+        "The machine still holds the design. Reconnecting picks the job up where it is: nothing is sent again.",
+        "Keep this screen awake and near the machine so it stays connected.",
+      ],
+      needsPerson: true,
+    };
+  }
   if (!isConnected) {
     return {
       tone: "info",
@@ -200,7 +214,11 @@ export function getNextStep(input: NextStepInput): NextStep | null {
         };
   }
 
-  const firstThread = threadLabel(colorBlocks[0]);
+  // The thread the job starts with: the first, unless a later thread was chosen as the start.
+  const firstThread = threadLabel(
+    colorBlocks[currentBlockIndex(colorBlocks, currentStitch)] ??
+      colorBlocks[0],
+  );
   const blockCount = colorBlocks.length;
 
   switch (status) {

@@ -170,3 +170,66 @@ describe("getNextStep", () => {
     );
   });
 });
+
+describe("a dropped connection", () => {
+  const offline = {
+    isConnected: false,
+    machineStatus: MachineStatus.None,
+    machineError: undefined,
+    hasPattern: true,
+    patternUploaded: false,
+    isUploading: false,
+    currentStitch: 0,
+    colorBlocks: [],
+  };
+  it("says the link dropped and that the machine keeps the job, when a design had been sent", () => {
+    const step = getNextStep({ ...offline, connectionLost: true })!;
+    expect(step.title).toMatch(/connection dropped/i);
+    expect(step.lines.join(" ")).toMatch(/nothing is sent again/);
+    expect(step.needsPerson).toBe(true);
+  });
+  it("keeps the plain first-connect prompt otherwise", () => {
+    const step = getNextStep(offline)!;
+    expect(step.title).toMatch(/^Turn on the Skitch/);
+    expect(step.needsPerson).toBe(false);
+  });
+});
+
+it("names the chosen starting thread, not the first one, when the start was moved", () => {
+  const blocks = [
+    {
+      colorIndex: 0,
+      threadHex: "#f00",
+      startStitch: 0,
+      endStitch: 100,
+      stitchCount: 100,
+      threadCatalogNumber: "800",
+      threadBrand: "Brother",
+      threadDescription: "Red",
+      threadChart: null,
+    },
+    {
+      colorIndex: 1,
+      threadHex: "#00f",
+      startStitch: 101,
+      endStitch: 200,
+      stitchCount: 100,
+      threadCatalogNumber: "405",
+      threadBrand: "Brother",
+      threadDescription: "Blue",
+      threadChart: null,
+    },
+  ] as ColorBlock[];
+  const step = getNextStep({
+    isConnected: true,
+    machineStatus: MachineStatus.MASK_TRACE_COMPLETE,
+    machineError: undefined,
+    hasPattern: true,
+    patternUploaded: true,
+    isUploading: false,
+    currentStitch: 101,
+    colorBlocks: blocks,
+  })!;
+  expect(step.lines.join(" ")).toMatch(/Blue/);
+  expect(step.lines.join(" ")).not.toMatch(/Red/);
+});

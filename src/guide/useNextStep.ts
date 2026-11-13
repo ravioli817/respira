@@ -42,7 +42,15 @@ export function useNextStep(): NextStep | null {
         colorBlocks,
         finished,
         trimStops: displayPattern?.penStitches.trimStops,
+        connectionLost: !machine.isConnected && uploadedPesData !== null,
       }),
-    [machine, displayPattern, isUploading, colorBlocks, finished],
+    [
+      machine,
+      displayPattern,
+      uploadedPesData,
+      isUploading,
+      colorBlocks,
+      finished,
+    ],
   );
 }

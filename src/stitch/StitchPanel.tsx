@@ -404,7 +404,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             />
             <ThreadCard
               title={
-                m.status === MachineStatus.COLOR_CHANGE_WAIT
+                m.status === MachineStatus.COLOR_CHANGE_WAIT && !pausedAfterCut
                   ? "After that"
                   : "Next thread"
               }
