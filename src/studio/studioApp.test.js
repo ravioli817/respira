@@ -451,9 +451,13 @@ it("shows a non-blocking named picture warning and clears it when the picture is
   expect(button("#send").disabled).toBe(false);
 });
 
-it("starts in Select, exposes only the selected object's properties and uses Bharti for new text", () => {
-  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("true");
+it("opens a drawing ready to draw, exposes only the selected object's properties and uses Bharti for new text", () => {
+  // The project opens on its drawing, so the Pencil draws without tapping Draw first.
+  expect(button("#add-draw-layer").getAttribute("aria-pressed")).toBe("true");
+  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("false");
+  expect(button("#selection-box").hidden).toBe(true);
   button("#add-text-layer").click();
+  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("true");
   expect(button("#txt").value).toBe("Bharti");
   expect(button("#panel-text").hidden).toBe(false);
   expect(button("#panel-draw").hidden).toBe(true);
@@ -587,7 +591,7 @@ it("keeps zoom, pan and panel changes out of artwork history and prepared placem
   expect(button("#canvas-zoom").value).toBe("100");
 });
 
-it("draws only after choosing Draw, then returns to object selection", async () => {
+it("draws straight away on a drawing, moves objects only in Select, and returns to drawing", async () => {
   const before = studio.snapshot().draw.strokes.length;
   vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
     left: 0,
@@ -599,18 +603,27 @@ it("draws only after choosing Draw, then returns to object selection", async () 
     button("#overlay").dispatchEvent(
       new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
     );
-  event("pointerdown", 5, 5);
-  event("pointermove", 15, 15);
-  event("pointerup", 15, 15);
-  expect(studio.snapshot().draw.strokes.length).toBe(before);
-  button("#add-draw-layer").click();
+  // No tool tapped yet: the first stroke already draws.
   event("pointerdown", 5, 5);
   event("pointermove", 15, 15);
   event("pointerup", 15, 15);
   await vi.advanceTimersByTimeAsync(70);
   expect(studio.snapshot().draw.strokes.length).toBe(before + 1);
+  // In Select a stroke over empty hoop draws nothing (and moves nothing).
   button("#move-layer").click();
   expect(button("#selection-box").hidden).toBe(false);
+  event("pointerdown", 92, 4);
+  event("pointermove", 97, 9);
+  event("pointerup", 97, 9);
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().draw.strokes.length).toBe(before + 1);
+  button("#add-draw-layer").click();
+  event("pointerdown", 5, 5);
+  event("pointermove", 15, 15);
+  event("pointerup", 15, 15);
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().draw.strokes.length).toBe(before + 2);
+  button("#undo").click();
   button("#undo").click();
   expect(studio.snapshot().draw.strokes.length).toBe(before);
 });
@@ -630,4 +643,88 @@ it("does not create an empty drawing when opening or cancelling Shape from a tex
   button("#add-shape").click();
   expect(studio.snapshot().layers).toHaveLength(2);
   expect(studio.snapshot().layers.at(-1).source.strokes).toHaveLength(1);
+});
+
+it("keeps Real size real in a window too small for it, and offers Pan instead of shrinking the hoop", () => {
+  const viewport = button("#canvas-viewport");
+  const size = (px) => {
+    Object.defineProperty(viewport, "clientWidth", {
+      configurable: true,
+      value: px,
+    });
+    Object.defineProperty(viewport, "clientHeight", {
+      configurable: true,
+      value: px,
+    });
+  };
+  const hoopWidth = () => parseFloat(button(".hoop").style.width);
+
+  // New projects start at real size.
+  expect(button("#size-real").getAttribute("aria-pressed")).toBe("true");
+  size(2000);
+  button("#size-real").click();
+  const real = hoopWidth();
+  expect(button("#pan-canvas").hidden).toBe(true);
+
+  size(400);
+  button("#size-real").click();
+  expect(hoopWidth()).toBe(real);
+  expect(button("#pan-canvas").hidden).toBe(false);
+  expect(button("#size-note").textContent).toMatch(/Pan/);
+
+  button("#size-fit").click();
+  expect(hoopWidth()).toBeLessThan(400);
+  expect(button("#pan-canvas").hidden).toBe(true);
+});
+
+it("docks the drawing tools above the hoop on a narrow screen instead of opening a drawer over it", () => {
+  studio.destroy();
+  const media = new EventTarget();
+  media.matches = true;
+  vi.stubGlobal("matchMedia", () => media);
+  studio = mountStudio(root, { onSend });
+  const dock = button("#draw-dock");
+
+  // Opens on the drawing, ready to draw: tools and thread colors are in the dock, no drawer is open.
+  expect(dock.hidden).toBe(false);
+  expect(dock.contains(button("#toolbar"))).toBe(true);
+  expect(dock.contains(button("#draw-palette-bench"))).toBe(true);
+  expect(button("#properties-panel").hidden).toBe(true);
+
+  // Select hands them back to Properties.
+  button("#move-layer").click();
+  expect(dock.hidden).toBe(true);
+  expect(button("#panel-draw").contains(button("#toolbar"))).toBe(true);
+
+  // Draw again: docked, and Properties stays shut.
+  button("#add-draw-layer").click();
+  expect(dock.hidden).toBe(false);
+  expect(button("#properties-panel").hidden).toBe(true);
+
+  // Picking a tool from the open drawer starts drawing and gets the drawer off the hoop.
+  button("#move-layer").click();
+  button("#toggle-properties").click();
+  expect(button("#properties-panel").hidden).toBe(false);
+  button("#tool-line").click();
+  expect(button("#properties-panel").hidden).toBe(true);
+  expect(dock.contains(button("#toolbar"))).toBe(true);
+
+  // Rotating to the wide layout puts the tools back beside the canvas.
+  const event = new Event("change");
+  Object.assign(event, { matches: false });
+  media.dispatchEvent(event);
+  expect(dock.hidden).toBe(true);
+  expect(button("#panel-draw").contains(button("#toolbar"))).toBe(true);
+});
+
+it("shows the host's save status and Projects button in the toolbar", () => {
+  expect(button("#projects").hidden).toBe(true);
+  studio.destroy();
+  const onProjects = vi.fn();
+  studio = mountStudio(root, { onSend, onProjects });
+  expect(button("#projects").hidden).toBe(false);
+  button("#projects").click();
+  expect(onProjects).toHaveBeenCalledOnce();
+  studio.setProjectStatus("Saved on this device");
+  expect(button("#project-status").textContent).toBe("Saved on this device");
 });

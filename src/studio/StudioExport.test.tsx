@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,13 +10,22 @@ import {
 import { Studio } from "./Studio";
 import { emptyProject } from "../projects/projectFile";
 import { listProjects, saveProject } from "../projects/projectStore";
+// The Projects button is part of the editor's own toolbar, so the stand-in editor hands back
+// the callback the real button would call.
+const editor = vi.hoisted(() => ({
+  options: undefined as { onProjects?: () => void } | undefined,
+}));
 vi.mock("./studioApp.js", () => ({
-  mountStudio: () => ({
-    destroy: () => {},
-    snapshot: () => emptyProject(),
-    thumbnail: () => "",
-    setPlacement: () => {},
-  }),
+  mountStudio: (_root: unknown, options: { onProjects?: () => void }) => {
+    editor.options = options;
+    return {
+      destroy: () => {},
+      snapshot: () => emptyProject(),
+      thumbnail: () => "",
+      setPlacement: () => {},
+      setProjectStatus: () => {},
+    };
+  },
 }));
 vi.mock("../projects/projectStore", () => ({
   getActiveProject: async () => ({
@@ -39,17 +49,17 @@ beforeEach(() => {
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 });
 afterEach(() => {
+  editor.options = undefined;
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 /** Project actions live in the Projects panel; open it and return the Export button. */
 async function openPanelAndFindExport() {
-  const projects = screen.getByRole("button", { name: "Projects" });
   await waitFor(() =>
-    expect((projects as HTMLButtonElement).disabled).toBe(false),
+    expect(editor.options?.onProjects).toBeTypeOf("function"),
   );
-  fireEvent.click(projects);
+  act(() => editor.options!.onProjects!());
   return screen.findByRole("button", { name: "Export project" });
 }
 it("finishes the local save before downloading an editable backup", async () => {

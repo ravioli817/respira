@@ -73,7 +73,8 @@ export function ScreenTabs({
               <span className="text-base font-semibold text-gray-900 dark:text-white">
                 {label}
               </span>
-              <span className="text-xs text-gray-600 dark:text-gray-400 hidden lg:block">
+              {/* The hint line needs a wide and tall window; a short one keeps the height for the hoop */}
+              <span className="text-xs text-gray-600 dark:text-gray-400 hidden lg:[@media(min-height:800px)]:block">
                 {id === "prepare" && patternName ? patternName : hint}
               </span>
             </span>

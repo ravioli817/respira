@@ -25,6 +25,8 @@ export interface NextStepInput {
   isUploading: boolean;
   currentStitch: number;
   colorBlocks: ColorBlock[];
+  /** The machine reported this job complete (see stitch/jobState.ts). */
+  finished?: boolean;
 }
 
 const ACCEPT = "the Accept button on the machine";
@@ -83,6 +85,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     isUploading,
     currentStitch,
     colorBlocks,
+    finished = false,
   } = input;
 
   if (!isConnected) {
@@ -155,11 +158,14 @@ export function getNextStep(input: NextStepInput): NextStep | null {
       needsPerson: false,
     };
   }
+  // Idle with the finished design still loaded. Without this the card would say to trace the
+  // outline, and the next tap after that sews the design again.
   if (
     patternUploaded &&
     status === MachineStatus.IDLE &&
-    colorBlocks.length &&
-    currentStitch > colorBlocks[colorBlocks.length - 1].endStitch
+    (finished ||
+      (colorBlocks.length > 0 &&
+        currentStitch >= colorBlocks[colorBlocks.length - 1].endStitch))
   ) {
     return {
       tone: "done",

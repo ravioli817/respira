@@ -25,6 +25,8 @@ export const STUDIO_MARKUP = `
       <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="true">Objects</button>
       <button class="btn" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Properties</button>
     </div>
+    <span class="project-status" id="project-status" role="status"></span>
+    <button class="btn" id="projects" hidden>Projects</button>
     <button class="btn-primary" id="send">Prepare to stitch</button>
   </header>
   <div class="editor-workspace">
@@ -37,7 +39,34 @@ export const STUDIO_MARKUP = `
     <p class="hint">Overlapping included objects both stitch.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
-    <div class="canvas-heading"><span class="mono">100 × 100 mm</span><p id="editing-object" class="hint" aria-live="polite"></p></div>
+    <div class="canvas-heading">
+      <div class="readout mono" id="readout">Nothing to stitch yet</div>
+      <p id="editing-object" class="hint" aria-live="polite"></p>
+      <div class="heading-controls">
+        <button class="btn" id="pan-canvas" aria-pressed="false" hidden>Pan</button>
+        <div class="seg small" role="group" aria-label="Show">
+          <button id="view-design" data-view="design" aria-pressed="true">Design</button>
+          <button id="view-stitches" data-view="stitches" aria-pressed="false">Stitches</button>
+        </div>
+        <details class="view-menu" id="view-menu">
+          <summary class="btn">View</summary>
+          <div class="view-pop">
+            <div class="seg small" role="group" aria-label="Hoop size on screen">
+              <button id="size-real" aria-pressed="true">Real size</button>
+              <button id="size-fit" aria-pressed="false">Fit screen</button>
+            </div>
+            <p class="size-line"><span id="size-note"></span><button class="link" id="size-check">Check the size with a card</button></p>
+            <label class="zoom">Zoom <input id="canvas-zoom" type="range" min="50" max="200" step="10" value="100"><output id="zoom-out">100%</output></label>
+            <button class="btn" id="grid-toggle" aria-pressed="true">Grid</button>
+            <div class="fabrics" role="group" aria-label="Fabric color for the preview" id="fabrics">
+              <span class="fabric-label">Fabric</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <!-- On a narrow screen the drawing tools dock here instead of in a drawer over the hoop. -->
+    <div class="draw-dock" id="draw-dock" hidden></div>
     <p class="note" id="note" role="status" hidden></p>
     <div class="canvas-viewport" id="canvas-viewport">
 
@@ -57,23 +86,6 @@ export const STUDIO_MARKUP = `
     </div>
 
     </div>
-    <div class="meta">
-      <div class="readout mono" id="readout">Nothing to stitch yet</div>
-      <div class="seg small" role="group" aria-label="Show">
-        <button id="view-design" data-view="design" aria-pressed="true">Design</button>
-        <button id="view-stitches" data-view="stitches" aria-pressed="false">Stitches</button>
-      </div>
-      <div class="fabrics" role="group" aria-label="Fabric color for the preview" id="fabrics">
-        <span class="fabric-label">Fabric</span>
-      </div>
-
-    </div>
-    <div class="zoom-row">      <div class="seg small" role="group" aria-label="Hoop size on screen">
-        <button id="size-real" aria-pressed="true">Real size</button>
-        <button id="size-fit" aria-pressed="false">Fit screen</button>
-      </div><button class="btn" id="pan-canvas" aria-pressed="false">Pan</button><button class="btn" id="grid-toggle" aria-pressed="true">Grid</button><label>Zoom <input id="canvas-zoom" type="range" min="50" max="200" step="10" value="100"><output id="zoom-out">100%</output></label></div>
-    <p class="size-line"><span id="size-note"></span><button class="link" id="size-check">Check the size with a card</button></p>
-
   </section>
   <aside class="bench" id="properties-panel" aria-label="Selected object properties">
     <div class="panel-heading"><h2>Properties</h2><button class="icon-btn" id="close-properties" aria-label="Collapse properties panel">×</button></div>

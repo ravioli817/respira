@@ -20,6 +20,8 @@ export interface StudioOptions {
   project?: ProjectData;
   onDirty?: () => void;
   onSave?: (data: ProjectData, thumbnail: string) => void;
+  /** Called when the toolbar's Projects button is tapped. The button is hidden without it. */
+  onProjects?: () => void;
   /** Called when "Prepare to stitch" is tapped. Return a message to show if the design cannot be taken. */
   onSend?: (design: StudioDesign) => string | null | undefined | void;
 }
@@ -31,5 +33,7 @@ export function mountStudio(
   destroy(): void;
   snapshot(): ProjectData;
   thumbnail(): string;
+  /** Text for the save status shown in the toolbar, e.g. "Saved on this device". */
+  setProjectStatus(text: string): void;
   setPlacement(value: { x: number; y: number; rotation: number }): void;
 };

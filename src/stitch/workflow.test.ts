@@ -50,6 +50,9 @@ it.each([
     undefined,
   ],
   [{ uploaded: true, current: 100 }, "app", "delete"],
+  // The last progress reading is short of the total, but the machine said it finished.
+  [{ uploaded: true, current: 97, finished: true }, "app", "delete"],
+  [{ uploaded: true, current: 97 }, "app", "trace"],
   [{ error: E.HoopError }, "machine", undefined],
 ] as const)("chooses one safe next action for %j", (patch, kind, command) => {
   const action = stitchAction({ ...base, ...patch });

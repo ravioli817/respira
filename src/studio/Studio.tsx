@@ -85,6 +85,8 @@ export function Studio({ className, onSend }: StudioProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editor = useRef<ReturnType<typeof mountStudio> | null>(null);
   const onSendRef = useRef(onSend);
+  // The editor's toolbar holds the Projects button; it calls whatever openPanel is current.
+  const openPanelRef = useRef<() => void>(() => {});
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const revision = useRef(0);
   const activeId = useRef("");
@@ -171,6 +173,7 @@ export function Studio({ className, onSend }: StudioProps) {
       project: legacy ? undefined : document.data,
       onSend: (design) =>
         onSendRef.current({ ...design, projectId: document.id }),
+      onProjects: () => openPanelRef.current(),
       onDirty: () => {
         revision.current++;
         setStatus("Unsaved changes…");
@@ -242,61 +245,45 @@ export function Studio({ className, onSend }: StudioProps) {
       });
   }
 
+  useEffect(() => {
+    openPanelRef.current = openPanel;
+  });
+  // Save status is shown in the editor's toolbar, next to Projects.
+  useEffect(() => {
+    editor.current?.setProjectStatus(status);
+  }, [status, document, legacy]);
+
   return (
     <div className={className}>
-      {/* One short row: the hoop needs the height, so project actions live in the Projects panel */}
-      <section
-        aria-label="Project files"
-        className="px-4 sm:px-5 lg:px-6 py-1.5 border-b bg-white dark:bg-gray-800 flex flex-wrap items-center gap-x-3 gap-y-1"
-      >
-        <h2 className="text-lg font-bold leading-tight text-gray-900 dark:text-white">
-          Create a design
-        </h2>
-        <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">
-          4 × 4 in hoop · 100 × 100 mm
-        </span>
-        <span
-          role="status"
-          className="ml-auto text-sm text-gray-600 dark:text-gray-300"
+      {/* Save status and the Projects button live in the editor's toolbar (studioApp.js), so this
+          screen spends no row on them. Only a problem takes a line here. */}
+      <input
+        ref={importRef}
+        type="file"
+        accept=".json,.respira.json"
+        className="hidden"
+        aria-label="Import editable project"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file)
+            void perform(async () => {
+              if (file.size > 20000000)
+                throw new Error("Project files must be smaller than 20 MB.");
+              const data = importProject(await file.text());
+              await flush();
+              await open(newRecord(data));
+            });
+        }}
+      />
+      {error && !panelOpen && (
+        <p
+          role="alert"
+          className="flex-shrink-0 px-4 sm:px-5 lg:px-6 py-1.5 border-b bg-white dark:bg-gray-800 text-sm text-red-700 dark:text-red-300"
         >
-          {status}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!document}
-          onClick={openPanel}
-        >
-          Projects
-        </Button>
-        <input
-          ref={importRef}
-          type="file"
-          accept=".json,.respira.json"
-          className="hidden"
-          aria-label="Import editable project"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file)
-              void perform(async () => {
-                if (file.size > 20000000)
-                  throw new Error("Project files must be smaller than 20 MB.");
-                const data = importProject(await file.text());
-                await flush();
-                await open(newRecord(data));
-              });
-          }}
-        />
-        {error && !panelOpen && (
-          <p
-            role="alert"
-            className="w-full text-sm text-red-700 dark:text-red-300"
-          >
-            {error}
-          </p>
-        )}
-      </section>
+          {error}
+        </p>
+      )}
       <div ref={hostRef} className="flex-1 min-h-0" />
       <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[85dvh] overflow-y-auto">

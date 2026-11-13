@@ -25,6 +25,8 @@ export interface WorkflowState {
   deleting: boolean;
   current: number;
   total: number;
+  /** The machine reported this job complete (see jobState.ts). */
+  finished?: boolean;
 }
 export interface StitchAction {
   kind: "app" | "machine" | "wait";
@@ -110,7 +112,12 @@ export function stitchAction(s: WorkflowState): StitchAction {
         label: "Remove the fabric, then press Accept on the machine",
       };
     case MachineStatus.IDLE:
-      if (s.total > 0 && s.current >= s.total && canDeletePattern(s.status))
+      // After a finished job the machine is idle with the design still loaded. Offering
+      // "Trace outline" then would lead straight to sewing it a second time.
+      if (
+        (s.finished || (s.total > 0 && s.current >= s.total)) &&
+        canDeletePattern(s.status)
+      )
         return {
           kind: "app",
           command: "delete",

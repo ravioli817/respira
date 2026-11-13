@@ -5,6 +5,7 @@ import { useMachineUploadStore } from "../stores/useMachineUploadStore";
 import { usePatternStore } from "../stores/usePatternStore";
 import { calculateColorBlocks } from "../utils/colorBlockHelpers";
 import { getNextStep, type NextStep } from "./nextStep";
+import { useJobState } from "../stitch/jobState";
 
 /** The current "what to do now" for the Stitch screen, from the app's existing stores. */
 export function useNextStep(): NextStep | null {
@@ -19,6 +20,7 @@ export function useNextStep(): NextStep | null {
     })),
   );
   const isUploading = useMachineUploadStore((state) => state.isUploading);
+  const finished = useJobState((state) => state.finished);
   const pesData = usePatternStore((state) => state.pesData);
   const uploadedPesData = usePatternStore((state) => state.uploadedPesData);
   const displayPattern = machine.patternUploaded ? uploadedPesData : pesData;
@@ -35,7 +37,8 @@ export function useNextStep(): NextStep | null {
         hasPattern: displayPattern !== null,
         isUploading,
         colorBlocks,
+        finished,
       }),
-    [machine, displayPattern, isUploading, colorBlocks],
+    [machine, displayPattern, isUploading, colorBlocks, finished],
   );
 }

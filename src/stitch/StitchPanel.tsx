@@ -1,5 +1,6 @@
 import { MachineStatus } from "../types/machine";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useJobState, watchJob } from "./jobState";
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore } from "../stores/useMachineStore";
 import { usePatternStore } from "../stores/usePatternStore";
@@ -47,6 +48,7 @@ function currentWorkflow(): WorkflowState {
       p.uploadedPesData?.penStitches.stitches.length ??
       m.patternInfo?.totalStitches ??
       0,
+    finished: useJobState.getState().finished,
   };
 }
 function ThreadCard({
@@ -120,6 +122,9 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
   );
   const [pending, setPending] = useState(false),
     [localError, setLocalError] = useState("");
+  // This panel stays mounted on every screen, so the job is watched for the whole session.
+  useEffect(() => watchJob(), []);
+  const finished = useJobState((s) => s.finished);
   const acting = useRef(false);
   const { handleUpload } = usePatternRotationUpload({
     uploadPattern: u.upload,
@@ -133,9 +138,12 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
   // Never label a machine's existing job using an unrelated local draft.
   const display = uploaded ? p.uploaded : prepared?.data || null;
   const blocks = useMemo(() => calculateColorBlocks(display), [display]);
-  const current = m.adjusted ?? m.progress?.currentStitch ?? 0;
   const total =
     display?.penStitches.stitches.length ?? m.patternInfo?.totalStitches ?? 0;
+  // The last progress reading is taken just before the end; a job the machine calls complete is complete.
+  const done = finished || m.status === MachineStatus.SEWING_COMPLETE;
+  const current =
+    m.adjusted ?? (done ? total : (m.progress?.currentStitch ?? 0));
   const action = stitchAction({
     connected: m.connected,
     status: m.status,
@@ -146,6 +154,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     deleting: m.deleting,
     current,
     total,
+    finished,
   });
   const timing = useMemo(
     () => calculatePatternTime(blocks, current),
@@ -268,7 +277,6 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             </Button>
           ) : (
             <p className="rounded-lg p-3 bg-gray-100 dark:bg-gray-700 font-semibold text-sm">
-              {action.kind === "machine" ? "On the machine: " : ""}
               {action.command === "connect"
                 ? "This browser cannot connect with Bluetooth."
                 : action.label}

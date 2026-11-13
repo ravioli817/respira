@@ -55,7 +55,7 @@ export function mountStudio(root, opts) {
     mode: 'draw',
     view: { draw: 'design', image: 'stitches', text: 'stitches' },
     fabric: '#FFFFFF',
-    hoop: { real: false, pxmm: null },     // pxmm: CSS px per mm once the size was checked against a card
+    hoop: { real: true, pxmm: null },      // pxmm: CSS px per mm once the size was checked against a card
     settings: { spacing: 0.4, angle: 45, underlay: true },
     draw: { tool: 'satin', color: 37, sizes: { satin: 3, brush: 6, eraser: 6 }, pressure: true, strokes: [], labels: new Uint8Array(GRID * GRID), order: [], example: false },
     image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [] },
@@ -64,7 +64,7 @@ export function mountStudio(root, opts) {
     design: null, parts: [], layers: [], activeId: null, plan: null, stats: null, note: ''
   };
   var undoStack = [], redoStack = [];
-  var objectBounds = new Map(), zoom = 1, showGrid = true, panCanvas = false;
+  var objectBounds = new Map(), zoom = 1, showGrid = true, panCanvas = false, pictureNotes = [];
 
   // ---------- helpers ----------
   function rgb(i) { var c = PEC[i]; return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
@@ -148,19 +148,28 @@ export function mountStudio(root, opts) {
   function applyHoopSize() {
     var need = Math.round(HOOP * pxPerMM()) + 22;       // the hoop's rim is 11 px each side
     var viewport = $('#canvas-viewport');
-    var room = Math.min(viewport.clientWidth - 32, viewport.clientHeight - 32);
-    var fit = Math.max(100, room || 400);
-    $('.hoop').style.width = ((S.hoop.real ? Math.min(need, fit) : fit) * zoom) + 'px';
-    var real = S.hoop.real && zoom === 1 && (!room || need <= room + 1);
+    // Space inside the viewport's 4 px padding; zero until the screen is laid out (and in tests).
+    var roomW = viewport.clientWidth - 8, roomH = viewport.clientHeight - 8, room = Math.min(roomW, roomH);
+    var fit = Math.max(100, room > 0 ? room - 16 : 400);
+    // Real size means real size. A screen that is too small scrolls (Pan) instead of quietly shrinking the hoop:
+    // drawing at a true 100 mm is the point of this view. "Fit screen" is one tap away in the View menu.
+    var width = (S.hoop.real ? need : fit) * zoom;
+    $('.hoop').style.width = width + 'px';
+    // Up to 6 px of the hoop's rim may hang over the edge before it counts as not fitting.
+    var overflow = room > 0 && (width > roomW + 6 || width > roomH + 6);
+    var real = S.hoop.real && zoom === 1;
     stageCol.classList.toggle('real', real);
     stageCol.style.setProperty('--real-w', need + 'px');
     $('#size-real').setAttribute('aria-pressed', String(S.hoop.real));
     $('#size-fit').setAttribute('aria-pressed', String(!S.hoop.real));
-    $('#size-note').textContent = zoom!==1 ? 'Zoomed preview · use Pan to move around the hoop.' : !S.hoop.real ? 'Scaled to fit the screen.'
-      : !real ? 'This screen is too small for real size, so the hoop is scaled to fit.'
+    var sizeText = zoom!==1 ? 'Zoomed preview.' : !S.hoop.real ? 'Scaled to fit the screen.'
       : (S.hoop.pxmm || sizeGuess.sure) ? 'Real size: the hoop is 100 mm (4 in) across, the same as on the machine.'
       : 'Real size is an estimate on this screen.';
+    $('#size-note').textContent = sizeText + (overflow ? ' The hoop is larger than this window: tap Pan and drag to reach the rest.' : '');
     $('#size-check').hidden = !S.hoop.real;
+    // Pan only earns its place in the heading while there is something to pan to.
+    $('#pan-canvas').hidden = !overflow;
+    if (!overflow && panCanvas) setPan(false);
   }
   $('#size-real').addEventListener('click', function () { S.hoop.real = true; resetZoom(); applyHoopSize(); scheduleSave(); });
   $('#size-fit').addEventListener('click', function () { S.hoop.real = false; resetZoom(); applyHoopSize(); scheduleSave(); });
@@ -385,7 +394,7 @@ export function mountStudio(root, opts) {
   function endStroke(e) {
     if (!active || e.pointerId !== active.id) return;
     if(active.pan){active=null;return;}
-    if(active.move||active.resize){var changed=active.changed;active=null;if(changed){S.placement=undefined;scheduleSave();}return;}
+    if(active.move||active.resize){var changed=active.changed;active=null;if(changed){S.placement=undefined;updateDesign();scheduleSave();}return;}
     var pts = active.pts; active = null;
     octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, over.width, over.height);
     if (pts.length) commitStroke(pts);
@@ -797,7 +806,10 @@ export function mountStudio(root, opts) {
         });
         S.parts = parts.filter(Boolean).map(function (part) { return { layer: part.layer, design: transformDesign(part.design, part.layer.transform) }; });
         S.parts.forEach(function(part){objectBounds.set(part.layer.id,designBounds(part.design));});
-        S.note = [S.note].concat(pictureDetailWarnings(S.parts)).filter(Boolean).join('\n');
+        // The check costs tens of milliseconds per picture, so a drag reuses the last result and
+        // endStroke() runs it once the object is let go.
+        if (!(active && (active.move || active.resize))) pictureNotes = pictureDetailWarnings(S.parts);
+        S.note = [S.note].concat(pictureNotes).filter(Boolean).join('\n');
         S.design = { labels: new Uint8Array(GRID * GRID), lines: [] };
         designReady();
       } catch (error) { failDesign(error.message); }
@@ -954,7 +966,8 @@ export function mountStudio(root, opts) {
     $('#add-draw-layer').setAttribute('aria-pressed',String(S.mode==='draw'&&!moveDrawing));
     $('#move-layer').setAttribute('aria-pressed',String(S.mode!=='draw'||moveDrawing));
     $('#editing-object').textContent=selected ? 'Editing: '+selected.name : '';
-    $('#editing-object').hidden=false;
+    syncEditingLabel();
+    placeDrawTools();
     stage.classList.toggle('drawing', S.mode === 'draw' && !moveDrawing);
     $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#object-count').textContent='('+S.layers.length+')';
@@ -1300,8 +1313,8 @@ export function mountStudio(root, opts) {
     pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
     if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
   }
-  $('#add-draw-layer').addEventListener('click',function(){setPan(false);moveDrawing=false;setMode('draw');showPanel('properties');});
-  $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;showPanel('properties');addObject('draw');});
+  $('#add-draw-layer').addEventListener('click',function(){setPan(false);moveDrawing=false;setMode('draw');showDrawTools();});
+  $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;addObject('draw');showDrawTools();});
   $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
   $('#add-text-layer').addEventListener('click',function(){moveDrawing=true;showPanel('properties');addObject('text');});
   $('#move-layer').addEventListener('click',function(){setPan(false);moveDrawing=true;syncLayers();render();});
@@ -1333,17 +1346,32 @@ export function mountStudio(root, opts) {
       $('#toggle-'+name).setAttribute('aria-expanded',String(panels[name]));
       $('.editor-workspace').classList.toggle('without-'+name,!panels[name]);
     });
+    syncEditingLabel();
     applyHoopSize();
   }
   function showPanel(name){if(compact)panels={objects:false,properties:false};panels[name]=true;syncPanels();}
+  // "Editing: Drawing 2" says which object is selected; the docked Objects list already shows that.
+  function syncEditingLabel(){$('#editing-object').hidden=!!(panels && panels.objects && !compact);}
+  // In the narrow layout Properties is a drawer over the canvas. Drawing needs its tools and thread
+  // colors in reach with the whole hoop in view, so while Draw is on they move to a dock above the hoop.
+  function placeDrawTools(){
+    var dock=$('#draw-dock'), toolbar=$('#toolbar'), threads=$('.threads.in-bench'), home=$('#panel-draw'), after=$('.drawing-recolor');
+    var docked=!!compact && S.mode==='draw' && !moveDrawing;
+    if(docked && toolbar.parentNode!==dock){dock.appendChild(toolbar);dock.appendChild(threads);if(panels.properties){panels.properties=false;syncPanels();}}
+    else if(!docked && toolbar.parentNode===dock){home.insertBefore(toolbar,after);home.insertBefore(threads,after);}
+    if(dock.hidden===docked){dock.hidden=!docked;applyHoopSize();}
+  }
+  // Opening Properties is right when it is docked beside the canvas, wrong when it would cover the hoop.
+  function showDrawTools(){if(compact){panels={objects:false,properties:false};syncPanels();}else showPanel('properties');}
   ['objects','properties'].forEach(function(name){
     $('#toggle-'+name).addEventListener('click',function(){if(panels[name]){panels[name]=false;syncPanels();}else showPanel(name);});
     $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-'+name).focus();});
   });
-  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:!compact,properties:!compact};syncPanels();});
+  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:!compact,properties:!compact};syncPanels();placeDrawTools();});
   listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-'+name).focus();}});
   function setPan(value){panCanvas=value;$('#pan-canvas').setAttribute('aria-pressed',String(value));stage.classList.toggle('panning',value);renderSelection();}
   $('#pan-canvas').addEventListener('click',function(){setPan(!panCanvas);});
+  holder.addEventListener('pointerdown',function(e){var menu=$('#view-menu');if(menu.open&&!menu.contains(e.target))menu.open=false;});
   function resetZoom(){zoom=1;$('#canvas-zoom').value=100;$('#zoom-out').textContent='100%';}
   $('#canvas-zoom').addEventListener('input',function(e){zoom=+e.target.value/100;$('#zoom-out').textContent=e.target.value+'%';applyHoopSize();});
   $('#grid-toggle').addEventListener('click',function(){showGrid=!showGrid;$('#grid-toggle').setAttribute('aria-pressed',String(showGrid));render();});
@@ -1393,15 +1421,21 @@ export function mountStudio(root, opts) {
     });
   }
   hydrateImages();
-  selectLayer(S.activeId || S.layers[0].id);
+  // Open ready to draw when the active object is a drawing; Select stays the start for pictures and text.
+  var opening = S.layers.find(function (l) { return l.id === S.activeId; }) || S.layers[0];
+  moveDrawing = opening.kind !== 'draw';
+  selectLayer(opening.id);
   syncPanels();
   applyHoopSize();
   resizeStage();
 
   listen(window, 'pagehide', saveLocal);
   listen(document, 'visibilitychange', function () { if (document.visibilityState === 'hidden') saveLocal(); });
+  $('#projects').hidden = !opts.onProjects;
+  $('#projects').addEventListener('click', function () { if (opts.onProjects) opts.onProjects(); });
   return {
     snapshot: snapshot, thumbnail: thumbnail,
+    setProjectStatus: function (text) { $('#project-status').textContent = text || ''; },
     setPlacement: function (value) { if (JSON.stringify(value) !== JSON.stringify(S.placement)) { S.placement = value; scheduleSave(); } },
     destroy: function () { destroyed = true; textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
   };

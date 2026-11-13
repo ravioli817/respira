@@ -63,7 +63,9 @@ button { cursor: pointer; }
 .editor-tools .canvas-actions { gap:4px; }
 .editor-tools .btn { padding:0 12px; background:transparent; }
 .editor-tools .history { gap:4px; }
-.editor-tools > .btn-primary { margin-left:auto; padding:0 18px; min-height:44px; font-size:14px; border-radius:9px; }
+.editor-tools > .btn-primary { padding:0 18px; min-height:44px; font-size:14px; border-radius:9px; }
+/* Save status and Projects sit with Prepare at the end of the toolbar, not on a row of their own. */
+.project-status { margin-left:auto; font-size:13px; color:var(--muted); white-space:nowrap; }
 .panel-toggles { display:flex; gap:4px; }
 .editor-workspace { display:grid; grid-template-columns:190px minmax(0,1fr) 290px; flex:1; min-height:0; position:relative; }
 .editor-workspace.without-objects { grid-template-columns:minmax(0,1fr) 290px; }
@@ -77,17 +79,37 @@ button { cursor: pointer; }
 .layer-order { display:grid; grid-template-columns:1fr; gap:6px; }
 .stage-col { display:flex; flex-direction:column; align-items:stretch; min-height:0; min-width:0; padding:0 12px 8px; gap:8px; overflow:hidden; }
 .canvas-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:36px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
-.canvas-viewport { flex:1; min-height:0; min-width:0; overflow:auto; display:grid; align-items:safe center; justify-items:safe center; padding:16px; overscroll-behavior:contain; }
+.canvas-heading { flex-wrap:nowrap; }
+.canvas-heading .readout { font-size:12px; flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.canvas-heading #editing-object { flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
+.heading-controls { flex-shrink:0; }
+/* View controls ride in the heading. Under the hoop they cost 150 px of height, which on an iPad in
+   landscape is the difference between a real-size hoop and one shrunk to two thirds. */
+.heading-controls { display:flex; align-items:center; gap:6px; margin-left:auto; }
+.heading-controls .btn, .view-pop .btn { min-height:34px; padding:0 12px; font-size:13px; }
+.view-menu { position:relative; }
+.view-menu > summary { list-style:none; cursor:pointer; }
+.view-menu > summary::-webkit-details-marker { display:none; }
+.view-menu[open] > summary { background:var(--accent-soft); border-color:var(--accent); }
+.view-pop { position:absolute; right:0; top:calc(100% + 6px); z-index:6; width:min(300px,80vw); padding:12px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); color:var(--ink); }
+.view-pop .zoom { display:flex; align-items:center; gap:8px; font-size:13px; width:100%; }
+.view-pop .zoom input { flex:1; min-width:0; }
+.view-pop .zoom output { min-width:38px; text-align:right; }
+.view-pop #grid-toggle[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent); }
+/* Narrow screens: drawing tools and thread colors dock here while Draw is on (see placeDrawTools). */
+.draw-dock { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; flex-shrink:0; }
+.draw-dock .toolbar { flex-direction:row; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.draw-dock .tools { flex-wrap:nowrap; }
+.draw-dock .tools > .tool { flex:0 0 auto; min-width:50px; }
+.draw-dock .size { min-width:210px; }
+.draw-dock .threads { flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.canvas-viewport { flex:1; min-height:0; min-width:0; overflow:auto; display:grid; align-items:safe center; justify-items:safe center; padding:4px; overscroll-behavior:contain; }
 .canvas-viewport .hoop { max-width:none; flex-shrink:0; }
 .toolbar { display:flex; flex-direction:column; gap:12px; }
 .size { display:flex; align-items:center; gap:8px; font-size:13px; }
 .size input { flex:1; min-width:40px; }
 .size.off { display:none; }
 .size output { min-width:54px; }
-.zoom-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.zoom-row label { display:flex; align-items:center; gap:8px; font-size:12px; }
-.zoom-row input { width:100px; }
-.zoom-row output { min-width:38px; }
 .editor-status { flex-shrink:0; margin:0; padding:0 12px; background:var(--surface); }
 .editor-status:empty { display:none; }
 .selection-box { position:absolute; pointer-events:none; border:1.5px solid #2b50d0; z-index:2; }
@@ -320,18 +342,14 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size:1
   .editor-tools { padding:6px; }.editor-tools > .btn-primary { padding:0 10px; }
   .canvas-actions { flex:1 0 100%; }.canvas-actions button { padding:0 6px; }
   .panel-toggles { gap:0; }.panel-toggles .btn { font-size:12px; padding:0 6px; }
-  .stage-col { padding-inline:6px; }.meta { gap:6px; }.readout { width:100%; }
+  .stage-col { padding-inline:6px; }
   .size-line { font-size:11px; }.size-line .link { font-size:11px; }
 }
-@media (max-height:650px) { .size-line { display:none; }.canvas-heading { min-height:24px; }.stage-col { gap:4px; } }
-.meta .readout { width:100%; font-size:12px; }
-.meta { justify-content:space-between; gap:6px; }
-.zoom-row { flex-wrap:wrap; gap:6px; }
-.zoom-row .btn { padding:0 10px; }
+/* A short window (an iPad in landscape inside a browser with its bars showing): tighten the rows above the hoop. */
+@media (max-height:800px) { .editor-tools { padding-block:4px; }.canvas-heading { min-height:34px; }.stage-col { gap:4px; padding-bottom:4px; } }
 .tools { flex-wrap:wrap; }
 .tools > .tool { flex:1; min-width:42px; padding-inline:4px; }
 .stack > input, .stack > select { min-width:0; }
 .stage-col .note { margin:0; max-height:100px; overflow:auto; flex-shrink:0; }
 .field.panning #overlay { cursor:grab; }
 #pan-canvas[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent); }
-.zoom-row label { margin-left:auto; }
