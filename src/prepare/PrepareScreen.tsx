@@ -11,6 +11,8 @@ import { DensityInspector } from "./DensityInspector";
 import { StitchPlayback } from "./StitchPlayback";
 import { Button } from "../components/ui/button";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
+import { HoopAlignment } from "../components/HoopAlignment";
+import { useHoopImageStore } from "../stores/useHoopImageStore";
 
 export function PrepareScreen({
   onContinue,
@@ -61,6 +63,13 @@ export function PrepareScreen({
     patternRotation: uploadedPesData ? 0 : patternRotation,
   });
   const stats = prepared ? playbackStats(prepared.data.penStitches) : null;
+  // A hoop photo is a placement aid: once it is lined up, show the view it appears in.
+  const hoopPhoto = useHoopImageStore((s) => s.status);
+  const [seenHoopPhoto, setSeenHoopPhoto] = useState(hoopPhoto);
+  if (hoopPhoto !== seenHoopPhoto) {
+    setSeenHoopPhoto(hoopPhoto);
+    if (hoopPhoto === "aligned") setView("placement");
+  }
   return (
     <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-7xl mx-auto grid lg:grid-cols-[360px_1fr] gap-4 items-start">
@@ -111,6 +120,9 @@ export function PrepareScreen({
               Back to Create
             </Button>
           </section>
+          {/* Photo of the hooped fabric under the design, from Dunar Dolorgiet's hoop-photo alignment
+              (jhbruhn/respira#95). Placement happens on this screen, so the card lives here. */}
+          {prepared && !uploadedPesData && <HoopAlignment />}
           <FileUpload preparationOnly />
         </div>
         <div className="min-w-0 space-y-3">
