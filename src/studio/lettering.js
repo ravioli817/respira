@@ -1,7 +1,6 @@
 import { columnUnderlay } from './underlay.js';
-import font from './fonts/small-satin/geometry.json';
-import license from './fonts/small-satin/LICENSE?raw';
-export const FONT_LICENSE = license;
+import { EMBROIDERY_FONTS } from './embroideryFonts.js';
+export const FONT_LICENSE = EMBROIDERY_FONTS.SmallSatin.license;
 export const EMBROIDERY_FONT = 'SmallSatin';
 export const LETTER_HEIGHT = { min: 4, max: 15 };
 const distance = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1]);
@@ -20,22 +19,40 @@ function samplePairs(pairs, step) {
 }
 /** Satin geometry is digitized at its final size; ordinary web fonts are never rasterized here. */
 export function letteringDesign(text, layerScale=1, underlay=true, settings={}) {
-  const height=text.heightMM ?? 8, effective=height*layerScale;
-  if(!Number.isFinite(effective) || effective<4 || effective>15) throw new Error('Small Satin needs a final letter height between 4 and 15 mm. Adjust letter height or layer size.');
+  const definition=EMBROIDERY_FONTS[text.font || EMBROIDERY_FONT];
+  if(!definition) throw new Error('Unknown embroidery font.');
+  const font=definition.geometry, height=text.heightMM ?? (text.font && text.font!==EMBROIDERY_FONT?definition.min:8), effective=height*layerScale;
+  if(!Number.isFinite(effective) || effective<definition.min-1e-8 || effective>definition.max+1e-8) throw new Error(definition.label+' needs a final letter height between '+definition.min+' and '+definition.max+' mm. Adjust letter height or layer size.');
   const value=String(text.value || '').normalize('NFC');
   const missing=[...new Set([...value].filter(c=>c!=='\n' && c!==' ' && !font.glyphs[c]))];
-  if(missing.length) throw new Error('Small Satin does not include: '+missing.join(' ')+'. Choose supported letters or a decorative fill font.');
+  if(missing.length) throw new Error(definition.label+' does not include: '+missing.join(' ')+'. Choose supported letters or a decorative fill font.');
   const scale=height/font.capHeight, spacing=text.letterSpacing ?? 0.5, gap=text.lineGap ?? 2;
-  const lines=value.split('\n'), lineWidths=lines.map(line=>[...line].reduce((w,c,i)=>w+(c===' '?font.space*scale:(font.glyphs[c].bounds[2]-font.glyphs[c].bounds[0])*scale)+(i?spacing:0),0));
+  const lines=value.split('\n');
+  const layout=lines.map(line=>{
+    let x=0, previous=null, min=Infinity, max=-Infinity;
+    const positions=[...line].map(char=>{
+      const glyph=font.glyphs[char];
+      if(font.kerning && previous && char!==' ') x-=(font.kerning[previous+' '+char]||0)*scale;
+      const origin=x;
+      if(glyph){min=Math.min(min,x+glyph.bounds[0]*scale);max=Math.max(max,x+glyph.bounds[2]*scale);}
+      x+=(char===' '?font.space:(glyph.advance ?? glyph.bounds[2]-glyph.bounds[0]))*scale+spacing;
+      previous=char;return origin;
+    });
+    // Small Satin keeps its original left-edge placement exactly. New fonts use authored bearings.
+    return {positions,offset:font.kerning && Number.isFinite(min)?min:0,width:font.kerning?(Number.isFinite(min)?max-min:0):Math.max(0,x-spacing)};
+  });
+  const lineWidths=layout.map(row=>row.width);
   const width=Math.max(0,...lineWidths), paths=[];
   if(width*layerScale>142 || (lines.length-1)*(font.leading*scale+gap)*layerScale>142) throw new Error('The lettering is too large for the hoop. Shorten the text or reduce its letter height.');
   lines.forEach((line,row)=>{
     let x=text.align==='left'?0:text.align==='right'?width-lineWidths[row]:(width-lineWidths[row])/2;
     const y=row*(font.leading*scale+gap);
-    for(const char of line) {
-      if(char===' ') { x+=font.space*scale+spacing; continue; }
+    for(const [index,char] of [...line].entries()) {
+      if(char===' ') continue;
+      const pathStart=paths.length;
       const glyph=font.glyphs[char];
-      const move=(p)=>[x+(p[0]-glyph.bounds[0])*scale,y+(p[1]-font.baseline)*scale];
+      const origin=x+layout[row].positions[index]-layout[row].offset;
+      const move=(p)=>[origin+(p[0]-(font.kerning?0:glyph.bounds[0]))*scale,y+(p[1]-font.baseline)*scale];
       for(const entry of glyph.order) {
         if(entry[0]==='run') { paths.push({color:text.color,pts:glyph.runs[entry[1]].map(move)}); continue; }
         const column=glyph.columns[entry[1]];
@@ -54,7 +71,10 @@ export function letteringDesign(text, layerScale=1, underlay=true, settings={}) 
         });
         paths.push({color:text.color,pts});
       }
-      x+=(glyph.bounds[2]-glyph.bounds[0])*scale+spacing;
+      // Additional cut before the first path of a new letter/word; never inside a glyph.
+      const before=[...line].slice(0,index).join('');
+      const wordBoundary=(index>0 && / $/.test(before)) || (index===0 && row>0);
+      if(pathStart>0 && paths.length>pathStart && (text.trimRule==='letter'||(text.trimRule==='word'&&wordBoundary))) paths[pathStart].trimBefore=true;
     }
   });
   const all=paths.flatMap(p=>p.pts);

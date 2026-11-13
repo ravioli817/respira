@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(3);
+  expect(saved.v).toBe(4);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -727,4 +727,52 @@ it("shows the host's save status and Projects button in the toolbar", () => {
   expect(onProjects).toHaveBeenCalledOnce();
   studio.setProjectStatus("Saved on this device");
   expect(button("#project-status").textContent).toBe("Saved on this device");
+});
+
+it("saves both new embroidery fonts and trim rules through undo, duplication and v4 reopening", async () => {
+  button("#add-text-layer").click();
+  for (const font of ["RoundedSatin", "ScriptSatin"]) {
+    button("#txt-font").value = font;
+    button("#txt-font").dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(button("#send").disabled).toBe(false);
+    expect(button("#font-note").textContent).toContain(
+      font === "RoundedSatin" ? "10–19" : "14.5–24.5",
+    );
+    expect(button("#fill-stitch-fields").hidden).toBe(true);
+    expect(button("#satin-stitch-fields").hidden).toBe(false);
+  }
+  input("#txt", "AB CD");
+  button("#txt-trim").value = "letter";
+  button("#txt-trim").dispatchEvent(new Event("change", { bubbles: true }));
+  expectBlocked();
+  await vi.advanceTimersByTimeAsync(250);
+  button("#send").click();
+  const output = onSend.mock.calls.at(-1)[0];
+  expect(output.stitches.filter((s) => (s[2] & 0x30) === 0x30)).toHaveLength(3);
+  button("#undo").click();
+  expect(button("#txt-trim").value).toBe("auto");
+  button("#redo").click();
+  expect(button("#txt-trim").value).toBe("letter");
+  button("#layer-duplicate").click();
+  expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
+  button("#undo").click();
+  const saved = studio.snapshot();
+  expect(saved.v).toBe(4);
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  await vi.advanceTimersByTimeAsync(70);
+  button("#send").click();
+  expect(button("#txt-font").value).toBe("ScriptSatin");
+  expect(button("#txt-trim").value).toBe("letter");
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(output.stitches);
+  input("#layer-size", "200");
+  await vi.advanceTimersByTimeAsync(70);
+  expect(button("#send").disabled).toBe(true);
+  expect(button("#note").textContent).toContain("14.5 and 24.5");
+  button("#undo").click();
+  await vi.advanceTimersByTimeAsync(70);
+  button("#txt-font").value = "Lobster";
+  button("#txt-font").dispatchEvent(new Event("change"));
+  expect(button("#lettering-trims").hidden).toBe(true);
 });

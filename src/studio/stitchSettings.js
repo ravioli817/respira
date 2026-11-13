@@ -1,5 +1,6 @@
+import { isEmbroideryFont } from './embroideryFonts.js';
 export function stitchDefaults(layer, project) {
-  const lettering=layer.kind==='text'&&layer.source.font==='SmallSatin';
+  const lettering=layer.kind==='text'&&isEmbroideryFont(layer.source.font);
   return {
     fillUnderlay:project.underlay?'tatami':'none',
     satinUnderlay:project.underlay?'center':'none',

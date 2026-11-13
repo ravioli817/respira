@@ -1,5 +1,5 @@
 export interface ProjectData {
-  v: 1 | 2 | 3;
+  v: 1 | 2 | 3 | 4;
   activeLayerId?: string;
   layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
@@ -34,6 +34,7 @@ export interface ProjectData {
     widthMM: number;
     color: number;
     heightMM?: number;
+    trimRule?: "auto" | "word" | "letter";
     letterSpacing?: number;
     lineGap?: number;
     align?: "left" | "center" | "right";
@@ -171,7 +172,7 @@ export function validateProject(value: unknown): ProjectData {
     t = object(s.text),
     settings = object(s.settings);
   if (
-    (s.v !== 1 && s.v !== 2 && s.v !== 3) ||
+    (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4) ||
     !["draw", "image", "text"].includes(String(s.mode))
   )
     return fail();
@@ -257,10 +258,17 @@ export function validateProject(value: unknown): ProjectData {
       widthMM: number(t.widthMM, 20, 100),
       color: color(t.color),
       ...(t.heightMM !== undefined
-        ? { heightMM: number(t.heightMM, 4, 15) }
+        ? { heightMM: number(t.heightMM, 1, 250) }
         : {}),
       ...(t.letterSpacing !== undefined
         ? { letterSpacing: number(t.letterSpacing, 0, 5) }
+        : {}),
+      ...(t.trimRule !== undefined
+        ? {
+            trimRule: (["auto", "word", "letter"].includes(String(t.trimRule))
+              ? t.trimRule
+              : fail()) as "auto" | "word" | "letter",
+          }
         : {}),
       ...(t.lineGap !== undefined ? { lineGap: number(t.lineGap, 0, 10) } : {}),
       ...(t.align !== undefined
@@ -272,7 +280,7 @@ export function validateProject(value: unknown): ProjectData {
         : {}),
     },
   };
-  if (s.v === 2 || s.v === 3) {
+  if (s.v === 2 || s.v === 3 || s.v === 4) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
       const l = object(value),
@@ -370,7 +378,10 @@ export function importProject(text: string): ProjectData {
   const file = object(parsed);
   if (
     file.format !== "respira-project" ||
-    (file.version !== 1 && file.version !== 2 && file.version !== 3) ||
+    (file.version !== 1 &&
+      file.version !== 2 &&
+      file.version !== 3 &&
+      file.version !== 4) ||
     object(file.data).v !== file.version
   )
     return fail();

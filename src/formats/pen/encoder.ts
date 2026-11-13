@@ -1,3 +1,4 @@
+// Changed in this fork: explicit MOVE | TRIM requests use the existing locked jump/cut sequence.
 /**
  * PEN Format Encoder
  *
@@ -207,8 +208,8 @@ export function encodeStitchesToPen(stitches: number[][]): PenEncodingResult {
     if (cmd & MOVE) {
       const jumpDist = Math.sqrt((absX - prevX) ** 2 + (absY - prevY) ** 2);
 
-      if (!isFirstStitch && jumpDist > FEED_LENGTH) {
-        // Long jump - add finishing lock stitches at previous position
+      if (!isFirstStitch && (jumpDist > FEED_LENGTH || (cmd & TRIM) !== 0)) {
+        // Long jump or explicit cut request - add finishing locks at the previous position
         // Loop B: End/Cut Vector - Look BACKWARD at previous stitches
         // This hides the knot inside the embroidery we just finished
         const finishDir = calculateLockDirection(stitches, i - 1, false);

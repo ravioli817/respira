@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { emptyProject, exportProject, importProject } from "./projectFile";
+import {
+  emptyProject,
+  exportProject,
+  importProject,
+  validateProject,
+} from "./projectFile";
 
 describe("editable project files", () => {
   it("round trips drawings, text, pictures, thread overrides and settings", () => {
@@ -170,4 +175,43 @@ it("preserves version 3 custom stitch settings and rejects invalid values", () =
     Object.assign(invalid.layers![0].stitchSettings!, { [key]: value });
     expect(() => exportProject(invalid)).toThrow();
   }
+});
+
+it("round-trips v4 lettering fonts and trim rules, while still importing older projects", () => {
+  for (const font of ["RoundedSatin", "ScriptSatin"]) {
+    const data = emptyProject();
+    const source = {
+      ...data.text,
+      font,
+      heightMM: 19,
+      trimRule: "word" as const,
+    };
+    const project = {
+      ...data,
+      v: 4 as const,
+      activeLayerId: "name",
+      layers: [
+        {
+          id: "name",
+          name: "Bharti",
+          kind: "text" as const,
+          visible: true,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          source,
+        },
+      ],
+    };
+    const roundtrip = importProject(exportProject(project));
+    expect(roundtrip.v).toBe(4);
+    expect(roundtrip.layers?.[0].source).toEqual(source);
+    expect(() =>
+      validateProject({
+        ...project,
+        layers: [
+          { ...project.layers[0], source: { ...source, trimRule: "invalid" } },
+        ],
+      }),
+    ).toThrow();
+  }
+  expect(importProject(exportProject(emptyProject())).v).toBe(1);
 });
