@@ -235,7 +235,11 @@ export function getNextStep(input: NextStepInput): NextStep | null {
         ? {
             tone: "action",
             title: `Paused. Press ${START_STOP} to carry on`,
-            lines: [],
+            lines: colorBlocks.length
+              ? [
+                  `The machine should be threaded with ${threadLabel(colorBlocks[currentBlockIndex(colorBlocks, currentStitch)])}.`,
+                ]
+              : [],
             needsPerson: false,
           }
         : {

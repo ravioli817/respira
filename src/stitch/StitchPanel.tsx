@@ -2,7 +2,10 @@ import { MachineStatus } from "../types/machine";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useJobState, watchJob } from "./jobState";
 import { useShallow } from "zustand/react/shallow";
-import { useMachineStore } from "../stores/useMachineStore";
+import {
+  selectPatternUploaded,
+  useMachineStore,
+} from "../stores/useMachineStore";
 import { usePatternStore } from "../stores/usePatternStore";
 import { useMachineUploadStore } from "../stores/useMachineUploadStore";
 import { NextStepCard } from "../guide/NextStepCard";
@@ -18,10 +21,12 @@ import { usePatternRotationUpload } from "../hooks/domain/usePatternRotationUplo
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
 import { calculateColorBlocks } from "../utils/colorBlockHelpers";
 import {
+  canChooseStartBlock,
   canDeletePattern,
   canShowStepControl,
   canStartMaskTrace,
 } from "../utils/machineStateHelpers";
+import { Switch } from "../components/ui/switch";
 import { isBluetoothSupported } from "../utils/bluetoothSupport";
 import { calculatePatternTime } from "../utils/timeCalculation";
 import { ProgressStats } from "../components/ProgressMonitor/ProgressStats";
@@ -40,7 +45,7 @@ function currentWorkflow(): WorkflowState {
     status: m.machineStatus,
     error: m.machineError,
     hasPattern: !!p.pesData,
-    uploaded: m.patternInfo !== null,
+    uploaded: selectPatternUploaded(m),
     uploading: u.isUploading,
     deleting: m.isDeleting,
     current: m.adjustedStitchIndex ?? m.sewingProgress?.currentStitch ?? 0,
@@ -101,6 +106,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
       paused: s.pausedStitchIndex,
       message: s.error,
       machineInfo: s.machineInfo,
+      loaded: selectPatternUploaded(s),
     })),
   );
   const p = usePatternStore(
@@ -134,7 +140,9 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     () => (p.data ? preparePattern(p.data, p.offset, p.rotation) : null),
     [p.data, p.offset, p.rotation],
   );
-  const uploaded = m.patternInfo !== null;
+  // True from the machine's status alone while its pattern details are still being read back
+  // after a reconnect (see selectPatternUploaded).
+  const uploaded = m.loaded;
   // Never label a machine's existing job using an unrelated local draft.
   const display = uploaded ? p.uploaded : prepared?.data || null;
   const blocks = useMemo(() => calculateColorBlocks(display), [display]);
@@ -168,6 +176,20 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     patternRotation: p.rotation,
   });
   const busy = pending || u.uploading || m.deleting;
+
+  // Opt-in: start, or start again, from a chosen thread instead of the first stitch. This is
+  // torfeu's "start from a chosen color block" for Respira's progress card (jhbruhn/respira#98,
+  // tested there on a PP1), fitted to this panel. Leaving the mode restores the old position.
+  const canChoose =
+    uploaded && blocks.length > 1 && !finished && canChooseStartBlock(m.status);
+  const [choosing, setChoosing] = useState(false);
+  const [couldChoose, setCouldChoose] = useState(canChoose);
+  const positionBeforeChoosing = useRef<number | null>(null);
+  if (canChoose !== couldChoose) {
+    setCouldChoose(canChoose);
+    if (!canChoose) setChoosing(false);
+  }
+  const isChoosing = choosing && canChoose;
   const percent = total
     ? Math.min(100, Math.max(0, (current / total) * 100))
     : 0;
@@ -246,6 +268,43 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
       acting.current = false;
       setPending(false);
     }
+  }
+  async function startFrom(stitch: number) {
+    const now = currentWorkflow();
+    if (
+      acting.current ||
+      !now.connected ||
+      !now.uploaded ||
+      now.uploading ||
+      now.deleting ||
+      !canChooseStartBlock(now.status)
+    )
+      return;
+    acting.current = true;
+    setPending(true);
+    setLocalError("");
+    try {
+      await useMachineStore.getState().setStitchPosition(stitch, now.total);
+    } catch (error) {
+      setLocalError(
+        error instanceof Error
+          ? error.message
+          : "The starting point could not be changed.",
+      );
+    } finally {
+      acting.current = false;
+      setPending(false);
+    }
+  }
+  function setChoosingStart(on: boolean) {
+    setChoosing(on);
+    if (on) {
+      positionBeforeChoosing.current = current;
+      return;
+    }
+    const previous = positionBeforeChoosing.current;
+    positionBeforeChoosing.current = null;
+    if (previous !== null && previous !== current) void startFrom(previous);
   }
   const supported = isBluetoothSupported();
   return (
@@ -346,7 +405,12 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             local draft is not used to guess its thread colors.
           </p>
         )}
-        {uploaded && (
+        {uploaded && total === 0 && (
+          <p className="text-sm" role="status">
+            Reading the job back from the machine…
+          </p>
+        )}
+        {uploaded && total > 0 && (
           <div>
             <div className="flex justify-between text-sm mb-2">
               <span>
@@ -380,14 +444,47 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             <summary className="cursor-pointer text-sm font-semibold">
               All thread blocks ({blocks.length})
             </summary>
+            {canChoose && (
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <label htmlFor="choose-start-thread" className="text-sm">
+                  Start from a chosen thread
+                </label>
+                <Switch
+                  id="choose-start-thread"
+                  checked={isChoosing}
+                  disabled={busy}
+                  onCheckedChange={setChoosingStart}
+                />
+              </div>
+            )}
+            {isChoosing && (
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                Tap the thread to start from. Everything before it is skipped.
+                Switch this off to go back to where it was.
+              </p>
+            )}
             <ol className="mt-2 space-y-2 text-sm max-h-60 overflow-y-auto">
               {blocks.map((block, i) => (
                 <li
                   key={i}
-                  className={`rounded border p-2 ${i === focus.index ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20" : ""}`}
+                  className={`rounded border ${isChoosing ? "" : "p-2"} ${i === focus.index ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20" : ""}`}
                 >
-                  {i + 1}. {threadLabel(block)}
-                  {i === focus.index ? " · " + focus.label : ""}
+                  {isChoosing ? (
+                    <button
+                      type="button"
+                      className="w-full min-h-11 p-2 text-left cursor-pointer disabled:opacity-60"
+                      disabled={busy}
+                      onClick={() => void startFrom(block.startStitch)}
+                    >
+                      {i + 1}. {threadLabel(block)}
+                      {i === focus.index ? " · starts here" : ""}
+                    </button>
+                  ) : (
+                    <>
+                      {i + 1}. {threadLabel(block)}
+                      {i === focus.index ? " · " + focus.label : ""}
+                    </>
+                  )}
                 </li>
               ))}
             </ol>

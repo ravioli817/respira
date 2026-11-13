@@ -1,4 +1,7 @@
-import { useMachineStore } from "../stores/useMachineStore";
+import {
+  selectPatternUploaded,
+  useMachineStore,
+} from "../stores/useMachineStore";
 import { useMachineUploadStore } from "../stores/useMachineUploadStore";
 import { usePatternStore } from "../stores/usePatternStore";
 import { studioDesignToPattern } from "./toPattern";
@@ -12,7 +15,7 @@ export function loadStudioDesign(design: StudioDesign): string | null {
   if (useMachineUploadStore.getState().isUploading) {
     return "A design is being sent to the machine right now. Wait for it to finish.";
   }
-  if (useMachineStore.getState().patternInfo !== null) {
+  if (selectPatternUploaded(useMachineStore.getState())) {
     return "The machine already holds a design. Finish it or delete it on the Stitch screen, then prepare this one.";
   }
 

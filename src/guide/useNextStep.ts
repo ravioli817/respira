@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useMachineStore } from "../stores/useMachineStore";
+import {
+  selectPatternUploaded,
+  useMachineStore,
+} from "../stores/useMachineStore";
 import { useMachineUploadStore } from "../stores/useMachineUploadStore";
 import { usePatternStore } from "../stores/usePatternStore";
 import { calculateColorBlocks } from "../utils/colorBlockHelpers";
@@ -14,7 +17,7 @@ export function useNextStep(): NextStep | null {
       isConnected: state.isConnected,
       machineStatus: state.machineStatus,
       machineError: state.machineError,
-      patternUploaded: state.patternInfo !== null,
+      patternUploaded: selectPatternUploaded(state),
       currentStitch:
         state.adjustedStitchIndex ?? state.sewingProgress?.currentStitch ?? 0,
     })),

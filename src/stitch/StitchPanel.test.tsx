@@ -169,3 +169,52 @@ it("surfaces upload failures and allows retry without duplicate in-flight calls"
     primary().getByRole("button", { name: "Upload prepared design" }),
   ).toBeTruthy();
 });
+it("lets a job start from a chosen thread, and puts the position back when the choice is switched off", async () => {
+  const setStitchPosition = vi.fn().mockResolvedValue(undefined);
+  useMachineStore.setState({
+    patternInfo: info,
+    machineStatus: M.IDLE,
+    setStitchPosition,
+  });
+  usePatternStore.setState({ uploadedPesData: data });
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  const total = data.penStitches.stitches.length;
+  const second = data.penStitches.colorBlocks[1].startStitchIndex;
+
+  // Off by default: thread rows are plain text, nothing to tap by accident.
+  expect(screen.queryByRole("button", { name: /^2\. / })).toBeNull();
+  fireEvent.click(screen.getByRole("switch", { name: /chosen thread/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^2\. / }));
+  await waitFor(() =>
+    expect(setStitchPosition).toHaveBeenCalledWith(second, total),
+  );
+
+  // The machine now sits at the second thread; switching the choice off restores stitch 0.
+  act(() => useMachineStore.setState({ adjustedStitchIndex: second }));
+  fireEvent.click(screen.getByRole("switch", { name: /chosen thread/ }));
+  await waitFor(() =>
+    expect(setStitchPosition).toHaveBeenLastCalledWith(0, total),
+  );
+});
+it("does not offer a different starting thread while the machine is sewing", () => {
+  useMachineStore.setState({ patternInfo: info, machineStatus: M.SEWING });
+  usePatternStore.setState({ uploadedPesData: data });
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  expect(screen.queryByRole("switch", { name: /chosen thread/ })).toBeNull();
+});
+it("treats a machine that is mid-job as holding a job while its details are read back after a reconnect", () => {
+  // Reconnected during a thread change: status known, pattern info not yet.
+  useMachineStore.setState({
+    patternInfo: null,
+    machineStatus: M.COLOR_CHANGE_WAIT,
+  });
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  expect(screen.getByText(/Machine job/)).toBeTruthy();
+  expect(
+    screen.getByText(/Reading the job back from the machine/),
+  ).toBeTruthy();
+  // Not an invitation to upload the local draft over the running job.
+  expect(
+    primary().queryByRole("button", { name: /Upload prepared design/ }),
+  ).toBeNull();
+});
