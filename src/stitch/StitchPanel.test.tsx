@@ -242,3 +242,31 @@ it("names the design the way its maker did, and counts threads and stitches in p
   ).toBeTruthy();
   expect(screen.queryByText(/Thread block|stitch positions|\.pes/)).toBeNull();
 });
+
+import { usePrepareOptions } from "../prepare/prepareOptions";
+import { preparePattern } from "../prepare/preparePattern";
+it("refreshes the pre-upload stitch count when the pause option changes", () => {
+  const draft = studioDesignToPattern({
+    name: "jump",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [20, 0, 0, 0],
+      [100, 0, 16, 0],
+      [110, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.setState({ pesData: draft });
+  usePrepareOptions.getState().setPauseAfterCuts(false);
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  const count = () =>
+    screen.getByText("Stitches", { exact: true }).nextElementSibling!
+      .textContent;
+  const before = count();
+  act(() => usePrepareOptions.getState().setPauseAfterCuts(true));
+  const expected = preparePattern(draft, { x: 0, y: 0 }, 0, true).data
+    .penStitches.stitches.length;
+  expect(count()).not.toBe(before);
+  expect(count()).toMatch(new RegExp("^" + expected + "\\("));
+  act(() => usePrepareOptions.getState().setPauseAfterCuts(false));
+});

@@ -63,7 +63,7 @@ export function usePatternRotationUpload({
         displayFileName,
         prepared.offset,
         patternRotation || 0,
-        patternRotation ? pesData : undefined,
+        prepared.data !== pesData ? pesData : undefined,
       );
     },
     [uploadPattern, setUploadedPattern],

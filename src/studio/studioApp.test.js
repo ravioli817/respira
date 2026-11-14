@@ -776,3 +776,83 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   button("#txt-font").dispatchEvent(new Event("change"));
   expect(button("#lettering-trims").hidden).toBe(true);
 });
+
+it("keeps a decoding picture through undo/redo and lets the latest replacement win", async () => {
+  const decodes = [];
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(() => new Promise((resolve) => decodes.push(resolve))),
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+    "data:image/png;base64,cGljdHVyZQ==",
+  );
+  const choose = (id, name) => {
+    Object.defineProperty(button(id), "files", {
+      configurable: true,
+      value: [new File(["x"], name)],
+    });
+    button(id).dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  choose("#add-picture-file", "first.png");
+  button("#undo").click();
+  button("#redo").click();
+  decodes[0]({ width: 64, height: 64, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().layers.at(-1).source.fileName).toBe("first.png");
+  choose("#file", "older.png");
+  choose("#file", "latest.png");
+  decodes[2]({ width: 64, height: 64, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  decodes[1]({ width: 64, height: 64, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().layers.at(-1).source.fileName).toBe("latest.png");
+  button("#undo").click();
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().layers.at(-1).source.fileName).toBe("older.png");
+  root.querySelector('#img-clean [data-clean="3"]').click();
+  await vi.advanceTimersByTimeAsync(150);
+  expect(studio.snapshot().layers.at(-1).source.clean).toBe(3);
+  button("#undo").click();
+  expect(studio.snapshot().layers.at(-1).source.clean).toBe(2);
+});
+
+it("keeps the prior picture intact when a replacement cannot be processed", async () => {
+  let finish;
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+    "data:image/png;base64,cGljdHVyZQ==",
+  );
+  const choose = (id, name) => {
+    Object.defineProperty(button(id), "files", {
+      configurable: true,
+      value: [new File(["x"], name)],
+    });
+    button(id).dispatchEvent(new Event("change"));
+  };
+  choose("#add-picture-file", "good.png");
+  finish({ width: 64, height: 64, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  choose("#file", "bad.png");
+  const getContext = HTMLCanvasElement.prototype.getContext;
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    function (...args) {
+      const context = getContext.apply(this, args);
+      context.getImageData = () => {
+        throw new Error("Cannot read pixels");
+      };
+      return context;
+    },
+  );
+  finish({ width: 64, height: 64, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.snapshot().layers.at(-1).source.fileName).toBe("good.png");
+  expect(button("#toast").textContent).toMatch(/couldn't be opened/);
+});

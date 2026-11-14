@@ -1,4 +1,6 @@
 // Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
+import { useMachineCacheStore } from "./useMachineCacheStore";
+import { usePatternStore } from "./usePatternStore";
 import { create } from "zustand";
 import {
   BrotherPP1Service,
@@ -108,17 +110,30 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
   // Connect to machine
   connect: async () => {
+    let generation = pollingGeneration;
     try {
       const { service } = get();
       set({ error: null, isPairingError: false });
       get()._stopPolling();
+      generation = pollingGeneration;
+      useMachineCacheStore.getState().clearResumeState();
+      usePatternStore.getState().clearUploadedPattern();
+      set({
+        adjustedStitchIndex: null,
+        lastRolledBackError: null,
+        pausedStitchIndex: null,
+        patternInfo: null,
+        sewingProgress: null,
+      });
 
       await service.connect();
+      if (generation !== pollingGeneration) return;
       set({ isConnected: true });
 
       // Fetch initial machine info and status
       const info = await service.getMachineInfo();
       const state = await service.getMachineState();
+      if (generation !== pollingGeneration) return;
 
       set({
         machineInfo: info,
@@ -130,7 +145,17 @@ export const useMachineStore = create<MachineState>((set, get) => ({
       // Fetch sewing progress so we know if sewing was in progress before reconnect
       try {
         const progress = await service.getSewingProgress();
-        set({ sewingProgress: progress });
+        if (generation !== pollingGeneration) return;
+        set({
+          sewingProgress: progress,
+          // Reconnecting observes the existing pause; it must not apply another automatic rollback.
+          pausedStitchIndex:
+            getMachineStateCategory(state.status) === "interrupted" ||
+            (state.status === MachineStatus.SEWING_WAIT &&
+              progress.currentStitch > 0)
+              ? progress.currentStitch
+              : null,
+        });
       } catch {
         // Not critical - polling will pick it up
       }
@@ -139,12 +164,13 @@ export const useMachineStore = create<MachineState>((set, get) => ({
       await get().refreshPatternInfo();
 
       // Check for resume possibility using cache store
-      const { useMachineCacheStore } = await import("./useMachineCacheStore");
       await useMachineCacheStore.getState().checkResume();
 
-      // Start polling
+      // Start polling only for the connection that completed this handshake.
+      if (generation !== pollingGeneration) return;
       get()._startPolling();
     } catch (err) {
+      if (generation !== pollingGeneration) return;
       console.log(err);
       const isPairing = err instanceof BluetoothPairingError;
       set({
@@ -162,6 +188,8 @@ export const useMachineStore = create<MachineState>((set, get) => ({
       _stopPolling();
 
       await service.disconnect();
+      useMachineCacheStore.getState().clearResumeState();
+      usePatternStore.getState().clearUploadedPattern();
       set({
         isConnected: false,
         machineInfo: null,
@@ -169,6 +197,9 @@ export const useMachineStore = create<MachineState>((set, get) => ({
         machineStatusName: MachineStatusNames[MachineStatus.None] || "Unknown",
         patternInfo: null,
         sewingProgress: null,
+        adjustedStitchIndex: null,
+        lastRolledBackError: null,
+        pausedStitchIndex: null,
         error: null,
         machineError: SewingMachineError.None,
       });
@@ -246,9 +277,11 @@ export const useMachineStore = create<MachineState>((set, get) => ({
   refreshServiceCount: async () => {
     const { isConnected, machineInfo, service } = get();
     if (!isConnected || !machineInfo) return;
+    const generation = pollingGeneration;
 
     try {
       const counts = await service.getServiceCount();
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         machineInfo: {
           ...machineInfo,
@@ -328,24 +361,32 @@ export const useMachineStore = create<MachineState>((set, get) => ({
     try {
       set({ error: null, isDeleting: true });
 
-      // Delete pattern from cache to prevent auto-resume
+      // Keep the recovery copy until the machine confirms deletion.
+      let machineUuid: Uint8Array | null = null;
       try {
-        const machineUuid = await service.getPatternUUID();
-        if (machineUuid) {
-          const uuidStr = uuidToString(machineUuid);
-          await storageService.deletePattern(uuidStr);
-          console.log("[Cache] Deleted pattern with UUID:", uuidStr);
-        }
+        machineUuid = await service.getPatternUUID();
       } catch (err) {
-        console.warn("[Cache] Failed to get UUID for cache deletion:", err);
+        console.warn("[Cache] Could not read UUID before deletion:", err);
       }
-
       await service.deletePattern();
+      if (machineUuid) {
+        try {
+          await storageService.deletePattern(uuidToString(machineUuid));
+        } catch (err) {
+          console.warn(
+            "[Cache] Could not remove the deleted job's cache:",
+            err,
+          );
+        }
+      }
 
       // Clear machine-related state
       set({
         patternInfo: null,
         sewingProgress: null,
+        adjustedStitchIndex: null,
+        lastRolledBackError: null,
+        pausedStitchIndex: null,
       });
 
       // Emit pattern deleted event for other stores to react
@@ -368,9 +409,11 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
     const totalStitches = maxStitches ?? patternInfo?.totalStitches ?? 0;
     const clamped = Math.max(0, Math.min(index, totalStitches));
+    const generation = pollingGeneration;
 
     try {
       await service.setStitchIndex(clamped);
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({ adjustedStitchIndex: clamped });
       // Refresh progress so UI reflects the new position
       await get().refreshProgress();
@@ -395,6 +438,8 @@ export const useMachineStore = create<MachineState>((set, get) => ({
     const { machineError, sewingProgress, service, lastRolledBackError } =
       get();
 
+    const generation = pollingGeneration;
+    if (!get().isConnected) return;
     const rollback = getErrorStitchRollback(machineError);
     if (rollback === null) return;
     if (machineError === lastRolledBackError) return;
@@ -408,6 +453,7 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
     try {
       await service.setStitchIndex(newIndex);
+      if (!get().isConnected || generation !== pollingGeneration) return;
       set({
         adjustedStitchIndex: newIndex,
         lastRolledBackError: machineError,
@@ -436,6 +482,8 @@ export const useMachineStore = create<MachineState>((set, get) => ({
     // Subscribe to disconnect events
     service.onDisconnect(() => {
       console.log("[useMachineStore] Device disconnected");
+      useMachineCacheStore.getState().clearResumeState();
+      usePatternStore.getState().clearUploadedPattern();
       get()._stopPolling();
       set({
         isConnected: false,
@@ -445,6 +493,9 @@ export const useMachineStore = create<MachineState>((set, get) => ({
         machineError: SewingMachineError.None,
         patternInfo: null,
         sewingProgress: null,
+        adjustedStitchIndex: null,
+        lastRolledBackError: null,
+        pausedStitchIndex: null,
         error: "Device disconnected",
         isPairingError: false,
       });
@@ -532,7 +583,9 @@ export const useMachineStore = create<MachineState>((set, get) => ({
       if (isInterruptedOrPausedMidSew && get().pausedStitchIndex === null) {
         // Refresh progress so rollback has accurate current stitch
         await get().refreshProgress();
+        if (!isCurrentPoll()) return;
         await get()._handleErrorStitchRollback();
+        if (!isCurrentPoll()) return;
 
         // Snapshot the paused position (after rollback, before manual adjustments)
         const postRollbackStitch =
@@ -548,7 +601,6 @@ export const useMachineStore = create<MachineState>((set, get) => ({
 
       // A UUID read can fail briefly after reconnect. Retry artwork recovery
       // without making live progress depend on its success.
-      const { useMachineCacheStore } = await import("./useMachineCacheStore");
       if (useMachineCacheStore.getState().resumeCheckPending) {
         await useMachineCacheStore.getState().checkResume();
       }

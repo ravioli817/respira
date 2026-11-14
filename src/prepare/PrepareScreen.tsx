@@ -39,7 +39,9 @@ export function PrepareScreen({
       patternRotation: s.patternRotation,
     })),
   );
-  const fileName = usePatternStore((s) => s.currentFileName);
+  const fileName = usePatternStore((s) =>
+    s.uploadedPesData ? s.uploadedFileName : s.currentFileName,
+  );
   const machineInfo = useMachineStore((s) => s.machineInfo);
   const [view, setView] = useState<"placement" | "playback" | "density">(
     "placement",

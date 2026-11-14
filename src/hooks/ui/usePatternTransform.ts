@@ -1,3 +1,4 @@
+// Changed in this fork: keyboard movement is scoped to the focused, visible placement canvas.
 /**
  * usePatternTransform Hook
  *
@@ -106,6 +107,24 @@ export function usePatternTransform({
     if (!pesData || patternUploaded || isUploading) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const canvas = patternGroupRef.current?.getStage()?.container();
+      if (
+        !canvas ||
+        !canvas.getClientRects().length ||
+        !canvas.contains(document.activeElement)
+      )
+        return;
+      if (
+        e
+          .composedPath()
+          .some(
+            (node) =>
+              node instanceof HTMLElement &&
+              (node.isContentEditable ||
+                /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName)),
+          )
+      )
+        return;
       const step = e.shiftKey ? 1 : 10; // 0.1mm or 1mm in 0.1mm units
       let dx = 0;
       let dy = 0;

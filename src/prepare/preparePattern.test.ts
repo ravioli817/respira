@@ -66,3 +66,39 @@ describe("final stitch playback data", () => {
     );
   });
 });
+
+import { usePrepareOptions } from "./prepareOptions";
+import { restoreCachedPattern } from "./restoreCachedPattern";
+it("keeps raw artwork in pause-only upload caches and restores uploaded offsets exactly once", async () => {
+  const original = samplePattern(),
+    offset = { x: 123, y: -45 };
+  const uploadPattern = vi.fn().mockResolvedValue(undefined);
+  const { result } = renderHook(() =>
+    usePatternRotationUpload({ uploadPattern, setUploadedPattern: vi.fn() }),
+  );
+  usePrepareOptions.getState().setPauseAfterCuts(true);
+  try {
+    await act(() =>
+      result.current.handleUpload(original, "test.pes", offset, 0),
+    );
+    expect(uploadPattern.mock.calls[0][5]).toBe(original);
+    for (const rotation of [0, 45, 90]) {
+      const prepared = preparePattern(original, offset, rotation, true);
+      const restored = restoreCachedPattern({
+        pesData: original,
+        uploadedPesData: prepared.data,
+        patternOffset: prepared.offset,
+        patternRotation: rotation,
+      });
+      expect(restored.uploadedOffset).toEqual(prepared.offset);
+      expect(restored.originalOffset.x).toBeCloseTo(offset.x);
+      expect(restored.originalOffset.y).toBeCloseTo(offset.y);
+      expect(
+        preparePattern(restored.original, restored.originalOffset, 0, false)
+          .data.penData,
+      ).toEqual(original.penData);
+    }
+  } finally {
+    usePrepareOptions.getState().setPauseAfterCuts(false);
+  }
+});

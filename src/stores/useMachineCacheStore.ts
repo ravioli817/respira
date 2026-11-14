@@ -39,6 +39,8 @@ interface MachineCacheState {
   clearResumeState: () => void;
 }
 
+let resumeGeneration = 0;
+
 export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
   // Initial state
   resumeAvailable: false,
@@ -51,6 +53,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
    * Queries the machine for its current pattern UUID and checks if we have it cached
    */
   checkResume: async (): Promise<PesPatternData | null> => {
+    const generation = ++resumeGeneration;
     set({
       resumeAvailable: false,
       resumeCheckPending: false,
@@ -65,6 +68,11 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
       console.log("[Resume] Checking for cached pattern...");
 
       const machineUuid = await service.getPatternUUID();
+      if (
+        generation !== resumeGeneration ||
+        !useMachineStore.getState().isConnected
+      )
+        return null;
       console.log(
         "[Resume] Machine UUID:",
         machineUuid ? uuidToString(machineUuid) : "none",
@@ -82,6 +90,11 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
 
       const uuidStr = uuidToString(machineUuid);
       const cached = await storageService.getPatternByUUID(uuidStr);
+      if (
+        generation !== resumeGeneration ||
+        !useMachineStore.getState().isConnected
+      )
+        return null;
 
       if (cached) {
         console.log(
@@ -114,7 +127,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
       }
     } catch (err) {
       console.error("[Resume] Failed to check resume:", err);
-      set({ resumeCheckPending: true });
+      if (generation === resumeGeneration) set({ resumeCheckPending: true });
       return null;
     }
   },
@@ -192,6 +205,7 @@ export const useMachineCacheStore = create<MachineCacheState>((set, get) => ({
    * Called when pattern is deleted from machine
    */
   clearResumeState: () => {
+    resumeGeneration++;
     set({
       resumeAvailable: false,
       resumeCheckPending: false,

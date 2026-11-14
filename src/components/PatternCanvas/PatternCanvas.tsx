@@ -235,11 +235,24 @@ export function PatternCanvas({
               scaleY={stageScale}
               draggable
               onWheel={handleWheel}
+              onPointerDown={(event) =>
+                event.target
+                  .getStage()
+                  ?.container()
+                  .focus({ preventScroll: true })
+              }
               onDragStart={handleStageDragStart}
               onDragEnd={handleStageDragEnd}
               ref={(node) => {
                 stageRef.current = node;
                 if (node) {
+                  node.container().tabIndex = 0;
+                  node
+                    .container()
+                    .setAttribute(
+                      "aria-label",
+                      "Embroidery placement canvas. Arrow keys move the design.",
+                    );
                   node.container().style.cursor = "grab";
                   node.container().style.touchAction = "none";
                 }
@@ -333,9 +346,7 @@ export function PatternCanvas({
                 onZoomReset={handleZoomReset}
               />
             </div>
-            {showThreads && (
-              <ThreadLegend colors={displayPattern.uniqueColors} />
-            )}
+            {showThreads && <ThreadLegend colors={displayPattern.threads} />}
           </div>
         )}
       </CardContent>

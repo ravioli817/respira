@@ -86,6 +86,15 @@ Disable customization to return that object to **Project stitch defaults**. Exis
 - **Picture detail warnings:** included pictures are checked at their final placed size, separately for each processed thread-color mask. A named, non-blocking warning highlights a substantial share of features thinner than approximately 1.2 mm. It updates after resizing, color/cleanup changes, hiding, undo or reopening. This is a coarse inspection of retained picture detail, not a guarantee about every pixel in the original photo.
 - **Unified Stitch panel:** machine guidance and one primary app action (or a clearly labeled physical-button instruction) share one panel with current/load-now and next-thread cards. Recovery controls appear while paused/interrupted; all thread blocks, dimensions, timing, speed, retracing and deletion are available below. Errors remain inline on Stitch; the header error badge can still be opened manually, and automatic error popovers remain enabled on Create/Prepare. The upload, cache, recovery and machine protocol stores remain the existing ones.
 
+### Recovery and editing checks
+
+- Reconnecting restores the exact cached machine job and its placement while keeping a different local draft intact. Uploaded and draft names are tracked separately. A reconnect does not apply a second automatic stitch rollback, and late replies from a dropped connection cannot restore stale recovery controls or artwork.
+- Pause-after-cut changes refresh the Stitch preview. Pause-only uploads retain the original editable data in the cache, so the option can be turned off for a later job. The recovery copy is removed only after successful machine deletion; failure to save a recovery copy is reported separately from a successful upload.
+- Prepare lists every thread block in sewing order, including repeated colors. Arrow-key movement requires focus on the visible placement canvas and does not intercept text editing on Create.
+- Picture decoding follows the newest replacement and remains consistent through undo/redo. Picture cleanup is undoable. Resetting hoop-photo markers or a failed alignment clears the previous warp; a late image decode cannot replace a newer photo or undo Remove. Hoop photos must be upright for side classification.
+
+These behaviors have software regression coverage and practice-machine/browser checks. The simulator does not validate physical Bluetooth timing, marker dimensions on a real hoop, needle movement or fabric stitch quality.
+
 ## Installation
 
 The latest release of Respira can be downloaded [here](https://github.com/jhbruhn/respira/releases/latest). Choose the appropriate installer for your Operating System.

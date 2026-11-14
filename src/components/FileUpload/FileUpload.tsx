@@ -77,7 +77,9 @@ export function FileUpload({
   } = usePatternStore(
     useShallow((state) => ({
       pesData: state.pesData,
-      currentFileName: state.currentFileName,
+      currentFileName: state.uploadedPesData
+        ? state.uploadedFileName || state.currentFileName
+        : state.currentFileName,
       patternOffset: state.patternOffset,
       patternRotation: state.patternRotation,
       setPattern: state.setPattern,
