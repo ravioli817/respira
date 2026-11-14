@@ -3,7 +3,11 @@
  * rest of the app already tracks; it sends nothing to the machine.
  */
 import { MachineStatus } from "../types/machine";
-import { getErrorDetails, hasError } from "../utils/errorCodeHelpers";
+import {
+  getErrorDetails,
+  hasError,
+  SewingMachineError,
+} from "../utils/errorCodeHelpers";
 import type { ColorBlock } from "../components/ProgressMonitor/types";
 import { classifyMachineStop } from "../utils/colorBlockHelpers";
 
@@ -15,6 +19,24 @@ export interface NextStep {
   lines: string[];
   /** True when the person has to come and do something, so a sound is worth making. */
   needsPerson: boolean;
+  /**
+   * The thread this step is about, when it is about one thread. The Stitch screen shows it as a
+   * large spool with `lead` above the name ("Change the thread to" / "Yellow"), big enough to read
+   * from across the table; `title` says the same in one sentence.
+   */
+  spool?: { lead: string; block: ColorBlock };
+}
+
+/**
+ * How the Stitch screen colours a step: tape yellow when it is the person's turn, pin red for a
+ * fault, mat green while the machine is busy by itself, plain paper otherwise.
+ */
+export type StepLook = "yours" | "fault" | "machine" | "plain";
+export function stepLook(step: NextStep): StepLook {
+  if (step.tone === "problem") return "fault";
+  if (step.needsPerson || step.tone === "action") return "yours";
+  if (step.tone === "progress") return "machine";
+  return "plain";
 }
 
 export interface NextStepInput {
@@ -37,6 +59,35 @@ export interface NextStepInput {
 const ACCEPT = "the Accept button on the machine";
 const START_STOP = "the Start/Stop button on the machine";
 
+/** Thread faults in plain words. `thread` is the one that should be in the machine. */
+const PLAIN_FAULTS: Record<
+  number,
+  { title: string; steps: (thread: string) => string[] } | undefined
+> = {
+  [SewingMachineError.UpperThreadError]: {
+    title: "The upper thread broke or ran out",
+    steps: (thread) => [
+      `Rethread the machine with ${thread}.`,
+      "If it keeps breaking, put in a new needle and rethread.",
+    ],
+  },
+  [SewingMachineError.UpperThreadSewingStartError]: {
+    title: "The upper thread is not threaded properly",
+    steps: (thread) => [
+      `Press ${ACCEPT}.`,
+      `Rethread the machine with ${thread}.`,
+      "If it happens again, put in a new needle and rethread.",
+    ],
+  },
+  [SewingMachineError.LowerThreadError]: {
+    title: "The bobbin thread is almost empty",
+    steps: () => [
+      "Put in a full bobbin.",
+      "To refill the empty one, wind thread onto it the way the manual shows.",
+    ],
+  },
+};
+
 /** "Pink (Brother #085)" from a color block's thread details. */
 export function threadLabel(block: ColorBlock | undefined): string {
   if (!block) return "the next thread";
@@ -47,6 +98,23 @@ export function threadLabel(block: ColorBlock | undefined): string {
   return block.threadCatalogNumber
     ? `${name} (Brother #${block.threadCatalogNumber})`
     : name;
+}
+
+/** A thread's name and its catalog number apart, for showing them at different sizes. */
+export function threadParts(block: ColorBlock | undefined): {
+  name: string;
+  catalog: string;
+} {
+  const name = block?.threadDescription
+    ? block.threadDescription.charAt(0).toUpperCase() +
+      block.threadDescription.slice(1).toLowerCase()
+    : "";
+  return {
+    name,
+    catalog: block?.threadCatalogNumber
+      ? `Brother ${block.threadCatalogNumber}`
+      : "",
+  };
 }
 
 /** The block being stitched, or the last one once the count runs past the end. */
@@ -135,11 +203,17 @@ export function getNextStep(input: NextStepInput): NextStep | null {
 
   if (error) {
     const sewing = currentStitch > 0;
+    // The thread faults happen to everyone, so they get plain words and the name of the thread
+    // to put back. Everything else keeps the machine's own text.
+    const plain = PLAIN_FAULTS[machineError as number];
+    const thread = colorBlocks.length
+      ? threadLabel(colorBlocks[currentBlockIndex(colorBlocks, currentStitch)])
+      : "the same thread";
     return {
       tone: "problem",
-      title: error.title,
+      title: plain?.title ?? error.title,
       lines: [
-        ...error.solutions,
+        ...(plain ? plain.steps(thread) : error.solutions),
         ...(sewing
           ? [`When it is fixed, tap Resume Sewing, then press ${START_STOP}.`]
           : []),
@@ -188,9 +262,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     return {
       tone: "done",
       title: "Ready for a new design",
-      lines: [
-        "Delete the finished pattern from the machine to prepare another design.",
-      ],
+      lines: ["Delete the finished design from the machine to stitch another."],
       needsPerson: false,
     };
   }
@@ -198,9 +270,9 @@ export function getNextStep(input: NextStepInput): NextStep | null {
     return hasPattern
       ? {
           tone: "action",
-          title: "Upload your prepared design",
+          title: "Send your design to the machine",
           lines: [
-            "Review placement and stitch playback on Prepare, then tap Upload here.",
+            "It will stitch where you put it on Place. Tap Send to the machine.",
           ],
           needsPerson: false,
         }
@@ -208,7 +280,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
           tone: "info",
           title: "Pick a design",
           lines: [
-            "Make one on Create and tap Prepare to stitch, or import a PES file on Prepare.",
+            "Draw one on Create, then tap Place. Or open an embroidery file on Place.",
           ],
           needsPerson: false,
         };
@@ -247,7 +319,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
         title: "Happy with the position? Tap Start Sewing",
         lines: [
           `Thread the machine with ${firstThread} first.`,
-          "To move the design, delete the pattern, place it again and upload.",
+          "To move the design, delete it from the machine, place it again and send it.",
         ],
         needsPerson: false,
       };
@@ -287,6 +359,9 @@ export function getNextStep(input: NextStepInput): NextStep | null {
             : "The machine stops by itself when it is finished.",
         ],
         needsPerson: false,
+        spool: colorBlocks[index]
+          ? { lead: "Stitching", block: colorBlocks[index] }
+          : undefined,
       };
     }
 
@@ -324,6 +399,9 @@ export function getNextStep(input: NextStepInput): NextStep | null {
           `Then press ${START_STOP}.`,
         ],
         needsPerson: true,
+        spool: colorBlocks[index]
+          ? { lead: "Change the thread to", block: colorBlocks[index] }
+          : undefined,
       };
     }
 
@@ -357,7 +435,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
         lines: [
           "Take the frame off the machine and remove your fabric.",
           `Press ${ACCEPT}.`,
-          "Tap Delete finished pattern to start something new.",
+          "Tap Delete finished design to start something new.",
         ],
         needsPerson: true,
       };

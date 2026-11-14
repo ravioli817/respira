@@ -16,6 +16,8 @@ import {
   saveProject,
 } from "../projects/projectStore";
 import { usePatternStore } from "../stores/usePatternStore";
+import { enhanceThreadWithBrotherColor } from "../utils/brotherColors";
+import { displayName, useProjectUi } from "../projects/projectUi";
 import { Button } from "../components/ui/button";
 import {
   Dialog,
@@ -38,6 +40,25 @@ import "@fontsource/righteous/latin-400.css";
 interface StudioProps {
   className?: string;
   onSend: (design: StudioDesign) => string | null;
+  /** A saved design was opened from the list, so the Create screen should be showing. */
+  onOpened?: () => void;
+}
+/** "Brother 509" for a palette colour, so the Create screen names threads the way the spools do. */
+function threadCode(r: number, g: number, b: number): string {
+  const hex =
+    "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+  const thread = enhanceThreadWithBrotherColor(
+    {
+      color: (r << 16) | (g << 8) | b,
+      hex,
+      brand: null,
+      catalogNumber: null,
+      description: null,
+      chart: null,
+    },
+    { matchByRGB: true },
+  );
+  return thread.catalogNumber ? `Brother ${thread.catalogNumber}` : "";
 }
 function download(data: string, name: string) {
   const url = URL.createObjectURL(
@@ -78,15 +99,14 @@ const newRecord = (data?: ProjectData): SavedProject => ({
 });
 
 /** Named editable projects. The machine's loaded job lives in separate stores. */
-export function Studio({ className, onSend }: StudioProps) {
+export function Studio({ className, onSend, onOpened }: StudioProps) {
   const sourceProjectId = usePatternStore((s) => s.sourceProjectId);
   const offset = usePatternStore((s) => s.patternOffset);
   const rotation = usePatternStore((s) => s.patternRotation);
   const hostRef = useRef<HTMLDivElement>(null);
   const editor = useRef<ReturnType<typeof mountStudio> | null>(null);
   const onSendRef = useRef(onSend);
-  // The editor's toolbar holds the Projects button; it calls whatever openPanel is current.
-  const openPanelRef = useRef<() => void>(() => {});
+  const onOpenedRef = useRef(onOpened);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const revision = useRef(0);
   const activeId = useRef("");
@@ -102,7 +122,8 @@ export function Studio({ className, onSend }: StudioProps) {
 
   useEffect(() => {
     onSendRef.current = onSend;
-  }, [onSend]);
+    onOpenedRef.current = onOpened;
+  }, [onSend, onOpened]);
   useEffect(() => {
     let cancelled = false;
     getActiveProject()
@@ -119,7 +140,7 @@ export function Studio({ className, onSend }: StudioProps) {
       .catch(() => {
         if (cancelled) return;
         setError(
-          "Project storage is unavailable. Export a project file to keep your work.",
+          "Designs cannot be kept on this device right now. Export a design file to keep your work.",
         );
         setLegacy(true);
         setDocument(newRecord());
@@ -154,7 +175,7 @@ export function Studio({ className, onSend }: StudioProps) {
           if (activeId.current === id) {
             setStatus("Not saved");
             setError(
-              "Could not save on this device. Export a project file to keep your work.",
+              "Could not save on this device. Export a design file to keep your work.",
             );
           }
         });
@@ -173,7 +194,12 @@ export function Studio({ className, onSend }: StudioProps) {
       project: legacy ? undefined : document.data,
       onSend: (design) =>
         onSendRef.current({ ...design, projectId: document.id }),
-      onProjects: () => openPanelRef.current(),
+      threadCode,
+      onName: (name) => useProjectUi.setState({ name }),
+      onScale: (pxPerMM) => {
+        if (useProjectUi.getState().pxPerMM !== pxPerMM)
+          useProjectUi.setState({ pxPerMM });
+      },
       onDirty: () => {
         revision.current++;
         setStatus("Not saved yet…");
@@ -185,7 +211,7 @@ export function Studio({ className, onSend }: StudioProps) {
     editor.current = instance;
     void activateProject(document.id).catch(() =>
       setError(
-        "Could not remember the current project. Use Projects to reopen it, or export a backup.",
+        "Could not remember which design is open. Tap its name at the top to open it again, or export a backup.",
       ),
     );
     return () => {
@@ -228,6 +254,7 @@ export function Studio({ className, onSend }: StudioProps) {
     setLegacy(false);
     setDocument(record);
     setPanelOpen(false);
+    onOpenedRef.current?.();
   }
   // Save first so the gallery shows this project as it is now. The panel opens either way:
   // a storage failure must never hide Export, the one way left to keep the work.
@@ -240,23 +267,26 @@ export function Studio({ className, onSend }: StudioProps) {
       .then(setGallery, () => {
         setGallery([]);
         setError(
-          "Saved projects could not be read on this device. Export a project file to keep your work.",
+          "Saved designs could not be read on this device. Export a design file to keep your work.",
         );
       });
   }
 
+  // The top bar holds the design's name (which opens this list) and the Place step.
   useEffect(() => {
-    openPanelRef.current = openPanel;
+    useProjectUi.setState({
+      openProjects: openPanel,
+      sendToPlace: () => editor.current?.send() ?? false,
+    });
   });
-  // Save status is shown in the editor's toolbar, next to Projects.
   useEffect(() => {
-    editor.current?.setProjectStatus(status);
-  }, [status, document, legacy]);
+    useProjectUi.setState({ status });
+  }, [status]);
 
   return (
     <div className={className}>
-      {/* Save status and the Projects button live in the editor's toolbar (studioApp.js), so this
-          screen spends no row on them. Only a problem takes a line here. */}
+      {/* The design's name and save status live in the top bar, so this screen spends no row on
+          them. Only a problem takes a line here. */}
       <input
         ref={importRef}
         type="file"
@@ -287,11 +317,11 @@ export function Studio({ className, onSend }: StudioProps) {
       <div ref={hostRef} className="flex-1 min-h-0" />
       <Dialog open={panelOpen} onOpenChange={setPanelOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[85dvh] overflow-y-auto">
-          <DialogTitle>Your projects</DialogTitle>
+          <DialogTitle>Your designs</DialogTitle>
           <DialogDescription>
-            Projects stay in this browser on this device. Export to Files for
-            backup or to use another device. Opening a project does not change
-            the pattern held by the machine.
+            Designs stay in this browser on this device. Export to Files for
+            backup or to use another device. Opening a design does not change
+            the one held by the machine.
           </DialogDescription>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Button
@@ -304,7 +334,7 @@ export function Studio({ className, onSend }: StudioProps) {
                 })
               }
             >
-              New project
+              New design
             </Button>
             <Button
               variant="outline"
@@ -348,14 +378,14 @@ export function Studio({ className, onSend }: StudioProps) {
                 })
               }
             >
-              Export project
+              Export design
             </Button>
             <Button
               variant="outline"
               disabled={busy || !document}
               onClick={() => importRef.current?.click()}
             >
-              Import project
+              Import design
             </Button>
           </div>
           {error && (
@@ -365,7 +395,7 @@ export function Studio({ className, onSend }: StudioProps) {
           )}
           {gallery === null ? (
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Opening your projects…
+              Opening your designs…
             </p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -373,7 +403,7 @@ export function Studio({ className, onSend }: StudioProps) {
                 <button
                   key={record.id}
                   disabled={busy}
-                  className="border rounded-xl p-2 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="border rounded-xl p-2 text-left cursor-pointer hover:bg-accent"
                   onClick={() =>
                     void perform(async () => {
                       await flush();
@@ -394,7 +424,7 @@ export function Studio({ className, onSend }: StudioProps) {
                     <div className="aspect-square bg-gray-100 rounded-lg" />
                   )}
                   <strong className="block truncate mt-2">
-                    {record.data.name || "Untitled"}
+                    {displayName(record.data.name) || "Untitled"}
                   </strong>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
                     {new Date(record.updatedAt).toLocaleString()}

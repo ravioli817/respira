@@ -1,35 +1,43 @@
 // The Create screen's markup. Mounted into a shadow root by mountStudio().
 export const STUDIO_MARKUP = `
 <main class="studio">
-  <header class="editor-tools" aria-label="Editor toolbar">
-    <div class="canvas-actions" role="group" aria-label="Canvas tools">
-      <button class="btn" id="move-layer" aria-pressed="true">Select</button>
-      <button class="btn" id="add-draw-layer" aria-pressed="false">Draw</button>
-      <button class="btn" id="add-image-layer">Picture</button>
-      <input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas">
-      <button class="btn" id="add-text-layer">Text</button>
-      <button class="btn" id="shape-tool">Shape</button>
-    </div>
-      <div class="history">
-        <button class="icon-btn" id="undo" aria-label="Undo" title="Undo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 4 10l5 5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H12"/></svg>
-        </button>
-        <button class="icon-btn" id="redo" aria-label="Redo" title="Redo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 5 5-5 5"/><path d="M20 10H9.5a5.5 5.5 0 0 0 0 11H12"/></svg>
-        </button>
-        <button class="icon-btn" id="clear">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span id="clear-label">Clear</span>
-        </button>
-      </div>
-    <div class="panel-toggles" role="group" aria-label="Editor panels">
-      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="true">Parts</button>
-      <button class="btn" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Settings</button>
-    </div>
-    <span class="project-status" id="project-status" role="status"></span>
-    <button class="btn" id="projects" hidden>Projects</button>
-    <button class="btn-primary" id="send">Prepare to stitch</button>
-  </header>
   <div class="editor-workspace">
+  <nav class="rail" aria-label="Tools">
+    <div class="tools" role="group" aria-label="Draw with">
+      <button class="tool" id="tool-line" data-tool="line" aria-pressed="false" title="Line: a bold outline stitch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 16c3-7 6 3 9-3s5-3 9-6"/></svg><span>Line</span>
+      </button>
+      <button class="tool" id="tool-satin" data-tool="satin" aria-pressed="false" title="Satin: a smooth, shiny column">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M5 19 19 5" stroke-width="6" opacity=".28"/><path d="M5.5 15.5l3 3M8 13l3 3M10.5 10.5l3 3M13 8l3 3M15.5 5.5l3 3" stroke-width="1.6"/></svg><span>Satin</span>
+      </button>
+      <button class="tool" id="tool-brush" data-tool="brush" aria-pressed="false" title="Fill: paint an area that stitches as a fill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 19 5a1.9 1.9 0 0 0-2.7-2.7l-9.5 9.5"/><path d="M6.8 12.4c-2 0-3.3 1.4-3.3 3.3 0 1.7-.6 2.9-1.5 3.8 3.4.4 7.5-.4 7.5-4.3a2.8 2.8 0 0 0-2.7-2.8z"/></svg><span>Fill</span>
+      </button>
+      <button class="tool" id="tool-bucket" data-tool="bucket" aria-pressed="false" title="Bucket: fill a shape you outlined">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m4.6 11.2 6.6-6.6 7.2 7.2-6.6 6.6a2 2 0 0 1-2.8 0L4.6 14a2 2 0 0 1 0-2.8z"/><path d="M4 12.5h14.2M8 2.5l3.2 3.2"/><path d="M20.5 15s1.6 2.1 1.6 3.2a1.6 1.6 0 0 1-3.2 0c0-1.1 1.6-3.2 1.6-3.2z"/></svg><span>Bucket</span>
+      </button>
+      <button class="tool" id="tool-eraser" data-tool="eraser" aria-pressed="false" title="Erase: remove lines and paint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20h11"/><path d="m4.4 13.6 8.5-8.5a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L11.5 18.5H8.6L4.4 14.3a.5.5 0 0 1 0-.7z"/><path d="m8.2 9.8 6 6"/></svg><span>Erase</span>
+      </button>
+    </div>
+    <span class="rail-rule" aria-hidden="true"></span>
+    <div class="canvas-actions" role="group" aria-label="Add to the design">
+      <button class="rail-btn" id="add-image-layer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4 3 2 4-4 4 4"/></svg><span>Picture</span>
+      </button>
+      <input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas">
+      <button class="rail-btn" id="add-text-layer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M12 6v13M9 19h6"/></svg><span>Words</span>
+      </button>
+      <button class="rail-btn" id="shape-tool">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/></svg><span>Shape</span>
+      </button>
+    </div>
+    <span class="rail-rule" aria-hidden="true"></span>
+    <button class="rail-btn" id="move-layer" aria-pressed="true" title="Move: tap a part to move, resize or change it">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3.5l12 9.2-5.4.8 3 6-2.3 1.1-3-6L6 18z"/></svg><span>Move</span>
+    </button>
+  </nav>
   <aside class="objects-panel" id="objects-panel" aria-label="Parts of the design, in stitching order">
     <div class="panel-heading"><h2>Parts <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the parts list">×</button></div>
     <p class="hint">Stitched in this order, top first.</p>
@@ -40,7 +48,17 @@ export const STUDIO_MARKUP = `
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
-      <div class="readout" id="readout">Nothing to stitch yet</div>
+      <div class="history">
+        <button class="icon-btn" id="undo" aria-label="Undo" title="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 4 10l5 5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H12"/></svg>
+        </button>
+        <button class="icon-btn" id="redo" aria-label="Redo" title="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5 5 5-5 5"/><path d="M20 10H9.5a5.5 5.5 0 0 0 0 11H12"/></svg>
+        </button>
+        <button class="icon-btn" id="clear">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span id="clear-label">Clear</span>
+        </button>
+      </div>
       <p id="editing-object" class="hint" aria-live="polite"></p>
       <div class="heading-controls">
         <button class="btn" id="pan-canvas" aria-pressed="false" hidden>Pan</button>
@@ -63,17 +81,20 @@ export const STUDIO_MARKUP = `
             </div>
           </div>
         </details>
+        <button class="btn panel-toggle" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Thread and settings</button>
       </div>
     </div>
-    <!-- On a narrow screen the drawing tools dock here instead of in a drawer over the hoop. -->
+    <!-- On a narrow screen the thread colors and line width dock here instead of in a drawer over the hoop. -->
     <div class="draw-dock" id="draw-dock" hidden></div>
     <p class="note" id="note" role="status" hidden></p>
     <div class="canvas-viewport" id="canvas-viewport">
 
+    <div class="hoop-wrap">
+    <div class="ruler" aria-hidden="true"><span>0</span><span>5 cm</span><span>10 cm</span></div>
     <div class="hoop">
       <div class="field" id="stage">
         <canvas id="base" aria-hidden="true"></canvas>
-        <canvas id="overlay" role="img" aria-label="Embroidery canvas. Select an object to move or resize it, or choose Draw to add marks."></canvas>
+        <canvas id="overlay" role="img" aria-label="Embroidery canvas. Pick a drawing tool to add marks, or Move to move and resize a part."></canvas>
         <div id="selection-box" class="selection-box" hidden>
           <button class="resize-handle nw" data-corner="nw" aria-label="Resize object from top left" tabindex="-1"></button>
           <button class="resize-handle ne" data-corner="ne" aria-label="Resize object from top right" tabindex="-1"></button>
@@ -84,11 +105,14 @@ export const STUDIO_MARKUP = `
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
       </div>
     </div>
+    <div class="readout" id="readout">Nothing to stitch yet</div>
+    </div>
 
     </div>
   </section>
-  <aside class="bench" id="properties-panel" aria-label="Selected object properties">
-    <div class="panel-heading"><h2>Tools and settings</h2><button class="icon-btn" id="close-properties" aria-label="Close tools and settings">×</button></div>
+  <aside class="bench" id="properties-panel" aria-label="Thread and settings">
+    <div class="bench-scroll">
+    <div class="panel-heading"><h2>Thread and settings</h2><button class="icon-btn" id="close-properties" aria-label="Close thread and settings">×</button></div>
       <details class="panel shape-tools" hidden>
         <summary>Add a shape</summary>
         <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>
@@ -105,50 +129,14 @@ export const STUDIO_MARKUP = `
         <p id="shape-status" role="status" class="hint"></p>
       </details>
     <section class="panel first" id="panel-draw">
-      <h2>Drawing</h2>
-    <div class="toolbar" id="toolbar">
-      <div class="seg tools" role="group" aria-label="Brush">
-        <button class="tool" id="tool-line" data-tool="line" aria-pressed="false" title="Line: a bold outline stitch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 16c3-7 6 3 9-3s5-3 9-6"/></svg><span>Line</span>
-        </button>
-        <button class="tool" id="tool-satin" data-tool="satin" aria-pressed="true" title="Satin: a smooth, shiny column">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M5 19 19 5" stroke-width="6" opacity=".28"/><path d="M5.5 15.5l3 3M8 13l3 3M10.5 10.5l3 3M13 8l3 3M15.5 5.5l3 3" stroke-width="1.5"/></svg><span>Satin</span>
-        </button>
-        <button class="tool" id="tool-brush" data-tool="brush" aria-pressed="false" title="Fill: paint an area that stitches as a fill">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 19 5a1.9 1.9 0 0 0-2.7-2.7l-9.5 9.5"/><path d="M6.8 12.4c-2 0-3.3 1.4-3.3 3.3 0 1.7-.6 2.9-1.5 3.8 3.4.4 7.5-.4 7.5-4.3a2.8 2.8 0 0 0-2.7-2.8z"/></svg><span>Fill</span>
-        </button>
-        <button class="tool" id="tool-bucket" data-tool="bucket" aria-pressed="false" title="Bucket: fill a shape you outlined">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4.6 11.2 6.6-6.6 7.2 7.2-6.6 6.6a2 2 0 0 1-2.8 0L4.6 14a2 2 0 0 1 0-2.8z"/><path d="M4 12.5h14.2M8 2.5l3.2 3.2"/><path d="M20.5 15s1.6 2.1 1.6 3.2a1.6 1.6 0 0 1-3.2 0c0-1.1 1.6-3.2 1.6-3.2z"/></svg><span>Bucket</span>
-        </button>
-        <button class="tool" id="tool-eraser" data-tool="eraser" aria-pressed="false" title="Eraser: remove lines and paint">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20h11"/><path d="m4.4 13.6 8.5-8.5a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L11.5 18.5H8.6L4.4 14.3a.5.5 0 0 1 0-.7z"/><path d="m8.2 9.8 6 6"/></svg><span>Eraser</span>
-        </button>
-      </div>
-      <label class="size" id="size-wrap"><span id="size-label">Width</span><input type="range" id="size" min="1.5" max="6" step="0.1" value="3"><output id="size-out" class="mono" for="size">3.0 mm</output></label>
-    </div>
-
+      <h2>Thread</h2>
       <div class="threads in-bench">
-        <div class="threads-head"><span>Thread</span><strong class="thread-name"></strong></div>
+        <div class="threads-head"><span class="thread-dot" aria-hidden="true"></span><span class="thread-words"><strong class="thread-name"></strong><span class="thread-code"></span></span></div>
         <div class="palette" id="draw-palette-bench"></div>
       </div>
-      <details class="drawing-recolor">
-        <summary>Recolor what's drawn</summary>
-        <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
-        <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
-        <button class="btn" id="recolor-drawing">Recolor marks</button>
-      </details>
-
-      <details><summary>Drawing help</summary>
-      <dl class="legend">
-        <dt>Line</dt><dd>A bold outline stitch.</dd>
-        <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
-        <dt>Fill</dt><dd>Paint an area that stitches as a solid fill.</dd>
-        <dt>Bucket</dt><dd>Fill inside a shape you outlined.</dd>
-        <dt>Eraser</dt><dd>Removes lines and paint it touches.</dd>
-      </dl>
-      <label class="check"><input type="checkbox" id="pressure" checked> <span>Pencil pressure changes satin width</span></label>
-      <p class="hint">Filled areas stitch first, then lines and satin go on top. Once you use Apple Pencil, finger touches are ignored so your palm can rest on the screen.</p>
-      </details>
+      <div class="toolbar" id="toolbar">
+        <label class="size" id="size-wrap"><span class="size-head"><span id="size-label">Width</span><output id="size-out" for="size">3.0 mm</output></span><input type="range" id="size" min="1.5" max="6" step="0.1" value="3"></label>
+      </div>
     </section>
 
     <section class="panel first" id="panel-image" hidden>
@@ -185,12 +173,16 @@ export const STUDIO_MARKUP = `
       </div>
       <div id="lettering-trims">
         <label class="stack">Thread trims<select id="txt-trim"><option value="auto">Automatic</option><option value="word">Between words</option><option value="letter">Between letters</option></select></label>
-        <p class="hint">Word and letter rules add cuts at those boundaries. Automatic cuts for long jumps and thread changes still apply. Extra cuts add sewing time; check them in Prepare.</p>
+        <p class="hint">Word and letter rules add cuts at those boundaries. Automatic cuts for long jumps and thread changes still apply. Extra cuts add sewing time; check them on Place.</p>
       </div>
       <p id="font-note" class="hint"></p>
       <details id="font-credit-panel"><summary>Embroidery font credit and license</summary><p class="hint" id="font-credit"></p><pre id="font-license" class="license-text"></pre></details>
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
     </section>
+
+    <details class="panel more" id="more">
+      <summary>More: parts, sizes, stitch settings</summary>
+      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false">Parts list: choose, reorder, add a drawing</button>
 
     <section class="panel object-properties">
   <div class="layer-controls">
@@ -205,6 +197,25 @@ export const STUDIO_MARKUP = `
   <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Stitch this part</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
     <p class="hint">Resize keeps proportions. Dimensions include rotation.</p>
     </section>
+
+      <details class="panel drawing-recolor">
+        <summary>Recolor what's drawn</summary>
+        <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
+        <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
+        <button class="btn" id="recolor-drawing">Recolor marks</button>
+      </details>
+
+      <details class="panel drawing-help"><summary>Drawing help</summary>
+      <dl class="legend">
+        <dt>Line</dt><dd>A bold outline stitch.</dd>
+        <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
+        <dt>Fill</dt><dd>Paint an area that stitches as a solid fill.</dd>
+        <dt>Bucket</dt><dd>Fill inside a shape you outlined.</dd>
+        <dt>Erase</dt><dd>Removes lines and paint it touches.</dd>
+      </dl>
+      <label class="check"><input type="checkbox" id="pressure" checked> <span>Pencil pressure changes satin width</span></label>
+      <p class="hint">Filled areas stitch first, then lines and satin go on top. Once you use Apple Pencil, finger touches are ignored so your palm can rest on the screen.</p>
+      </details>
 
 
     <details class="panel" id="object-stitches">
@@ -227,7 +238,7 @@ export const STUDIO_MARKUP = `
         <label class="stack">Underlay row / zigzag spacing (mm)<input id="stitch-underlaySpacingMm" type="number" min="0.8" max="4" step="0.1"></label>
         <label class="stack">Underlay running stitch length (mm)<input id="stitch-underlayStitchMm" type="number" min="0.5" max="4" step="0.1"></label>
       </fieldset>
-      <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Review Density inspection and test on your fabric.</p>
+      <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Check stitch density on Place (under More) and test on your fabric.</p>
     </details>
     <details class="panel" id="settings">
       <summary>Stitch settings</summary>
@@ -255,12 +266,15 @@ export const STUDIO_MARKUP = `
     <details class="panel howto">
       <summary>Getting it onto your Skitch</summary>
       <ol>
-        <li>Tap <strong>Prepare to stitch</strong>. Prepare opens with your design in the hoop. Review its placement and playback.</li>
-        <li>Continue to <strong>Stitch</strong>, connect to the machine, then tap <strong>Upload</strong>.</li>
+        <li>Tap <strong>Next: place it in the hoop</strong>. Place opens with your design in the hoop. Drag it to where you want it.</li>
+        <li>Go on to <strong>Stitch</strong>, connect to the machine, then tap <strong>Send to the machine</strong>.</li>
         <li>Let the machine trace the outline so you can see where it will stitch, then start.</li>
       </ol>
       <p>You can also save a .pes file and bring it into Brother's Artspira app.</p>
     </details>
+    </details>
+    </div>
+    <div class="bench-foot"><button class="btn-primary" id="send">Next: place it in the hoop</button></div>
   </aside>
   </div>
   <p class="status editor-status" id="save-status" role="status" aria-live="polite"></p>

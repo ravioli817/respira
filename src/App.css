@@ -5,114 +5,128 @@
 @import "tw-animate-css";
 
 /* ============================================
-   SHADCN/UI THEME VARIABLES
-   CSS variables for shadcn/ui components
+   STITCH SKETCHBOOK LOOK
+   One set of colours for the whole app (the Create screen reads the same
+   values through studio.css). The surround is a cutting mat; chrome is
+   paper and ink; the only strong colours are the threads themselves,
+   tape yellow for "your turn at the machine" and pin red for faults.
    ============================================ */
 
 @layer base {
   :root {
-    /* Background colors */
-    --background: hsl(0 0% 100%);
-    --foreground: hsl(222.2 84% 4.9%);
+    --ss-mat: #1e5c4f;
+    --ss-mat-line: #3b7d6e;
+    --ss-mat-text: #d6e7e1;
+    --ss-page: #f2f4f3;
+    --ss-paper: #ffffff;
+    --ss-ink: #17212b;
+    --ss-muted: #4a5560;
+    --ss-line: #d5dbd8;
+    --ss-line-strong: #c3cbc7;
+    --ss-tape: #f5c518;
+    --ss-on-tape: #17212b;
+    --ss-pin: #d2362b;
+    --ss-ok: #1e7a4c;
+    --ss-hoop: #20242b;
+    --ss-fabric: #fbfbf8;
+    --ss-action: #1e5c4f;
 
-    /* Card colors */
-    --card: hsl(0 0% 100%);
-    --card-foreground: hsl(222.2 84% 4.9%);
-
-    /* Popover colors */
-    --popover: hsl(0 0% 100%);
-    --popover-foreground: hsl(222.2 84% 4.9%);
-
-    /* Primary - Blue (existing brand color) */
-    --primary: hsl(221.2 83.2% 53.3%); /* blue-600 */
-    --primary-foreground: hsl(210 40% 98%);
-
-    /* Secondary - Orange (existing secondary color) */
-    --secondary: hsl(24.6 95% 53.1%); /* orange-500 */
-    --secondary-foreground: hsl(60 9.1% 97.8%);
-
-    /* Muted colors */
-    --muted: hsl(210 40% 96.1%);
-    --muted-foreground: hsl(215.4 16.3% 46.9%);
-
-    /* Accent - Purple (existing accent color) */
-    --accent: hsl(262.1 83.3% 57.8%); /* purple-500 */
-    --accent-foreground: hsl(210 40% 98%);
-
-    /* Destructive - Red (existing danger color) */
-    --destructive: hsl(0 84.2% 60.2%); /* red-500 */
-    --destructive-foreground: hsl(210 40% 98%);
-
-    /* Success - Green (existing success color) */
-    --success: hsl(142.1 76.2% 36.3%); /* green-600 */
-    --success-foreground: hsl(210 40% 98%);
-
-    /* Warning - Amber (existing warning color) */
-    --warning: hsl(45.4 93.4% 47.5%); /* amber-500 */
-    --warning-foreground: hsl(60 9.1% 97.8%);
-
-    /* Info - Cyan (existing info color) */
-    --info: hsl(188.7 85.7% 53.3%); /* cyan-500 */
-    --info-foreground: hsl(210 40% 98%);
-
-    /* Border and input */
-    --border: hsl(214.3 31.8% 91.4%);
-    --input: hsl(214.3 31.8% 91.4%);
-    --ring: hsl(221.2 83.2% 53.3%); /* matches primary */
-
-    /* Radius */
-    --radius: 0.5rem;
+    /* shadcn/ui component variables */
+    --background: var(--ss-paper);
+    --foreground: var(--ss-ink);
+    --card: var(--ss-paper);
+    --card-foreground: var(--ss-ink);
+    --popover: var(--ss-paper);
+    --popover-foreground: var(--ss-ink);
+    --primary: var(--ss-action);
+    --primary-foreground: #ffffff;
+    --secondary: #e3e8e5;
+    --secondary-foreground: var(--ss-ink);
+    --muted: var(--ss-page);
+    --muted-foreground: var(--ss-muted);
+    /* Hover wash for outline and ghost buttons */
+    --accent: #e9eeeb;
+    --accent-foreground: var(--ss-ink);
+    --destructive: var(--ss-pin);
+    --destructive-foreground: #ffffff;
+    --success: var(--ss-ok);
+    --success-foreground: #ffffff;
+    --warning: var(--ss-tape);
+    --warning-foreground: var(--ss-on-tape);
+    --info: var(--ss-mat-line);
+    --info-foreground: #ffffff;
+    --border: var(--ss-line);
+    --input: var(--ss-line-strong);
+    --ring: var(--ss-ink);
+    --radius: 0.75rem;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: hsl(222.2 84% 4.9%);
+      --ss-mat: #17483e;
+      --ss-mat-line: #2a6658;
+      --ss-mat-text: #cfe3dc;
+      --ss-page: #0f1619;
+      --ss-paper: #1a2328;
+      --ss-ink: #eef2f0;
+      --ss-muted: #a8b3ae;
+      --ss-line: #2c383c;
+      --ss-line-strong: #46545a;
+      --ss-ok: #4fc48a;
+      --ss-hoop: #0b0e11;
+      --ss-action: #2a7868;
 
-      --foreground: hsl(210 40% 98%);
-
-      --card: oklch(27.8% 0.033 256.848);
-      --card-foreground: hsl(210 40% 98%);
-
-      --popover: hsl(222.2 84% 4.9%);
-      --popover-foreground: hsl(210 40% 98%);
-
-      --primary: hsl(217.2 91.2% 59.8%); /* blue-500 lighter for dark */
-      --primary-foreground: hsl(210 40% 98%);
-
-      --secondary: hsl(20.5 90.2% 48.2%); /* orange-600 for dark */
-      --secondary-foreground: hsl(210 40% 98%);
-
-      --muted: hsl(217.2 32.6% 17.5%);
-      --muted-foreground: hsl(215 20.2% 65.1%);
-
-      --accent: hsl(263.4 70% 50.4%); /* purple-600 for dark */
-      --accent-foreground: hsl(210 40% 98%);
-
-      --destructive: hsl(0 62.8% 30.6%); /* red-900 */
-      --destructive-foreground: hsl(210 40% 98%);
-
-      --success: hsl(142.1 70.6% 45.3%); /* green-500 for dark */
-      --success-foreground: hsl(210 40% 98%);
-
-      --warning: hsl(47.9 95.8% 53.1%); /* amber-400 for dark */
-      --warning-foreground: hsl(26 83.3% 14.1%);
-
-      --info: hsl(188.7 85.7% 53.3%); /* cyan-500 */
-      --info-foreground: hsl(210 40% 98%);
-
-      --border: hsl(217.2 32.6% 37.5%);
-      --input: hsl(217.2 32.6% 47.5%);
-      --ring: hsl(224.3 76.3% 48%);
+      --secondary: #2c383c;
+      --accent: #263136;
     }
   }
+
+  html {
+    font-size: 100%;
+  }
+  body {
+    font-size: 1.0625rem;
+    line-height: 1.4;
+  }
+}
+
+/* The cutting mat behind the hoop. --cm is one centimetre on this screen where it is known. */
+.mat-surface {
+  background-color: var(--ss-mat);
+  background-image:
+    linear-gradient(var(--ss-mat-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ss-mat-line) 1px, transparent 1px);
+  background-size: var(--cm, 52px) var(--cm, 52px);
+  color: #ffffff;
 }
 
 /* ============================================
    THEME DEFINITION - Tailwind v4
-   Semantic color system that references Tailwind colors
    ============================================ */
 
 @theme {
+  --font-sans:
+    "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+
+  /* The look's own names: bg-mat, text-ink, border-line, bg-tape, bg-pin ... */
+  --color-mat: var(--ss-mat);
+  --color-mat-line: var(--ss-mat-line);
+  --color-mat-text: var(--ss-mat-text);
+  --color-page: var(--ss-page);
+  --color-paper: var(--ss-paper);
+  --color-ink: var(--ss-ink);
+  --color-ink-soft: var(--ss-muted);
+  --color-line: var(--ss-line);
+  --color-line-strong: var(--ss-line-strong);
+  --color-tape: var(--ss-tape);
+  --color-on-tape: var(--ss-on-tape);
+  --color-pin: var(--ss-pin);
+  --color-ok: var(--ss-ok);
+  --color-hoop: var(--ss-hoop);
+  --color-fabric: var(--ss-fabric);
+  --color-action: var(--ss-action);
+
   /* SHADCN/UI COLORS - For bg-primary, bg-destructive, etc. */
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
@@ -134,18 +148,31 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* PRIMARY - Main brand color (references Blue) - For bg-primary-600 style classes */
-  --color-primary-50: var(--color-blue-50);
-  --color-primary-100: var(--color-blue-100);
-  --color-primary-200: var(--color-blue-200);
-  --color-primary-300: var(--color-blue-300);
-  --color-primary-400: var(--color-blue-400);
-  --color-primary-500: var(--color-blue-500);
-  --color-primary-600: var(--color-blue-600);
-  --color-primary-700: var(--color-blue-700);
-  --color-primary-800: var(--color-blue-800);
-  --color-primary-900: var(--color-blue-900);
-  --color-primary-950: var(--color-blue-950);
+  /* NEUTRALS - paper to ink, replacing Tailwind's blue-gray */
+  --color-gray-50: #f7f9f8;
+  --color-gray-100: #f2f4f3;
+  --color-gray-200: #e3e8e5;
+  --color-gray-300: #c3cbc7;
+  --color-gray-400: #8a9490;
+  --color-gray-500: #66716f;
+  --color-gray-600: #4a5560;
+  --color-gray-700: #323d46;
+  --color-gray-800: #1a2328;
+  --color-gray-900: #131b20;
+  --color-gray-950: #0c1215;
+
+  /* PRIMARY - cutting-mat green */
+  --color-primary-50: #eef5f2;
+  --color-primary-100: #d9e9e3;
+  --color-primary-200: #b5d3c9;
+  --color-primary-300: #89b8aa;
+  --color-primary-400: #5a9685;
+  --color-primary-500: #3b7d6e;
+  --color-primary-600: #1e5c4f;
+  --color-primary-700: #184a40;
+  --color-primary-800: #133b33;
+  --color-primary-900: #0e2c26;
+  --color-primary-950: #081a17;
 
   /* SUCCESS - Positive states, completion (references Green) */
   --color-success-50: var(--color-green-50);
@@ -160,91 +187,79 @@
   --color-success-900: var(--color-green-900);
   --color-success-950: var(--color-green-950);
 
-  /* WARNING - Caution, waiting states (references Amber) */
-  --color-warning-50: var(--color-amber-50);
-  --color-warning-100: var(--color-amber-100);
-  --color-warning-200: var(--color-amber-200);
-  --color-warning-300: var(--color-amber-300);
-  --color-warning-400: var(--color-amber-400);
-  --color-warning-500: var(--color-amber-500);
-  --color-warning-600: var(--color-amber-600);
-  --color-warning-700: var(--color-amber-700);
-  --color-warning-800: var(--color-amber-800);
-  --color-warning-900: var(--color-amber-900);
-  --color-warning-950: var(--color-amber-950);
+  /* WARNING - tape yellow: the machine is waiting for you */
+  --color-warning-50: #fff9db;
+  --color-warning-100: #fff0a8;
+  --color-warning-200: #fde36a;
+  --color-warning-300: #f9d53a;
+  --color-warning-400: #f5c518;
+  --color-warning-500: #e0b10b;
+  --color-warning-600: #b88e06;
+  --color-warning-700: #8a6a05;
+  --color-warning-800: #6b5206;
+  --color-warning-900: #4d3b06;
+  --color-warning-950: #2e2303;
 
-  /* DANGER - Errors, destructive actions (references Red) */
-  --color-danger-50: var(--color-red-50);
-  --color-danger-100: var(--color-red-100);
-  --color-danger-200: var(--color-red-200);
-  --color-danger-300: var(--color-red-300);
-  --color-danger-400: var(--color-red-400);
-  --color-danger-500: var(--color-red-500);
-  --color-danger-600: var(--color-red-600);
-  --color-danger-700: var(--color-red-700);
-  --color-danger-800: var(--color-red-800);
-  --color-danger-900: var(--color-red-900);
-  --color-danger-950: var(--color-red-950);
+  /* DANGER - pin red: faults */
+  --color-danger-50: #fdf0ee;
+  --color-danger-100: #fadbd7;
+  --color-danger-200: #f4b5ae;
+  --color-danger-300: #ec8a80;
+  --color-danger-400: #e05e52;
+  --color-danger-500: #d2362b;
+  --color-danger-600: #b72b21;
+  --color-danger-700: #93221a;
+  --color-danger-800: #721b15;
+  --color-danger-900: #541410;
+  --color-danger-950: #330b08;
 
-  /* INFO - Informational states (references Cyan) */
-  --color-info-50: var(--color-cyan-50);
-  --color-info-100: var(--color-cyan-100);
-  --color-info-200: var(--color-cyan-200);
-  --color-info-300: var(--color-cyan-300);
-  --color-info-400: var(--color-cyan-400);
-  --color-info-500: var(--color-cyan-500);
-  --color-info-600: var(--color-cyan-600);
-  --color-info-700: var(--color-cyan-700);
-  --color-info-800: var(--color-cyan-800);
-  --color-info-900: var(--color-cyan-900);
-  --color-info-950: var(--color-cyan-950);
+  /* INFO, ACCENT, SECONDARY, TERTIARY - Respira gave each kind of card its own hue (cyan, purple,
+     orange, teal). Here they all read as the one green, so the threads are the only colour. */
+  --color-info-50: var(--color-primary-50);
+  --color-info-100: var(--color-primary-100);
+  --color-info-200: var(--color-primary-200);
+  --color-info-300: var(--color-primary-300);
+  --color-info-400: var(--color-primary-400);
+  --color-info-500: var(--color-primary-500);
+  --color-info-600: var(--color-primary-600);
+  --color-info-700: var(--color-primary-700);
+  --color-info-800: var(--color-primary-800);
+  --color-info-900: var(--color-primary-900);
+  --color-info-950: var(--color-primary-950);
 
-  /* ACCENT - Progress, sewing states (references Purple) */
-  --color-accent-50: var(--color-purple-50);
-  --color-accent-100: var(--color-purple-100);
-  --color-accent-200: var(--color-purple-200);
-  --color-accent-300: var(--color-purple-300);
-  --color-accent-400: var(--color-purple-400);
-  --color-accent-500: var(--color-purple-500);
-  --color-accent-600: var(--color-purple-600);
-  --color-accent-700: var(--color-purple-700);
-  --color-accent-800: var(--color-purple-800);
-  --color-accent-900: var(--color-purple-900);
-  --color-accent-950: var(--color-purple-950);
+  --color-accent-50: var(--color-primary-50);
+  --color-accent-100: var(--color-primary-100);
+  --color-accent-200: var(--color-primary-200);
+  --color-accent-300: var(--color-primary-300);
+  --color-accent-400: var(--color-primary-400);
+  --color-accent-500: var(--color-primary-500);
+  --color-accent-600: var(--color-primary-600);
+  --color-accent-700: var(--color-primary-700);
+  --color-accent-800: var(--color-primary-800);
+  --color-accent-900: var(--color-primary-900);
+  --color-accent-950: var(--color-primary-950);
 
-  /* SECONDARY - Upload operations (references Orange) */
-  --color-secondary-50: var(--color-orange-50);
-  --color-secondary-100: var(--color-orange-100);
-  --color-secondary-200: var(--color-orange-200);
-  --color-secondary-300: var(--color-orange-300);
-  --color-secondary-400: var(--color-orange-400);
-  --color-secondary-500: var(--color-orange-500);
-  --color-secondary-600: var(--color-orange-600);
-  --color-secondary-700: var(--color-orange-700);
-  --color-secondary-800: var(--color-orange-800);
-  --color-secondary-900: var(--color-orange-900);
-  --color-secondary-950: var(--color-orange-950);
+  --color-secondary-50: var(--color-primary-50);
+  --color-secondary-100: var(--color-primary-100);
+  --color-secondary-200: var(--color-primary-200);
+  --color-secondary-300: var(--color-primary-300);
+  --color-secondary-400: var(--color-primary-400);
+  --color-secondary-500: var(--color-primary-500);
+  --color-secondary-600: var(--color-primary-600);
+  --color-secondary-700: var(--color-primary-700);
+  --color-secondary-800: var(--color-primary-800);
+  --color-secondary-900: var(--color-primary-900);
+  --color-secondary-950: var(--color-primary-950);
 
-  /* TERTIARY - Pattern canvas theme (references Teal) */
-  --color-tertiary-500: var(--color-teal-500);
-  --color-tertiary-600: var(--color-teal-600);
+  --color-tertiary-500: var(--color-primary-500);
+  --color-tertiary-600: var(--color-primary-600);
 
   /* Canvas/Konva-specific colors for embroidery rendering */
-  --color-canvas-grid: #e0e0e0;
-  --color-canvas-origin: #888888;
-  --color-canvas-hoop: #2196f3;
-  --color-canvas-bounds: #ff0000;
-  --color-canvas-position: #ff0000;
-}
-
-/* Dark Mode Overrides - Media Query */
-@media (prefers-color-scheme: dark) {
-  @theme {
-    /* Canvas colors adjusted for dark mode */
-    --color-canvas-grid: #404040;
-    --color-canvas-origin: #999999;
-    /* hoop, bounds, position stay the same for visibility */
-  }
+  --color-canvas-grid: #e3e8e5;
+  --color-canvas-origin: #8a9490;
+  --color-canvas-hoop: #20242b;
+  --color-canvas-bounds: #17212b;
+  --color-canvas-position: #17212b;
 }
 
 /* ============================================
@@ -299,10 +314,10 @@
 @keyframes pulseGlow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgb(37 99 235 / 0.4); /* primary-600 with 40% opacity */
+    box-shadow: 0 0 0 0 rgb(30 92 79 / 0.4); /* primary-600 with 40% opacity */
   }
   50% {
-    box-shadow: 0 0 0 8px rgb(37 99 235 / 0); /* primary-600 fully transparent */
+    box-shadow: 0 0 0 8px rgb(30 92 79 / 0); /* primary-600 fully transparent */
   }
 }
 
@@ -333,11 +348,13 @@
   animation: skeleton-loading 2s ease-in-out infinite;
 }
 
-/* Fork: larger small text. The app is read on a tablet at arm's length while handling fabric;
-   Respira's 12 px captions are a desk size. Nothing is set below 14 px now. */
+/* Fork: larger text. The app is read on a tablet at arm's length while handling fabric;
+   Respira's 12 px captions are a desk size. Reading text is 17 px; nothing is set below 15 px. */
 @theme {
-  --text-xs: 0.875rem;
-  --text-xs--line-height: calc(1.25 / 0.875);
-  --text-sm: 0.9375rem;
-  --text-sm--line-height: calc(1.375 / 0.9375);
+  --text-xs: 0.9375rem;
+  --text-xs--line-height: calc(1.3125 / 0.9375);
+  --text-sm: 1rem;
+  --text-sm--line-height: calc(1.375 / 1);
+  --text-base: 1.0625rem;
+  --text-base--line-height: calc(1.5 / 1.0625);
 }

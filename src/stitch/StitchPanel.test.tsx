@@ -88,7 +88,7 @@ it("keeps homing physical, then offers upload and sends the existing encoded dat
     useMachineStore.setState({ machineStatus: M.IDLE, machineError: E.None }),
   );
   fireEvent.click(
-    primary().getByRole("button", { name: "Upload prepared design" }),
+    primary().getByRole("button", { name: "Send to the machine" }),
   );
   await waitFor(() =>
     expect(
@@ -129,8 +129,12 @@ it("shows current/next threads and keeps recovery available for a thread interru
   });
   usePatternStore.setState({ uploadedPesData: data });
   render(<StitchPanel onPrepare={vi.fn()} />);
-  expect(screen.getByText("Current thread")).toBeTruthy();
-  expect(screen.getByText("Next thread")).toBeTruthy();
+  // Every thread is listed in sewing order, with the one in the machine marked.
+  const threads = within(
+    screen.getByRole("list", { name: "Threads, in sewing order" }),
+  );
+  expect(threads.getAllByRole("listitem")).toHaveLength(2);
+  expect(threads.getByText(/, now$/)).toBeTruthy();
   expect(screen.getByText(/Go back or forward a few stitches/)).toBeTruthy();
   fireEvent.click(primary().getByRole("button", { name: "Resume Sewing" }));
   await waitFor(() =>
@@ -141,7 +145,9 @@ it("does not guess machine threads from an unrelated prepared draft", () => {
   useMachineStore.setState({ patternInfo: info, machineStatus: M.SEWING });
   render(<StitchPanel onPrepare={vi.fn()} />);
   expect(screen.getByText(/this device has no copy of/)).toBeTruthy();
-  expect(screen.queryByText("Current thread")).toBeNull();
+  expect(
+    screen.queryByRole("list", { name: "Threads, in sewing order" }),
+  ).toBeNull();
   expect(screen.queryByText(/Stitching Red/)).toBeNull();
 });
 it("surfaces upload failures and allows retry without duplicate in-flight calls", async () => {
@@ -155,7 +161,7 @@ it("surfaces upload failures and allows retry without duplicate in-flight calls"
   useMachineUploadStore.setState({ uploadPattern: upload });
   render(<StitchPanel onPrepare={vi.fn()} />);
   const button = primary().getByRole("button", {
-    name: "Upload prepared design",
+    name: "Send to the machine",
   });
   fireEvent.click(button);
   fireEvent.click(button);
@@ -166,7 +172,7 @@ it("surfaces upload failures and allows retry without duplicate in-flight calls"
   );
   expect(usePatternStore.getState().uploadedPesData).toBeNull();
   expect(
-    primary().getByRole("button", { name: "Upload prepared design" }),
+    primary().getByRole("button", { name: "Send to the machine" }),
   ).toBeTruthy();
 });
 it("lets a job start from a chosen thread, and puts the position back when the choice is switched off", async () => {
@@ -215,7 +221,7 @@ it("treats a machine that is mid-job as holding a job while its details are read
   ).toBeTruthy();
   // Not an invitation to upload the local draft over the running job.
   expect(
-    primary().queryByRole("button", { name: /Upload prepared design/ }),
+    primary().queryByRole("button", { name: /Send to the machine/ }),
   ).toBeNull();
 });
 it("names the design the way its maker did, and counts threads and stitches in plain words", () => {
@@ -232,9 +238,11 @@ it("names the design the way its maker did, and counts threads and stitches in p
   });
   usePatternStore.setState({ uploadedPesData: data });
   render(<StitchPanel onPrepare={vi.fn()} />);
-  // "two", not "two.pes"
-  expect(screen.getByText("On the machine: two")).toBeTruthy();
-  expect(screen.getByText("Thread 1 of 2")).toBeTruthy();
+  // "Two", not "two.pes"
+  expect(screen.getByText("On the machine: Two")).toBeTruthy();
+  expect(screen.getByText(/^Thread 1 of 2\./)).toBeTruthy();
+  // The thread being stitched is named large in the card, and as a sentence for a screen reader.
+  expect(screen.getByRole("heading", { name: /^Stitching Red/ })).toBeTruthy();
   expect(
     screen.getByText(
       `3 of ${data.penStitches.stitches.length.toLocaleString()} stitches`,

@@ -2,6 +2,7 @@
  * Sounds and screen wake lock for the Stitch screen. Browsers only allow sound after the person has
  * touched the page, so the audio is prepared on the first tap anywhere.
  */
+import { useSyncExternalStore } from "react";
 import type { NextStepTone } from "./nextStep";
 
 const SOUND_KEY = "respira:sound";
@@ -9,6 +10,7 @@ const SOUND_KEY = "respira:sound";
 let audio: AudioContext | null = null;
 
 export function soundEnabled(): boolean {
+  if (chosen !== null) return chosen;
   try {
     return localStorage.getItem(SOUND_KEY) !== "off";
   } catch {
@@ -16,12 +18,29 @@ export function soundEnabled(): boolean {
   }
 }
 
+// Without storage the choice lasts for this visit only.
+let chosen: boolean | null = null;
+const listeners = new Set<() => void>();
+
 export function setSoundEnabled(on: boolean): void {
+  chosen = on;
   try {
     localStorage.setItem(SOUND_KEY, on ? "on" : "off");
   } catch {
-    // Storage unavailable: the choice lasts for this visit only
+    // Storage unavailable
   }
+  listeners.forEach((listener) => listener());
+}
+
+/** Whether the chime is on, for a component that shows or depends on it. */
+export function useSound(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => chosen ?? soundEnabled(),
+  );
 }
 
 /** Call from a tap or click so later sounds are allowed to play. */

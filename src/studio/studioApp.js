@@ -11,6 +11,7 @@ import { letteringDesign, EMBROIDERY_FONT } from './lettering.js';
 import { EMBROIDERY_FONTS, isEmbroideryFont } from './embroideryFonts.js';
 import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
+import { guessPxPerMM } from './realSize.js';
 
 export function mountStudio(root, opts) {
   opts = opts || {};
@@ -45,9 +46,9 @@ export function mountStudio(root, opts) {
     'Righteous': { css: '"Righteous", sans-serif', weight: 400, label: 'Righteous (retro)' }
   };
   var SIZE_CFG = {
-    satin: { min: 1.5, max: 6, step: 0.1, label: 'Width' },
-    brush: { min: 2, max: 20, step: 0.5, label: 'Brush' },
-    eraser: { min: 2, max: 20, step: 0.5, label: 'Eraser' }
+    satin: { min: 1.5, max: 6, step: 0.1, label: 'Line width' },
+    brush: { min: 2, max: 20, step: 0.5, label: 'Brush size' },
+    eraser: { min: 2, max: 20, step: 0.5, label: 'Eraser size' }
   };
   var MIN_SPECK = { 1: 25, 2: 75, 3: 200 }; // grid cells (0.04 mm² each)
 
@@ -78,6 +79,9 @@ export function mountStudio(root, opts) {
     return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
   }
   function threadName(i) { return PEC[i][3]; }
+  // "Brother 509" for a palette colour, when the host app can look it up; '' otherwise.
+  function threadCode(i) { var c = PEC[i]; return (opts.threadCode && opts.threadCode(c[0], c[1], c[2])) || ''; }
+  function threadTitle(i) { var code = threadCode(i); return threadName(i) + (code ? ', ' + code : ''); }
   function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function slug(s) {
@@ -100,8 +104,8 @@ export function mountStudio(root, opts) {
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'swatch';
         b.style.setProperty('--c', rgb(i));
-        b.title = threadName(i) + ' · ' + i;
-        b.setAttribute('aria-label', threadName(i) + ', thread ' + i);
+        b.title = threadTitle(i);
+        b.setAttribute('aria-label', threadTitle(i));
         b.setAttribute('aria-pressed', String(i === sel));
         b.addEventListener('click', function () { set(i); draw(); });
         el.appendChild(b);
@@ -109,7 +113,7 @@ export function mountStudio(root, opts) {
       if (!(opts && opts.all)) {
         var t = document.createElement('button');
         t.type = 'button'; t.className = 'swatch-more';
-        t.textContent = showAll ? 'Fewer colors' : 'All 63 threads';
+        t.textContent = showAll ? 'Fewer threads' : 'All 63 threads';
         t.addEventListener('click', function () { showAll = !showAll; draw(); });
         el.appendChild(t);
       }
@@ -131,36 +135,29 @@ export function mountStudio(root, opts) {
     render();
   }
   // ---------- real size: the hoop on screen measures a true 100 mm (4 in) ----------
-  // A web page cannot ask how big its pixels are, so this goes by the device: every iPad is 132 points per
-  // inch except the mini (163). Other screens get a sensible guess and the card check to correct it.
+  // The device's pixels per millimetre come from realSize.js; the card check below corrects a guess.
   var stageCol = $('.stage-col');
-  function guessPxPerMM() {
-    var ua = navigator.userAgent || '', touch = (navigator.maxTouchPoints || 0) > 1;
-    var w = Math.min(screen.width, screen.height), h = Math.max(screen.width, screen.height);
-    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch)) return { v: (w === 744 && h === 1133 ? 163 : 132) / 25.4, sure: true };
-    if (/Macintosh/.test(ua)) {
-      var known = { '1470x956': 128.6, '1512x982': 127, '1728x1117': 127, '1710x1107': 133, '1440x900': 127.7, '2240x1260': 109, '2560x1440': 109 };
-      return { v: (known[screen.width + 'x' + screen.height] || 127) / 25.4, sure: false };
-    }
-    return { v: 96 / 25.4, sure: false };
-  }
   var sizeGuess = guessPxPerMM();
   function pxPerMM() { return S.hoop.pxmm || sizeGuess.v; }
   function applyHoopSize() {
     var need = Math.round(HOOP * pxPerMM()) + 22;       // the hoop's rim is 11 px each side
     var viewport = $('#canvas-viewport');
     // Space inside the viewport's 4 px padding; zero until the screen is laid out (and in tests).
-    var roomW = viewport.clientWidth - 8, roomH = viewport.clientHeight - 8, room = Math.min(roomW, roomH);
+    // The ruler above the hoop and the caption under it take 56 px of the height.
+    var roomW = viewport.clientWidth - 8, roomH = viewport.clientHeight - 8 - 56, room = Math.min(roomW, roomH);
     var fit = Math.max(100, room > 0 ? room - 16 : 400);
     // Real size means real size. A screen that is too small scrolls (Pan) instead of quietly shrinking the hoop:
     // drawing at a true 100 mm is the point of this view. "Fit screen" is one tap away in the View menu.
     var width = (S.hoop.real ? need : fit) * zoom;
     $('.hoop').style.width = width + 'px';
+    // One square of the cutting mat is one centimetre of hoop, whatever the zoom.
+    stageCol.style.setProperty('--cm', ((width - 22) / 10) + 'px');
     // Up to 6 px of the hoop's rim may hang over the edge before it counts as not fitting.
     var overflow = room > 0 && (width > roomW + 6 || width > roomH + 6);
     var real = S.hoop.real && zoom === 1;
     stageCol.classList.toggle('real', real);
     stageCol.style.setProperty('--real-w', need + 'px');
+    if (opts.onScale) opts.onScale(pxPerMM());
     $('#size-real').setAttribute('aria-pressed', String(S.hoop.real));
     $('#size-fit').setAttribute('aria-pressed', String(!S.hoop.real));
     var sizeText = zoom!==1 ? 'Zoomed preview.' : !S.hoop.real ? 'Scaled to fit the screen.'
@@ -900,7 +897,8 @@ export function mountStudio(root, opts) {
     ro.innerHTML = '';
     var a = document.createElement('strong'); a.textContent = w.toFixed(1) + ' × ' + h.toFixed(1) + ' mm';
     ro.appendChild(a);
-    ro.appendChild(document.createTextNode(' (' + (w / 25.4).toFixed(2) + ' × ' + (h / 25.4).toFixed(2) + ' in) · ' + fmt(st.stitches) + ' stitches'));
+    ro.appendChild(document.createTextNode(', ' + fmt(st.stitches) + ' stitches'));
+    ro.title = (w / 25.4).toFixed(2) + ' × ' + (h / 25.4).toFixed(2) + ' in';
     var changes = S.plan.blocks.length - 1;
     $('#seq-sum').textContent = S.plan.blocks.length + (S.plan.blocks.length === 1 ? ' thread' : ' threads') + (changes ? ' · ' + changes + (changes === 1 ? ' change' : ' changes') : '');
     S.plan.blocks.forEach(function (b, bi) {
@@ -935,7 +933,7 @@ export function mountStudio(root, opts) {
     // Finish queued processing on its original source before rebinding controls.
     clearTimeout(txtTimer); clearTimeout(imgTimer);
     if(S.mode==='image' && S.image.source) processImage(S.image);
-    if(S.activeId!==id) $('#properties-panel').scrollTop=0;
+    if(S.activeId!==id) $('.bench-scroll').scrollTop=0;
     setPan(false);$('.shape-tools').hidden=true;S.activeId = id; endUndoGroup();
     var layer = currentLayer(); if (!layer) return;
     lastOfKind[layer.kind] = id;
@@ -943,6 +941,7 @@ export function mountStudio(root, opts) {
     if (S.mode === 'image' && S.image.source) processImage(S.image);
     ['draw','image','text'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
     $('#toolbar').hidden = S.mode !== 'draw'; $('#clear').hidden = S.mode !== 'draw';
+    $('.drawing-recolor').hidden = S.mode !== 'draw'; $('.drawing-help').hidden = S.mode !== 'draw';
     stage.classList.toggle('drawing', S.mode === 'draw' && !moveDrawing);
     $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#pressure').checked = S.draw.pressure;
@@ -967,7 +966,7 @@ export function mountStudio(root, opts) {
   }
   function syncLayers() {
     var selected=currentLayer();
-    $('#add-draw-layer').setAttribute('aria-pressed',String(S.mode==='draw'&&!moveDrawing));
+    syncToolButtons();
     $('#move-layer').setAttribute('aria-pressed',String(S.mode!=='draw'||moveDrawing));
     $('#editing-object').textContent=selected ? 'Editing: '+selected.name : '';
     syncEditingLabel();
@@ -1003,9 +1002,14 @@ export function mountStudio(root, opts) {
   function syncFabric() { $$('.fabric').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.fabric === S.fabric)); }); }
 
   // tools
+  // A drawing tool is "on" only while drawing: with Move on, or a picture or words selected, none is.
+  function syncToolButtons() {
+    var drawing = S.mode === 'draw' && !moveDrawing;
+    $$('.tool').forEach(function (b) { b.setAttribute('aria-pressed', String(drawing && b.dataset.tool === S.draw.tool)); });
+  }
   function setTool(t) {
     S.draw.tool = t;
-    $$('.tool').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.tool === t)); });
+    syncToolButtons();
     var cfg = SIZE_CFG[t], wrap = $('#size-wrap');
     wrap.classList.toggle('off', !cfg);
     if (cfg) {
@@ -1016,7 +1020,15 @@ export function mountStudio(root, opts) {
     }
     scheduleSave();
   }
-  $$('.tool').forEach(function (b) { b.addEventListener('click', function () { moveDrawing=false;setTool(b.dataset.tool);syncLayers();render(); }); });
+  // Tapping a drawing tool starts drawing with it: on the selected drawing, or the last one used
+  // (a new one if the design has none) when a picture or words were selected.
+  $$('.tool').forEach(function (b) { b.addEventListener('click', function () {
+    setPan(false); moveDrawing=false;
+    var drawable = function () { var l = currentLayer(); return !!l && l.kind === 'draw' && l.visible; };
+    if (!drawable()) setMode('draw');
+    if (!drawable()) { moveDrawing=true; syncLayers(); return; }   // no room for another part
+    setTool(b.dataset.tool); showDrawTools(); syncLayers(); render();
+  }); });
   $('#size').addEventListener('input', function (e) {
     var t = S.draw.tool; if (!SIZE_CFG[t]) return;
     S.draw.sizes[t] = +e.target.value;
@@ -1028,7 +1040,11 @@ export function mountStudio(root, opts) {
   var drawPalettes = [];
   function pickDrawColor(i) { S.draw.color = i; syncThreadName(); syncDrawingRecolor(); drawPalettes.forEach(function (p) { p.draw(); }); scheduleSave(); }
   drawPalettes.push(Palette($('#draw-palette-bench'), function () { return S.draw.color; }, pickDrawColor));
-  function syncThreadName() { $$('.thread-name').forEach(function (el) { el.textContent = threadName(S.draw.color) + ' · #' + S.draw.color; }); }
+  function syncThreadName() {
+    $$('.thread-name').forEach(function (el) { el.textContent = threadName(S.draw.color); });
+    $$('.thread-code').forEach(function (el) { el.textContent = threadCode(S.draw.color); });
+    $$('.thread-dot').forEach(function (el) { el.style.setProperty('--c', rgb(S.draw.color)); });
+  }
 
   function syncDrawingRecolor() {
     var select=$('#recolor-from'), old=select.value, colors=drawingColors(S.draw);
@@ -1213,8 +1229,12 @@ export function mountStudio(root, opts) {
     else n = slug(S.text.value.split('\n')[0]).toLowerCase() || 'text';
     S.name = n;
     $('#fname').value = n;
+    nameChanged();
   }
-  $('#fname').addEventListener('input', function (e) { S.name = e.target.value; S.nameAuto = !e.target.value; scheduleSave(); });
+  // The top bar shows the open design's name.
+  var toldName = null;
+  function nameChanged() { if (opts.onName && S.name !== toldName) { toldName = S.name; opts.onName(S.name); } }
+  $('#fname').addEventListener('input', function (e) { S.name = e.target.value; S.nameAuto = !e.target.value; nameChanged(); scheduleSave(); });
 
   function setStatus(msg, kind) { var el = $('#save-status'); el.textContent = msg; el.className = 'status' + (kind ? ' ' + kind : ''); }
   function buildFiles() {
@@ -1239,12 +1259,14 @@ export function mountStudio(root, opts) {
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   }
   function hasDesign() { return !!(S.plan && S.stats && S.stats.stitches); }
-  $('#send').addEventListener('click', function () {
-    if (!hasDesign()) return;
+  function sendDesign() {
+    if (!hasDesign()) return false;
     setStatus('');
     var refusal = opts.onSend ? opts.onSend(buildDesign()) : 'Sending is not available here.';
     if (refusal) setStatus(refusal, 'err');
-  });
+    return true;
+  }
+  $('#send').addEventListener('click', sendDesign);
   $('#save').addEventListener('click', function () {
     if (!hasDesign()) return;
     var files = buildFiles();
@@ -1316,7 +1338,7 @@ export function mountStudio(root, opts) {
   }
 
   var shapeAsObject=false;
-  $('#shape-tool').addEventListener('click',function(){showPanel('properties');shapeAsObject=true;$('.shape-tools').hidden=false;$('.shape-tools').open=true;$('#shape-status').textContent='';$('#properties-panel').scrollTop=0;});
+  $('#shape-tool').addEventListener('click',function(){showPanel('properties');shapeAsObject=true;$('.shape-tools').hidden=false;$('.shape-tools').open=true;$('#shape-status').textContent='';$('.bench-scroll').scrollTop=0;});
   $('#cancel-shape').addEventListener('click',function(){shapeAsObject=false;$('.shape-tools').hidden=true;$('#shape-tool').focus();});
   // Presets become normal editable drawing strokes/fills, including undo and project saving.
   $('#add-shape').addEventListener('click', function () {
@@ -1342,7 +1364,6 @@ export function mountStudio(root, opts) {
     pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
     if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
   }
-  $('#add-draw-layer').addEventListener('click',function(){setPan(false);moveDrawing=false;setMode('draw');showDrawTools();});
   $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;addObject('draw');showDrawTools();});
   $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
   $('#add-text-layer').addEventListener('click',function(){moveDrawing=true;showPanel('properties');addObject('text');});
@@ -1368,7 +1389,9 @@ export function mountStudio(root, opts) {
 
   // Docked panels in landscape; independent, dismissible drawers in portrait.
   var compactQuery=window.matchMedia?.('(max-width: 1023px)'), compact=!!compactQuery?.matches;
-  var panels={objects:!compact,properties:!compact};
+  // The parts list starts closed everywhere (it is opened from "More"); thread and settings is
+  // docked whenever there is room for it beside the hoop.
+  var panels={objects:false,properties:!compact};
   function syncPanels(){
     ['objects','properties'].forEach(function(name){
       $('#'+name+'-panel').hidden=!panels[name];
@@ -1381,23 +1404,23 @@ export function mountStudio(root, opts) {
   function showPanel(name){if(compact)panels={objects:false,properties:false};panels[name]=true;syncPanels();}
   // "Editing: Drawing 2" says which object is selected; the docked Objects list already shows that.
   function syncEditingLabel(){$('#editing-object').hidden=!!(panels && panels.objects && !compact);}
-  // In the narrow layout Properties is a drawer over the canvas. Drawing needs its tools and thread
-  // colors in reach with the whole hoop in view, so while Draw is on they move to a dock above the hoop.
+  // In the narrow layout the thread panel is a drawer over the canvas. Drawing needs its thread colors
+  // and line width in reach with the whole hoop in view, so while drawing they move to a dock above the hoop.
   function placeDrawTools(){
-    var dock=$('#draw-dock'), toolbar=$('#toolbar'), threads=$('.threads.in-bench'), home=$('#panel-draw'), after=$('.drawing-recolor');
+    var dock=$('#draw-dock'), toolbar=$('#toolbar'), threads=$('.threads.in-bench'), home=$('#panel-draw');
     var docked=!!compact && S.mode==='draw' && !moveDrawing;
-    if(docked && toolbar.parentNode!==dock){dock.appendChild(toolbar);dock.appendChild(threads);if(panels.properties){panels.properties=false;syncPanels();}}
-    else if(!docked && toolbar.parentNode===dock){home.insertBefore(toolbar,after);home.insertBefore(threads,after);}
+    if(docked && toolbar.parentNode!==dock){dock.appendChild(threads);dock.appendChild(toolbar);if(panels.properties){panels.properties=false;syncPanels();}}
+    else if(!docked && toolbar.parentNode===dock){home.appendChild(threads);home.appendChild(toolbar);}
     if(dock.hidden===docked){dock.hidden=!docked;applyHoopSize();}
   }
   // Opening Properties is right when it is docked beside the canvas, wrong when it would cover the hoop.
   function showDrawTools(){if(compact){panels={objects:false,properties:false};syncPanels();}else showPanel('properties');}
   ['objects','properties'].forEach(function(name){
     $('#toggle-'+name).addEventListener('click',function(){if(panels[name]){panels[name]=false;syncPanels();}else showPanel(name);});
-    $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-'+name).focus();});
+    $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-properties').focus();});
   });
-  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:!compact,properties:!compact};syncPanels();placeDrawTools();});
-  listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-'+name).focus();}});
+  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:false,properties:!compact};syncPanels();placeDrawTools();});
+  listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-properties').focus();}});
   function setPan(value){panCanvas=value;$('#pan-canvas').setAttribute('aria-pressed',String(value));stage.classList.toggle('panning',value);renderSelection();}
   $('#pan-canvas').addEventListener('click',function(){setPan(!panCanvas);});
   holder.addEventListener('pointerdown',function(e){var menu=$('#view-menu');if(menu.open&&!menu.contains(e.target))menu.open=false;});
@@ -1460,11 +1483,11 @@ export function mountStudio(root, opts) {
 
   listen(window, 'pagehide', saveLocal);
   listen(document, 'visibilitychange', function () { if (document.visibilityState === 'hidden') saveLocal(); });
-  $('#projects').hidden = !opts.onProjects;
-  $('#projects').addEventListener('click', function () { if (opts.onProjects) opts.onProjects(); });
+  nameChanged();
   return {
     snapshot: snapshot, thumbnail: thumbnail,
-    setProjectStatus: function (text) { $('#project-status').textContent = text || ''; },
+    // The top bar's Place step does what the Next button does. False when there is nothing to stitch yet.
+    send: sendDesign,
     setPlacement: function (value) { if (JSON.stringify(value) !== JSON.stringify(S.placement)) { S.placement = value; scheduleSave(); } },
     destroy: function () { destroyed = true; textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }
   };

@@ -1,5 +1,4 @@
 // Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
-import { formatPatternDimensions } from "../../prepare/patternDimensions";
 import { useRef, useMemo, useState, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -8,26 +7,17 @@ import {
 } from "../../stores/useMachineStore";
 import { useMachineUploadStore } from "../../stores/useMachineUploadStore";
 import { usePatternStore } from "../../stores/usePatternStore";
+import { useProjectUi } from "../../projects/projectUi";
+import { guessPxPerMM } from "../../studio/realSize.js";
 import { Stage, Layer } from "react-konva";
 import Konva from "konva";
-import { PhotoIcon, SunIcon, MoonIcon } from "@heroicons/react/24/solid";
-import { Grid, Origin, Hoop } from "./KonvaComponents";
 import { HoopBackground } from "./HoopBackground";
+import { HoopFabric, HoopFrame, HoopGuides } from "./HoopFrame";
 import { MarkerTargets } from "./MarkerTargets";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
-import { ThreadLegend } from "./ThreadLegend";
 import { PatternPositionIndicator } from "./PatternPositionIndicator";
 import { PositionPresets } from "./PositionPresets";
 import { ZoomControls } from "./ZoomControls";
 import { PatternLayer } from "./PatternLayer";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -35,11 +25,23 @@ import {
 } from "@/components/ui/popover";
 import { useCanvasViewport, usePatternTransform } from "@/hooks";
 
+/** The Skitch hoop, shown before a machine has said what it has (0.1 mm). */
+const DEFAULT_HOOP = 1000;
+
+/** Buttons that sit on the mat: white, so they read as tools laid on it. */
+const MAT_BUTTON =
+  "inline-flex items-center justify-center h-11 px-4 rounded-xl bg-paper text-ink font-normal cursor-pointer hover:bg-accent aria-pressed:outline-2 aria-pressed:outline-offset-2 aria-pressed:outline-white";
+
+/**
+ * The hoop on the cutting mat, with the design in it. Before a design is sent it can be dragged and
+ * turned here; afterwards this is the live view of what has been stitched. Nothing floats over the
+ * hoop: the controls sit in a row on the mat beneath it.
+ */
 export function PatternCanvas({
-  showThreads = false,
+  quickPlacement = true,
 }: {
-  /** List the design's threads under the canvas (Prepare; Stitch has its own thread cards). */
-  showThreads?: boolean;
+  /** Show "Turn a quarter" and "Line up in the hoop" (Place). Dragging works either way. */
+  quickPlacement?: boolean;
 }) {
   // Machine store
   const { sewingProgress, machineInfo } = useMachineStore(
@@ -79,13 +81,23 @@ export function PatternCanvas({
 
   // Derived state: pattern is uploaded if machine has pattern info
   const patternUploaded = usePatternUploaded();
+  const sectionRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
+
+  // Real size: one millimetre of hoop is one millimetre of screen, as on Create.
+  const checkedPxPerMM = useProjectUi((s) => s.pxPerMM);
+  const pxPerMM = useMemo(
+    () => checkedPxPerMM ?? guessPxPerMM().v,
+    [checkedPxPerMM],
+  );
+  const realScale = pxPerMM / 10;
 
   // Canvas viewport (zoom, pan, container size)
   const {
     stagePos,
     stageScale,
+    initialScale,
     containerSize,
     handleWheel,
     handleZoomIn,
@@ -98,6 +110,7 @@ export function PatternCanvas({
     pesData,
     uploadedPesData,
     machineInfo,
+    realScale,
   });
 
   // Handler for position preset selection
@@ -127,86 +140,165 @@ export function PatternCanvas({
     isUploading,
   });
 
-  const [previewDark, setPreviewDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
+  // Light thread vanishes on pale fabric, so the fabric in the preview can be switched to dark.
+  const [darkFabric, setDarkFabric] = useState(false);
 
-  const canvasBg = previewDark
-    ? "bg-gray-900 border-gray-600"
-    : "bg-gray-200 border-gray-300";
-  const canvasGridColor = previewDark ? "#404040" : "#e0e0e0";
-  const canvasOriginColor = previewDark ? "#999999" : "#888888";
+  const hoopWidth = machineInfo?.maxWidth ?? DEFAULT_HOOP;
+  const hoopHeight = machineInfo?.maxHeight ?? DEFAULT_HOOP;
+  const hasPattern = !!(pesData || uploadedPesData);
+  const locked = isUploading || patternUploaded || !!uploadedPesData;
+  const movable = !!pesData && !locked;
 
-  const hasPattern = pesData || uploadedPesData;
-  const borderColor = hasPattern
-    ? "border-tertiary-600 dark:border-tertiary-500"
-    : "border-gray-400 dark:border-gray-600";
-  const iconColor = hasPattern
-    ? "text-tertiary-600 dark:text-tertiary-400"
-    : "text-gray-600 dark:text-gray-400";
+  // The mat's lines carry on from the hoop's centimetre grid, and follow it while it is dragged.
+  const placeMat = useCallback((x: number, y: number, scale: number) => {
+    const el = sectionRef.current;
+    if (!el) return;
+    el.style.setProperty("--cm", `${100 * scale}px`);
+    el.style.backgroundPosition = `${x}px ${y}px`;
+  }, []);
 
-  // Memoize the display pattern to avoid recalculation
-  const displayPattern = useMemo(
-    () => uploadedPesData || pesData,
-    [uploadedPesData, pesData],
-  );
-
-  // Memoize pattern dimensions calculation
-  const patternDimensions = useMemo(() => {
-    if (!displayPattern) return null;
-    return formatPatternDimensions(
-      displayPattern,
-      uploadedPesData ? 0 : localPatternRotation,
-    );
-  }, [displayPattern, uploadedPesData, localPatternRotation]);
+  const zoomLabel =
+    Math.abs(stageScale - realScale) < 0.001
+      ? "Real size"
+      : `${Math.round((stageScale / (realScale || initialScale)) * 100)}%`;
 
   return (
-    <Card
-      className={`p-0 gap-0 h-[min(44rem,100vw)] lg:h-full flex flex-col border-l-4 ${borderColor}`}
+    <section
+      ref={sectionRef}
+      aria-label="Your design in the hoop"
+      className="mat-surface flex-1 min-h-0 h-full flex flex-col"
+      style={
+        {
+          "--cm": `${100 * stageScale}px`,
+          backgroundPosition: `${stagePos.x}px ${stagePos.y}px`,
+        } as React.CSSProperties
+      }
     >
-      <CardHeader className="p-4 pb-3">
-        <div className="flex items-start gap-3">
-          <PhotoIcon className={`w-6 h-6 ${iconColor} flex-shrink-0 mt-0.5`} />
-          <div className="flex-1 min-w-0 flex items-center justify-between">
-            <div>
-              <CardTitle className="text-sm">Your design in the hoop</CardTitle>
-              {hasPattern ? (
-                <CardDescription className="text-xs">
-                  {patternDimensions}
-                </CardDescription>
-              ) : (
-                <CardDescription className="text-xs">
-                  No design yet
-                </CardDescription>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <SunIcon className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-              <Switch
-                checked={previewDark}
-                onCheckedChange={setPreviewDark}
-                aria-label="Toggle preview background"
+      <div
+        className="relative w-full flex-1 min-h-[340px] lg:min-h-0 overflow-hidden"
+        ref={containerRef}
+      >
+        {containerSize.width > 0 && (
+          <Stage
+            width={containerSize.width}
+            height={containerSize.height}
+            x={stagePos.x}
+            y={stagePos.y}
+            scaleX={stageScale}
+            scaleY={stageScale}
+            draggable
+            onWheel={handleWheel}
+            onPointerDown={(event) =>
+              event.target
+                .getStage()
+                ?.container()
+                .focus({ preventScroll: true })
+            }
+            onDragStart={handleStageDragStart}
+            onDragMove={(event) => {
+              const stage = event.target.getStage();
+              if (stage && event.target === stage)
+                placeMat(stage.x(), stage.y(), stage.scaleX());
+            }}
+            onDragEnd={handleStageDragEnd}
+            ref={(node) => {
+              stageRef.current = node;
+              if (node) {
+                node.container().tabIndex = 0;
+                node
+                  .container()
+                  .setAttribute(
+                    "aria-label",
+                    "Embroidery placement canvas. Arrow keys move the design.",
+                  );
+                node.container().style.cursor = "grab";
+                node.container().style.touchAction = "none";
+              }
+            }}
+          >
+            {/* Background layer: frame, fabric, hoop photo, guides - static, no event listening */}
+            <Layer listening={false}>
+              <HoopFrame
+                width={hoopWidth}
+                height={hoopHeight}
+                scale={stageScale}
               />
-              <MoonIcon className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="px-4 pt-0 pb-4 flex-1 flex flex-col min-h-0">
-        {pesData && !patternUploaded && !isUploading && !uploadedPesData && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Button
-              variant="outline"
+              <HoopFabric
+                width={hoopWidth}
+                height={hoopHeight}
+                scale={stageScale}
+                dark={darkFabric}
+              />
+              {/* An aligned photo of the hooped fabric covers the plain fabric; the guides and the
+                  design go on top of it. */}
+              <HoopBackground />
+              <MarkerTargets />
+              <HoopGuides
+                width={hoopWidth}
+                height={hoopHeight}
+                scale={stageScale}
+                dark={darkFabric}
+              />
+            </Layer>
+
+            {/* Original pattern layer: draggable with transformer (shown before upload starts) */}
+            <Layer visible={!locked}>
+              {pesData && (
+                <PatternLayer
+                  pesData={pesData}
+                  offset={localPatternOffset}
+                  rotation={localPatternRotation}
+                  isInteractive={true}
+                  showProgress={false}
+                  currentStitchIndex={0}
+                  patternGroupRef={patternGroupRef}
+                  transformerRef={transformerRef}
+                  onDragEnd={handlePatternDragEnd}
+                  onTransformEnd={handleTransformEnd}
+                  attachTransformer={attachTransformer}
+                />
+              )}
+            </Layer>
+
+            {/* Uploaded pattern layer: locked, rotation baked in (shown during and after upload) */}
+            <Layer visible={locked}>
+              {uploadedPesData && (
+                <PatternLayer
+                  pesData={uploadedPesData}
+                  offset={initialUploadedPatternOffset}
+                  isInteractive={false}
+                  showProgress={true}
+                  currentStitchIndex={sewingProgress?.currentStitch || 0}
+                />
+              )}
+            </Layer>
+          </Stage>
+        )}
+      </div>
+
+      {/* Everything that used to float on the canvas sits under it, so the hoop is never covered */}
+      <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 px-3 sm:px-5 pb-3 sm:pb-4 pt-1">
+        {movable && quickPlacement && (
+          <div
+            className="flex flex-shrink-0 gap-2"
+            role="group"
+            aria-label="Quick placement"
+          >
+            <button
+              type="button"
+              className={MAT_BUTTON}
               onClick={() =>
                 setPatternRotation((localPatternRotation + 90) % 360)
               }
             >
-              Rotate 90°
-            </Button>
-            {machineInfo && (
+              Turn a quarter
+            </button>
+            {machineInfo && pesData && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline">Line up in the hoop</Button>
+                  <button type="button" className={MAT_BUTTON}>
+                    Line up in the hoop
+                  </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-auto p-2">
                   <PositionPresets
@@ -221,135 +313,31 @@ export function PatternCanvas({
             )}
           </div>
         )}
-        <div
-          className={`relative w-full flex-1 min-h-[360px] lg:min-h-0 border rounded overflow-hidden ${canvasBg}`}
-          ref={containerRef}
-        >
-          {containerSize.width > 0 && (
-            <Stage
-              width={containerSize.width}
-              height={containerSize.height}
-              x={stagePos.x}
-              y={stagePos.y}
-              scaleX={stageScale}
-              scaleY={stageScale}
-              draggable
-              onWheel={handleWheel}
-              onPointerDown={(event) =>
-                event.target
-                  .getStage()
-                  ?.container()
-                  .focus({ preventScroll: true })
-              }
-              onDragStart={handleStageDragStart}
-              onDragEnd={handleStageDragEnd}
-              ref={(node) => {
-                stageRef.current = node;
-                if (node) {
-                  node.container().tabIndex = 0;
-                  node
-                    .container()
-                    .setAttribute(
-                      "aria-label",
-                      "Embroidery placement canvas. Arrow keys move the design.",
-                    );
-                  node.container().style.cursor = "grab";
-                  node.container().style.touchAction = "none";
-                }
-              }}
-            >
-              {/* Background layer: hoop photo, grid, origin, hoop - static, no event listening */}
-              <Layer listening={false}>
-                {/* Aligned hoop photo sits beneath the grid so the reference
-                    grid and pattern overlay on top of the fabric. */}
-                <HoopBackground />
-                <MarkerTargets />
-                {displayPattern && (
-                  <>
-                    <Grid
-                      gridSize={100}
-                      bounds={displayPattern.bounds}
-                      machineInfo={machineInfo}
-                      colorOverride={canvasGridColor}
-                    />
-                    <Origin colorOverride={canvasOriginColor} />
-                    {machineInfo && <Hoop machineInfo={machineInfo} />}
-                  </>
-                )}
-              </Layer>
-
-              {/* Original pattern layer: draggable with transformer (shown before upload starts) */}
-              <Layer
-                visible={!isUploading && !patternUploaded && !uploadedPesData}
-              >
-                {pesData && (
-                  <PatternLayer
-                    pesData={pesData}
-                    offset={localPatternOffset}
-                    rotation={localPatternRotation}
-                    isInteractive={true}
-                    showProgress={false}
-                    currentStitchIndex={0}
-                    patternGroupRef={patternGroupRef}
-                    transformerRef={transformerRef}
-                    onDragEnd={handlePatternDragEnd}
-                    onTransformEnd={handleTransformEnd}
-                    attachTransformer={attachTransformer}
-                  />
-                )}
-              </Layer>
-
-              {/* Uploaded pattern layer: locked, rotation baked in (shown during and after upload) */}
-              <Layer
-                visible={isUploading || patternUploaded || !!uploadedPesData}
-              >
-                {uploadedPesData && (
-                  <PatternLayer
-                    pesData={uploadedPesData}
-                    offset={initialUploadedPatternOffset}
-                    isInteractive={false}
-                    showProgress={true}
-                    currentStitchIndex={sewingProgress?.currentStitch || 0}
-                  />
-                )}
-              </Layer>
-            </Stage>
-          )}
-
-          {/* Placeholder overlay when no pattern is loaded */}
-          {!hasPattern && (
-            <div className="flex items-center justify-center h-full text-gray-600 dark:text-gray-400 italic">
-              Nothing to show yet. Make a design on Create, or open a .pes file
-              on Prepare.
-            </div>
-          )}
+        <PatternPositionIndicator
+          hasPattern={hasPattern}
+          offset={locked ? initialUploadedPatternOffset : localPatternOffset}
+          rotation={localPatternRotation}
+          isLocked={patternUploaded || !!uploadedPesData}
+          isUploading={isUploading}
+        />
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className={MAT_BUTTON}
+            aria-pressed={darkFabric}
+            onClick={() => setDarkFabric((value) => !value)}
+          >
+            Dark fabric
+          </button>
+          <ZoomControls
+            label={zoomLabel}
+            buttonClassName={MAT_BUTTON}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onZoomReset={handleZoomReset}
+          />
         </div>
-
-        {/* Everything that used to float on the canvas sits under it, so the hoop is never covered */}
-        {displayPattern && (
-          <div className="flex-shrink-0 pt-3 space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <PatternPositionIndicator
-                offset={
-                  isUploading || patternUploaded || uploadedPesData
-                    ? initialUploadedPatternOffset
-                    : localPatternOffset
-                }
-                rotation={localPatternRotation}
-                isLocked={patternUploaded || !!uploadedPesData}
-                isUploading={isUploading}
-              />
-              <ZoomControls
-                scale={stageScale}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                onZoomReset={handleZoomReset}
-              />
-            </div>
-            {showThreads && <ThreadLegend colors={displayPattern.threads} />}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

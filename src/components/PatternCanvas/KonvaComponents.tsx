@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 import { memo, useMemo } from "react";
 import { Group, Line, Rect, Text, Circle } from "react-konva";
 import type { PesPatternData } from "../../formats/import/pesImporter";
@@ -317,7 +318,7 @@ export const Stitches = memo(
             key={i}
             points={group.points}
             stroke={group.color}
-            strokeWidth={group.isJump ? 1.5 : 1.5}
+            strokeWidth={group.isJump ? 1.5 : 3}
             lineCap="round"
             lineJoin="round"
             dash={group.isJump ? [8, 4] : undefined}
@@ -365,6 +366,8 @@ export const CurrentPosition = memo(
 
     return (
       <Group name="currentPosition">
+        {/* A pale ring under the marker keeps it visible on any thread or fabric colour */}
+        <Circle x={x} y={y} radius={8} stroke="#ffffff" strokeWidth={7} />
         <Circle
           x={x}
           y={y}

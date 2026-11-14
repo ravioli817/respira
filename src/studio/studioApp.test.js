@@ -231,11 +231,13 @@ it("does not treat a tap on text as a move or reset prepared placement", () => {
   expect(studio.snapshot().layers).toEqual(before.layers);
 });
 
-it("has one canvas toolbar and no redundant Draw/Picture/Text mode tabs", () => {
+it("has one rail of tools and no redundant Draw/Picture/Text mode tabs", () => {
   expect(root.querySelectorAll('[role="tab"]')).toHaveLength(0);
-  expect(root.querySelector('[aria-label="Canvas tools"]')).not.toBeNull();
+  expect(root.querySelectorAll('nav[aria-label="Tools"]')).toHaveLength(1);
+  // The drawing tools are the way into drawing: there is no separate Draw button.
+  expect(root.querySelector("#add-draw-layer")).toBeNull();
   const before = studio.snapshot().layers.length;
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   expect(studio.snapshot().layers.length).toBe(before);
   button("#add-image-layer").click(); // Cancelling the picker must not create an empty object.
   expect(studio.snapshot().layers.length).toBe(before);
@@ -297,7 +299,7 @@ it("Draw does not silently include an excluded legacy drawing", () => {
   const oldId = studio.snapshot().activeLayerId;
   button("#layer-visible").checked = false;
   button("#layer-visible").dispatchEvent(new Event("change"));
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   const saved = studio.snapshot();
   expect(saved.layers.find((l) => l.id === oldId).visible).toBe(false);
   expect(saved.activeLayerId).not.toBe(oldId);
@@ -359,13 +361,13 @@ it("Draw stays on the selected drawing, and objects of one kind get distinct nam
   expect(studio.snapshot().layers.at(-1).name).toBe("Drawing 2");
 
   button("#move-layer").click();
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   expect(studio.snapshot().activeLayerId).toBe(second);
 
   // From another kind of object, Draw goes back to the drawing last used, not the first one.
   button("#add-text-layer").click();
   expect(studio.snapshot().activeLayerId).not.toBe(second);
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   expect(studio.snapshot().activeLayerId).toBe(second);
 });
 
@@ -374,7 +376,7 @@ it("recolors only the selected drawing, supports one-step undo/redo and survives
   button("#layer-duplicate").click();
   const copyId = studio.snapshot().activeLayerId;
   root
-    .querySelector('#draw-palette-bench [aria-label="Blue, thread 2"]')
+    .querySelector('#draw-palette-bench [aria-label="Blue"]')
     .click();
   button("#recolor-drawing").click();
   await vi.advanceTimersByTimeAsync(60);
@@ -452,16 +454,18 @@ it("shows a non-blocking named picture warning and clears it when the picture is
 });
 
 it("opens a drawing ready to draw, exposes only the selected object's properties and uses Bharti for new text", () => {
-  // The project opens on its drawing, so the Pencil draws without tapping Draw first.
-  expect(button("#add-draw-layer").getAttribute("aria-pressed")).toBe("true");
+  // The project opens on its drawing with a drawing tool on, so the Pencil draws straight away.
+  expect(button("#tool-satin").getAttribute("aria-pressed")).toBe("true");
   expect(button("#move-layer").getAttribute("aria-pressed")).toBe("false");
   expect(button("#selection-box").hidden).toBe(true);
   button("#add-text-layer").click();
   expect(button("#move-layer").getAttribute("aria-pressed")).toBe("true");
+  // With words selected no drawing tool is on; the tools stay in reach in the rail.
+  expect(root.querySelectorAll('.tool[aria-pressed="true"]')).toHaveLength(0);
   expect(button("#txt").value).toBe("Bharti");
   expect(button("#panel-text").hidden).toBe(false);
   expect(button("#panel-draw").hidden).toBe(true);
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   expect(button("#selection-box").hidden).toBe(true);
   button("#move-layer").click();
   expect(button("#selection-box").hidden).toBe(false);
@@ -469,7 +473,7 @@ it("opens a drawing ready to draw, exposes only the selected object's properties
   expect(button("#panel-draw").hidden).toBe(false);
 });
 
-it("collapses portrait panels independently and restores docks on rotation", () => {
+it("collapses portrait panels independently and docks the thread panel again on rotation", () => {
   studio.destroy();
   const media = new EventTarget();
   media.matches = true;
@@ -490,6 +494,10 @@ it("collapses portrait panels independently and restores docks on rotation", () 
   const event = new Event("change");
   Object.assign(event, { matches: false });
   media.dispatchEvent(event);
+  // The parts list stays shut until it is asked for (it lives behind "More").
+  expect(button("#objects-panel").hidden).toBe(true);
+  expect(button("#properties-panel").hidden).toBe(false);
+  button("#toggle-objects").click();
   expect(button("#objects-panel").hidden).toBe(false);
   expect(button("#properties-panel").hidden).toBe(false);
 });
@@ -617,7 +625,7 @@ it("draws straight away on a drawing, moves objects only in Select, and returns 
   event("pointerup", 97, 9);
   await vi.advanceTimersByTimeAsync(70);
   expect(studio.snapshot().draw.strokes.length).toBe(before + 1);
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   event("pointerdown", 5, 5);
   event("pointermove", 15, 15);
   event("pointerup", 15, 15);
@@ -697,7 +705,7 @@ it("docks the drawing tools above the hoop on a narrow screen instead of opening
   expect(button("#panel-draw").contains(button("#toolbar"))).toBe(true);
 
   // Draw again: docked, and Properties stays shut.
-  button("#add-draw-layer").click();
+  button("#tool-satin").click();
   expect(dock.hidden).toBe(false);
   expect(button("#properties-panel").hidden).toBe(true);
 
@@ -717,16 +725,33 @@ it("docks the drawing tools above the hoop on a narrow screen instead of opening
   expect(button("#panel-draw").contains(button("#toolbar"))).toBe(true);
 });
 
-it("shows the host's save status and Projects button in the toolbar", () => {
-  expect(button("#projects").hidden).toBe(true);
+it("tells the host the design's name, names threads by their number, and sends when the host asks", () => {
   studio.destroy();
-  const onProjects = vi.fn();
-  studio = mountStudio(root, { onSend, onProjects });
-  expect(button("#projects").hidden).toBe(false);
-  button("#projects").click();
-  expect(onProjects).toHaveBeenCalledOnce();
-  studio.setProjectStatus("Saved");
-  expect(button("#project-status").textContent).toBe("Saved");
+  const onName = vi.fn();
+  const threadCode = vi.fn(() => "Brother 509");
+  studio = mountStudio(root, { onSend, onName, threadCode });
+  vi.advanceTimersByTime(60);
+  input("#fname", "flower");
+  expect(onName).toHaveBeenLastCalledWith("flower");
+  // The thread in hand is named as its spool is, not by its place in a list.
+  expect(root.querySelector(".thread-name").textContent).toBe("Leaf Green");
+  expect(root.querySelector(".thread-code").textContent).toBe("Brother 509");
+  // The top bar's Place step uses send(): the Next button without the tap.
+  expect(studio.send()).toBe(true);
+  expect(onSend).toHaveBeenCalledOnce();
+});
+
+it("starts drawing from a picture or words by tapping a drawing tool", () => {
+  button("#add-text-layer").click();
+  const words = studio.snapshot().activeLayerId;
+  button("#tool-line").click();
+  const saved = studio.snapshot();
+  expect(saved.activeLayerId).not.toBe(words);
+  expect(saved.layers.find((l) => l.id === saved.activeLayerId).kind).toBe(
+    "draw",
+  );
+  expect(button("#tool-line").getAttribute("aria-pressed")).toBe("true");
+  expect(button("#move-layer").getAttribute("aria-pressed")).toBe("false");
 });
 
 it("saves both new embroidery fonts and trim rules through undo, duplication and v4 reopening", async () => {
