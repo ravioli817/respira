@@ -70,7 +70,7 @@ button { cursor: pointer; }
   border: 2px solid transparent; border-radius: 12px; background: transparent; color: var(--ink); font-size: 15px; line-height: 1.2;
 }
 .tool svg, .rail-btn svg { width: 26px; height: 26px; }
-.tool[aria-pressed="true"], .rail-btn[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-2); font-weight: 700; }
+.tool[aria-pressed="true"], .rail-btn[aria-pressed="true"], .rail-btn[aria-expanded="true"] { border-color: var(--ink); background: var(--surface-2); font-weight: 700; }
 .rail-rule { width: 56px; height: 1px; flex-shrink: 0; background: var(--line); margin: 4px 0; }
 
 /* ---------- parts list ---------- */
@@ -235,17 +235,16 @@ input[type="range"] { accent-color: var(--ink); }
 .note { margin: 0 18px 4px; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 16px; white-space: pre-line; }
 
 /* collapsible sections */
-details.panel > summary { list-style: none; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
-details.panel > summary::-webkit-details-marker { display: none; }
-details.panel > summary::after { content: "+"; color: var(--muted); font-size: 22px; font-weight: 400; }
-details.panel[open] > summary::after { content: "–"; }
-details.panel[open] { gap: 14px; }
-/* The door to everything a first design does not need. */
-details.more > summary { min-height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; font-weight: 400; }
-details.more > summary::after { content: ""; width: 8px; height: 8px; margin-right: 4px; border: solid var(--ink); border-width: 0 2px 2px 0; transform: rotate(-45deg); }
-details.more[open] > summary::after { content: ""; transform: rotate(45deg); }
-details.more .panel { padding: 16px 0 0; }
-details.more > .btn { justify-content: flex-start; text-align: left; padding: 8px 14px; }
+/* Each section's title is always in view; a tap opens it. Nothing is tucked behind one "More". */
+details.panel { padding-block: 10px; }
+details.panel > summary, .drawing-recolor > summary { list-style: none; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+details.panel > summary::-webkit-details-marker, .drawing-recolor > summary::-webkit-details-marker { display: none; }
+details.panel > summary::after, .drawing-recolor > summary::after { content: "+"; color: var(--muted); font-size: 24px; font-weight: 400; }
+details.panel[open] > summary::after, .drawing-recolor[open] > summary::after { content: "–"; }
+details.panel[open] { gap: 14px; padding-bottom: 20px; }
+.drawing-recolor { border-top: 1px solid var(--line); margin-top: 2px; }
+.drawing-recolor[open] { display: flex; flex-direction: column; gap: 12px; }
+.object-properties h2 { margin-bottom: -2px; }
 .sequence ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; counter-reset: seq; }
 .sequence li { counter-increment: seq; display: grid; grid-template-columns: 22px 20px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
 .sequence li:last-child { border-bottom: 0; }

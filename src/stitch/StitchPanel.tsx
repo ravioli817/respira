@@ -456,9 +456,23 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
 
         {blocks.length > 0 && (
           <div className="flex flex-col gap-2">
+            {canChoose && (
+              <div className="flex items-center justify-between gap-3 min-h-11">
+                <label htmlFor="choose-start-thread">
+                  Start from a chosen thread
+                </label>
+                <Switch
+                  id="choose-start-thread"
+                  checked={isChoosing}
+                  disabled={busy}
+                  onCheckedChange={setChoosingStart}
+                />
+              </div>
+            )}
             {isChoosing && (
-              <p>
+              <p className="text-ink-soft">
                 Tap the thread to start from. Everything before it is skipped.
+                Switch this off to go back to where it was.
               </p>
             )}
             <ol
@@ -541,33 +555,52 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
         )}
 
         {uploaded && canShowStepControl(m.status, current > 0) && (
-          <details className="group">
-            <summary
-              className={cn(
-                ROW_BUTTON,
-                "list-none [&::-webkit-details-marker]:hidden",
-              )}
-            >
+          <fieldset disabled={busy}>
+            <legend className="font-bold mb-2">
               Go back or forward a few stitches
-              <Chevron />
-            </summary>
-            <fieldset disabled={busy} className="mt-3">
-              <legend className="sr-only">
-                Move the needle's place in the design
-              </legend>
-              <StitchStepControl
-                currentStitch={current}
-                adjustedStitchIndex={m.adjusted}
-                pausedStitchIndex={m.paused}
-                totalStitches={total}
-                lastRolledBackError={m.rollback}
-                colorBlocks={blocks}
-                onAdjustPosition={(delta) => void recover(delta)}
-                onSetPosition={(index) => void recover(index, true)}
-              />
-            </fieldset>
-          </details>
+            </legend>
+            <StitchStepControl
+              currentStitch={current}
+              adjustedStitchIndex={m.adjusted}
+              pausedStitchIndex={m.paused}
+              totalStitches={total}
+              lastRolledBackError={m.rollback}
+              colorBlocks={blocks}
+              onAdjustPosition={(delta) => void recover(delta)}
+              onSetPosition={(index) => void recover(index, true)}
+            />
+          </fieldset>
         )}
+
+        {/* What else can be done right now, in plain view rather than behind a menu. */}
+        {uploaded &&
+          ((canStartMaskTrace(m.status, current > 0) &&
+            action.command !== "trace") ||
+            (canDeletePattern(m.status) && action.command !== "delete")) && (
+            <div className="flex flex-wrap gap-2.5">
+              {canStartMaskTrace(m.status, current > 0) &&
+                action.command !== "trace" && (
+                  <button
+                    type="button"
+                    className={cn(ROW_BUTTON, "flex-1 basis-48 w-auto")}
+                    disabled={busy}
+                    onClick={() => void run("trace", true)}
+                  >
+                    Trace outline again
+                  </button>
+                )}
+              {canDeletePattern(m.status) && action.command !== "delete" && (
+                <button
+                  type="button"
+                  className={cn(ROW_BUTTON, "flex-1 basis-48 w-auto")}
+                  disabled={busy}
+                  onClick={() => void run("delete", true)}
+                >
+                  Delete it from the machine
+                </button>
+              )}
+            </div>
+          )}
 
         <div className="mt-auto flex flex-wrap items-start gap-3">
           <details className="group flex-1 basis-56 min-w-0">
@@ -577,60 +610,16 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
                 "list-none [&::-webkit-details-marker]:hidden",
               )}
             >
-              More
+              Design details
               <Chevron />
             </summary>
             <div className="mt-3 space-y-3">
-              {canChoose && (
-                <div className="flex items-center justify-between gap-3 min-h-11">
-                  <label htmlFor="choose-start-thread">
-                    Start from a chosen thread
-                  </label>
-                  <Switch
-                    id="choose-start-thread"
-                    checked={isChoosing}
-                    disabled={busy}
-                    onCheckedChange={setChoosingStart}
-                  />
-                </div>
-              )}
-              {isChoosing && (
+              {!display && (
                 <p className="text-ink-soft">
-                  Switch this off to go back to where it was.
+                  Size, stitch count and speed show here once a design is
+                  placed.
                 </p>
               )}
-              {uploaded &&
-                canStartMaskTrace(m.status, current > 0) &&
-                action.command !== "trace" && (
-                  <button
-                    type="button"
-                    className={ROW_BUTTON}
-                    disabled={busy}
-                    onClick={() => void run("trace", true)}
-                  >
-                    Trace outline again
-                  </button>
-                )}
-              {uploaded &&
-                canDeletePattern(m.status) &&
-                action.command !== "delete" && (
-                  <button
-                    type="button"
-                    className={ROW_BUTTON}
-                    disabled={busy}
-                    onClick={() => void run("delete", true)}
-                  >
-                    Delete the design from the machine
-                  </button>
-                )}
-              <button
-                type="button"
-                className={ROW_BUTTON}
-                onClick={onPrepare}
-                disabled={u.uploading}
-              >
-                Go to Place
-              </button>
               {display && <PatternInfo pesData={display} showThreadBlocks />}
               {display && m.patternInfo && (
                 <ProgressStats

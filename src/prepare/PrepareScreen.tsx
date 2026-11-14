@@ -234,71 +234,83 @@ export function PrepareScreen({
                   ? "Back to placing it"
                   : "Watch how it will stitch"}
               </button>
+              <button
+                type="button"
+                className={ROW}
+                aria-pressed={shown === "density"}
+                onClick={() =>
+                  setView(shown === "density" ? "placement" : "density")
+                }
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="size-6 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 4h16v16H4zM4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16" />
+                </svg>
+                {shown === "density"
+                  ? "Back to placing it"
+                  : "Check how dense the stitches are"}
+              </button>
             </div>
           )}
 
+          {/* From Jibbe23/respira (2f17126, 6f44986): each cut also stops the machine. */}
+          {prepared && !onMachine && (
+            <div className="rounded-xl border border-line-strong p-3.5 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="pause-after-cuts" className="font-bold">
+                  Pause after each thread cut
+                </label>
+                <Switch
+                  id="pause-after-cuts"
+                  checked={pauseAfterCuts}
+                  onCheckedChange={setPauseAfterCuts}
+                />
+              </div>
+              <p className="text-sm text-ink-soft">
+                Turn this on if the thread pulls out of the needle after a cut:
+                the machine waits so you can hold the loose end, then press
+                Start/Stop.
+                {stats &&
+                  ` This design has ${stats.cuts} ${stats.cuts === 1 ? "cut" : "cuts"}${
+                    stats.pauses > 0
+                      ? `, so ${stats.pauses} ${stats.pauses === 1 ? "pause" : "pauses"}`
+                      : ""
+                  }.`}
+              </p>
+            </div>
+          )}
+
+          {/* Most designs come from Create. Opening a file is in plain view, but folded: its
+              card is tall. With nothing placed yet it is the one thing to do here, so it is open. */}
           <details className="group" open={!prepared}>
             <summary className={SUMMARY}>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="size-6 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 3h8l4 4v14H6zM14 3v4h4" />
+              </svg>
               {prepared
-                ? "More: thread cuts, density, embroidery files"
+                ? "Use an embroidery file instead (.pes)"
                 : "Open an embroidery file (.pes)"}
               <Chevron />
             </summary>
-            <div className="mt-3 flex flex-col gap-3">
-              {/* From Jibbe23/respira (2f17126, 6f44986): each cut also stops the machine. */}
-              {prepared && !onMachine && (
-                <div className="rounded-xl border border-line p-3.5 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <label htmlFor="pause-after-cuts" className="font-bold">
-                      Pause after each thread cut
-                    </label>
-                    <Switch
-                      id="pause-after-cuts"
-                      checked={pauseAfterCuts}
-                      onCheckedChange={setPauseAfterCuts}
-                    />
-                  </div>
-                  <p className="text-sm text-ink-soft">
-                    The machine stops after it cuts the thread, so you can hold
-                    the loose end while it starts again, then press Start/Stop.
-                    Turn this on if the thread pulls out of the needle after
-                    cuts.
-                  </p>
-                  {stats && (
-                    <p className="text-sm text-ink-soft">
-                      This design has {stats.cuts}{" "}
-                      {stats.cuts === 1 ? "thread cut" : "thread cuts"}
-                      {stats.pauses > 0 &&
-                        `, so ${stats.pauses} ${stats.pauses === 1 ? "pause" : "pauses"}`}
-                      .
-                    </p>
-                  )}
-                </div>
-              )}
-              {prepared && (
-                <button
-                  type="button"
-                  className={ROW}
-                  aria-pressed={shown === "density"}
-                  onClick={() =>
-                    setView(shown === "density" ? "placement" : "density")
-                  }
-                >
-                  {shown === "density"
-                    ? "Back to placing it"
-                    : "Check stitch density (advanced)"}
-                </button>
-              )}
-              <div className="rounded-xl border border-line">
-                {prepared && (
-                  <p className="px-3.5 pt-3 font-bold">
-                    Use an embroidery file instead (.pes)
-                  </p>
-                )}
-                <div className="p-1.5">
-                  <FileUpload preparationOnly />
-                </div>
-              </div>
+            <div className="mt-2.5 rounded-xl border border-line p-1.5">
+              <FileUpload preparationOnly />
             </div>
           </details>
         </div>

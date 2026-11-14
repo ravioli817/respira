@@ -27,7 +27,7 @@ export const STUDIO_MARKUP = `
       </button>
       <input type="file" id="add-picture-file" accept="image/*" hidden aria-label="Add a picture to the canvas">
       <button class="rail-btn" id="add-text-layer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M12 6v13M9 19h6"/></svg><span>Words</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M12 6v13M9 19h6"/></svg><span>Text</span>
       </button>
       <button class="rail-btn" id="shape-tool">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/></svg><span>Shape</span>
@@ -36,6 +36,10 @@ export const STUDIO_MARKUP = `
     <span class="rail-rule" aria-hidden="true"></span>
     <button class="rail-btn" id="move-layer" aria-pressed="true" title="Move: tap a part to move, resize or change it">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3.5l12 9.2-5.4.8 3 6-2.3 1.1-3-6L6 18z"/></svg><span>Move</span>
+    </button>
+    <span class="rail-rule" aria-hidden="true"></span>
+    <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Parts: everything in the design, in stitching order">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Parts</span>
     </button>
   </nav>
   <aside class="objects-panel" id="objects-panel" aria-label="Parts of the design, in stitching order">
@@ -137,6 +141,12 @@ export const STUDIO_MARKUP = `
       <div class="toolbar" id="toolbar">
         <label class="size" id="size-wrap"><span class="size-head"><span id="size-label">Width</span><output id="size-out" for="size">3.0 mm</output></span><input type="range" id="size" min="1.5" max="6" step="0.1" value="3"></label>
       </div>
+      <details class="drawing-recolor">
+        <summary>Recolor what's drawn</summary>
+        <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
+        <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
+        <button class="btn" id="recolor-drawing">Recolor marks</button>
+      </details>
     </section>
 
     <section class="panel first" id="panel-image" hidden>
@@ -180,11 +190,8 @@ export const STUDIO_MARKUP = `
       <div class="stack"><span>Thread</span><div class="palette" id="txt-palette"></div></div>
     </section>
 
-    <details class="panel more" id="more">
-      <summary>More: parts, sizes, stitch settings</summary>
-      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false">Parts list: choose, reorder, add a drawing</button>
-
     <section class="panel object-properties">
+      <h2>This part</h2>
   <div class="layer-controls">
     <label class="stack">Width (mm)<input id="object-width" type="number" min="0.1" max="400" step="0.5"></label>
     <label class="stack">Height (mm)<input id="object-height" type="number" min="0.1" max="400" step="0.5"></label>
@@ -198,25 +205,18 @@ export const STUDIO_MARKUP = `
     <p class="hint">Resize keeps proportions. Dimensions include rotation.</p>
     </section>
 
-      <details class="panel drawing-recolor">
-        <summary>Recolor what's drawn</summary>
-        <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
-        <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
-        <button class="btn" id="recolor-drawing">Recolor marks</button>
-      </details>
-
-      <details class="panel drawing-help"><summary>Drawing help</summary>
-      <dl class="legend">
-        <dt>Line</dt><dd>A bold outline stitch.</dd>
-        <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
-        <dt>Fill</dt><dd>Paint an area that stitches as a solid fill.</dd>
-        <dt>Bucket</dt><dd>Fill inside a shape you outlined.</dd>
-        <dt>Erase</dt><dd>Removes lines and paint it touches.</dd>
-      </dl>
-      <label class="check"><input type="checkbox" id="pressure" checked> <span>Pencil pressure changes satin width</span></label>
-      <p class="hint">Filled areas stitch first, then lines and satin go on top. Once you use Apple Pencil, finger touches are ignored so your palm can rest on the screen.</p>
-      </details>
-
+    <details class="panel" id="settings">
+      <summary>Stitch settings</summary>
+      <div class="field-row"><span>Fill density</span>
+        <div class="seg small" role="group" aria-label="Fill density" id="density">
+          <button data-spacing="0.5" aria-pressed="false">Light</button>
+          <button data-spacing="0.4" aria-pressed="true">Standard</button>
+          <button data-spacing="0.34" aria-pressed="false">Dense</button>
+        </div>
+      </div>
+      <label class="range"><span>Fill angle</span><input type="range" id="angle" min="0" max="175" step="5" value="45"><output id="angle-out" for="angle">45°</output></label>
+      <label class="check"><input type="checkbox" id="underlay" checked> <span>Supporting underlay stitches beneath fills and satin</span></label>
+    </details>
 
     <details class="panel" id="object-stitches">
       <summary>Advanced: underlay and pull</summary>
@@ -238,19 +238,7 @@ export const STUDIO_MARKUP = `
         <label class="stack">Underlay row / zigzag spacing (mm)<input id="stitch-underlaySpacingMm" type="number" min="0.8" max="4" step="0.1"></label>
         <label class="stack">Underlay running stitch length (mm)<input id="stitch-underlayStitchMm" type="number" min="0.5" max="4" step="0.1"></label>
       </fieldset>
-      <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Check stitch density on Place (under More) and test on your fabric.</p>
-    </details>
-    <details class="panel" id="settings">
-      <summary>Stitch settings</summary>
-      <div class="field-row"><span>Fill density</span>
-        <div class="seg small" role="group" aria-label="Fill density" id="density">
-          <button data-spacing="0.5" aria-pressed="false">Light</button>
-          <button data-spacing="0.4" aria-pressed="true">Standard</button>
-          <button data-spacing="0.34" aria-pressed="false">Dense</button>
-        </div>
-      </div>
-      <label class="range"><span>Fill angle</span><input type="range" id="angle" min="0" max="175" step="5" value="45"><output id="angle-out" for="angle">45°</output></label>
-      <label class="check"><input type="checkbox" id="underlay" checked> <span>Supporting underlay stitches beneath fills and satin</span></label>
+      <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Check stitch density on Place and test on your fabric.</p>
     </details>
 
     <details class="panel sequence">
@@ -263,6 +251,18 @@ export const STUDIO_MARKUP = `
       <div class="save-files"><button class="link" id="save">Save a .pes file</button><button class="link" id="save-dst">Save a .dst file</button></div>
     </section>
 
+    <details class="panel drawing-help"><summary>Drawing help</summary>
+      <dl class="legend">
+        <dt>Line</dt><dd>A bold outline stitch.</dd>
+        <dt>Satin</dt><dd>A smooth, shiny column 1.5 to 6 mm wide.</dd>
+        <dt>Fill</dt><dd>Paint an area that stitches as a solid fill.</dd>
+        <dt>Bucket</dt><dd>Fill inside a shape you outlined.</dd>
+        <dt>Erase</dt><dd>Removes lines and paint it touches.</dd>
+      </dl>
+      <label class="check"><input type="checkbox" id="pressure" checked> <span>Pencil pressure changes satin width</span></label>
+      <p class="hint">Filled areas stitch first, then lines and satin go on top. Once you use Apple Pencil, finger touches are ignored so your palm can rest on the screen.</p>
+    </details>
+
     <details class="panel howto">
       <summary>Getting it onto your Skitch</summary>
       <ol>
@@ -271,7 +271,6 @@ export const STUDIO_MARKUP = `
         <li>Let the machine trace the outline so you can see where it will stitch, then start.</li>
       </ol>
       <p>You can also save a .pes file and bring it into Brother's Artspira app.</p>
-    </details>
     </details>
     </div>
     <div class="bench-foot"><button class="btn-primary" id="send">Next: place it in the hoop</button></div>

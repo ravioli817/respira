@@ -1389,9 +1389,10 @@ export function mountStudio(root, opts) {
 
   // Docked panels in landscape; independent, dismissible drawers in portrait.
   var compactQuery=window.matchMedia?.('(max-width: 1023px)'), compact=!!compactQuery?.matches;
-  // The parts list starts closed everywhere (it is opened from "More"); thread and settings is
-  // docked whenever there is room for it beside the hoop.
-  var panels={objects:false,properties:!compact};
+  // Thread and settings is docked whenever the layout is wide. The parts list (the rail's Parts
+  // button) starts open only where it fits beside a real-size hoop: rail 96 + list 210 + hoop 566 + panel 300.
+  function roomForParts(){return !compact && window.innerWidth>=1172;}
+  var panels={objects:roomForParts(),properties:!compact};
   function syncPanels(){
     ['objects','properties'].forEach(function(name){
       $('#'+name+'-panel').hidden=!panels[name];
@@ -1407,20 +1408,20 @@ export function mountStudio(root, opts) {
   // In the narrow layout the thread panel is a drawer over the canvas. Drawing needs its thread colors
   // and line width in reach with the whole hoop in view, so while drawing they move to a dock above the hoop.
   function placeDrawTools(){
-    var dock=$('#draw-dock'), toolbar=$('#toolbar'), threads=$('.threads.in-bench'), home=$('#panel-draw');
+    var dock=$('#draw-dock'), toolbar=$('#toolbar'), threads=$('.threads.in-bench'), home=$('#panel-draw'), after=$('#panel-draw .drawing-recolor');
     var docked=!!compact && S.mode==='draw' && !moveDrawing;
     if(docked && toolbar.parentNode!==dock){dock.appendChild(threads);dock.appendChild(toolbar);if(panels.properties){panels.properties=false;syncPanels();}}
-    else if(!docked && toolbar.parentNode===dock){home.appendChild(threads);home.appendChild(toolbar);}
+    else if(!docked && toolbar.parentNode===dock){home.insertBefore(threads,after);home.insertBefore(toolbar,after);}
     if(dock.hidden===docked){dock.hidden=!docked;applyHoopSize();}
   }
   // Opening Properties is right when it is docked beside the canvas, wrong when it would cover the hoop.
   function showDrawTools(){if(compact){panels={objects:false,properties:false};syncPanels();}else showPanel('properties');}
   ['objects','properties'].forEach(function(name){
     $('#toggle-'+name).addEventListener('click',function(){if(panels[name]){panels[name]=false;syncPanels();}else showPanel(name);});
-    $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-properties').focus();});
+    $('#close-'+name).addEventListener('click',function(){panels[name]=false;syncPanels();$('#toggle-'+name).focus();});
   });
-  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:false,properties:!compact};syncPanels();placeDrawTools();});
-  listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-properties').focus();}});
+  if(compactQuery)listen(compactQuery,'change',function(e){compact=e.matches;panels={objects:roomForParts(),properties:!compact};syncPanels();placeDrawTools();});
+  listen(document,'keydown',function(e){if(!shown()||e.key!=='Escape')return; if(compact){var name=panels.properties?'properties':'objects';panels={objects:false,properties:false};syncPanels();$('#toggle-'+name).focus();}});
   function setPan(value){panCanvas=value;$('#pan-canvas').setAttribute('aria-pressed',String(value));stage.classList.toggle('panning',value);renderSelection();}
   $('#pan-canvas').addEventListener('click',function(){setPan(!panCanvas);});
   holder.addEventListener('pointerdown',function(e){var menu=$('#view-menu');if(menu.open&&!menu.contains(e.target))menu.open=false;});

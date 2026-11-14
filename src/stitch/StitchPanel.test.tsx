@@ -141,6 +141,21 @@ it("shows current/next threads and keeps recovery available for a thread interru
     expect(useMachineStore.getState().resumeSewing).toHaveBeenCalledOnce(),
   );
 });
+it("keeps retracing, deleting and stepping in plain view, not folded away", () => {
+  useMachineStore.setState({
+    patternInfo: info,
+    machineStatus: M.MASK_TRACE_COMPLETE,
+  });
+  usePatternStore.setState({ uploadedPesData: data });
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  for (const name of ["Trace outline again", "Delete it from the machine"]) {
+    const button = screen.getByRole("button", { name });
+    expect(button.closest("details")).toBeNull();
+  }
+  expect(
+    screen.getByRole("switch", { name: /chosen thread/ }).closest("details"),
+  ).toBeNull();
+});
 it("does not guess machine threads from an unrelated prepared draft", () => {
   useMachineStore.setState({ patternInfo: info, machineStatus: M.SEWING });
   render(<StitchPanel onPrepare={vi.fn()} />);

@@ -236,6 +236,12 @@ it("has one rail of tools and no redundant Draw/Picture/Text mode tabs", () => {
   expect(root.querySelectorAll('nav[aria-label="Tools"]')).toHaveLength(1);
   // The drawing tools are the way into drawing: there is no separate Draw button.
   expect(root.querySelector("#add-draw-layer")).toBeNull();
+  expect(button("#add-text-layer").textContent.trim()).toBe("Text");
+  // The parts list has its own button in the rail, and a part's name, size and position are in
+  // plain view: neither sits inside a folded "More".
+  expect(button("#toggle-objects").closest("nav")).not.toBeNull();
+  expect(button("#layer-name").closest("details")).toBeNull();
+  expect(button("#fname").closest("details")).toBeNull();
   const before = studio.snapshot().layers.length;
   button("#tool-satin").click();
   expect(studio.snapshot().layers.length).toBe(before);
