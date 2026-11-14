@@ -61,6 +61,15 @@ const DEFAULTS = {
   alignError: null,
 };
 
+let imageRequest = 0;
+
+const UNALIGNED = {
+  homography: null,
+  warped: null,
+  markerPoints: {},
+  status: "loaded" as const,
+};
+
 export const useHoopImageStore = create<HoopImageState>((set, get) => ({
   ...DEFAULTS,
   opacity: 0.6,
@@ -68,9 +77,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
   showMarkerCheck: false,
 
   loadImage: async (file: File) => {
-    // Revoke any previous object URL to avoid leaks.
-    const prevUrl = get().imageUrl;
-    if (prevUrl) URL.revokeObjectURL(prevUrl);
+    const request = ++imageRequest;
 
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -79,13 +86,21 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
       await image.decode();
     } catch (err) {
       URL.revokeObjectURL(url);
+      if (request !== imageRequest) return;
       set({ alignError: "Could not load that image file." });
       console.error("[HoopImage] Failed to decode image:", err);
       return;
     }
 
+    if (request !== imageRequest) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+    const previous = get().imageUrl;
+    if (previous) URL.revokeObjectURL(previous);
     set({
       ...DEFAULTS,
+      visible: true,
       imageUrl: url,
       image,
       imageSize: { width: image.naturalWidth, height: image.naturalHeight },
@@ -107,7 +122,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
     // Fourth click — classify, solve the homography and warp.
     const result = solveAlignment(next, image);
     if (!result.ok) {
-      set({ rawClicks: next, alignError: result.error });
+      set({ ...UNALIGNED, rawClicks: next, alignError: result.error });
       return;
     }
     set({
@@ -130,6 +145,8 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
     } catch (err) {
       console.error("[HoopImage] Marker detection threw:", err);
       set({
+        ...UNALIGNED,
+        rawClicks: [],
         alignError:
           "Marker detection failed unexpectedly. Click the markers manually.",
       });
@@ -138,6 +155,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
 
     if (result.markers.length !== 4) {
       set({
+        ...UNALIGNED,
         detectionCandidates: result.candidates,
         rawClicks: [],
         alignError: `Auto-detect found ${result.candidates.length} candidate marker(s), not 4. Click the markers manually, or adjust the photo (even lighting, all 4 markers in frame).`,
@@ -148,6 +166,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
     const solved = solveAlignment(result.markers, image);
     if (!solved.ok) {
       set({
+        ...UNALIGNED,
         detectionCandidates: result.candidates,
         rawClicks: result.markers,
         alignError: solved.error,
@@ -169,6 +188,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
   undoClick: () => {
     const { rawClicks } = get();
     set({
+      ...(get().image ? UNALIGNED : {}),
       rawClicks: rawClicks.slice(0, -1),
       alignError: null,
     });
@@ -176,6 +196,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
 
   resetClicks: () =>
     set({
+      ...(get().image ? UNALIGNED : {}),
       rawClicks: [],
       markerPoints: {},
       detectionCandidates: [],
@@ -187,6 +208,7 @@ export const useHoopImageStore = create<HoopImageState>((set, get) => ({
   setShowMarkerCheck: (v: boolean) => set({ showMarkerCheck: v }),
 
   clear: () => {
+    imageRequest++;
     const prevUrl = get().imageUrl;
     if (prevUrl) URL.revokeObjectURL(prevUrl);
     set({ ...DEFAULTS });

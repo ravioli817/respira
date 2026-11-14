@@ -17,6 +17,7 @@ import {
   type StitchCommand,
 } from "./workflow";
 import { preparePattern } from "../prepare/preparePattern";
+import { usePrepareOptions } from "../prepare/prepareOptions";
 import { designName } from "../prepare/designName";
 import { usePatternRotationUpload } from "../hooks/domain/usePatternRotationUpload";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
@@ -123,6 +124,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
       offset: s.patternOffset,
       rotation: s.patternRotation,
       name: s.currentFileName,
+      uploadedName: s.uploadedFileName,
       setUploaded: s.setUploadedPattern,
     })),
   );
@@ -143,9 +145,13 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     uploadPattern: u.upload,
     setUploadedPattern: p.setUploaded,
   });
+  const pauseAfterCuts = usePrepareOptions((s) => s.pauseAfterCuts);
   const prepared = useMemo(
-    () => (p.data ? preparePattern(p.data, p.offset, p.rotation) : null),
-    [p.data, p.offset, p.rotation],
+    () =>
+      p.data
+        ? preparePattern(p.data, p.offset, p.rotation, pauseAfterCuts)
+        : null,
+    [p.data, p.offset, p.rotation, pauseAfterCuts],
   );
   // True from the machine's status alone while its pattern details are still being read back
   // after a reconnect (see selectPatternUploaded).
@@ -338,7 +344,9 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             : p.data
               ? "Ready to send"
               : "Nothing prepared yet"}
-          {display ? `: ${designName(p.name)}` : ""}
+          {display
+            ? `: ${designName(uploaded ? p.uploadedName || p.name : p.name)}`
+            : ""}
         </p>
       </div>
       <NextStepCard embedded>

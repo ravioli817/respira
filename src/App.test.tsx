@@ -85,3 +85,47 @@ describe("Create handoff navigation", () => {
     expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
   });
 });
+
+import { act } from "@testing-library/react";
+import { usePatternStore } from "./stores/usePatternStore";
+import { useMachineCacheStore } from "./stores/useMachineCacheStore";
+import { studioDesignToPattern } from "./studio/toPattern";
+it("restores the cached machine job without overwriting a different prepared draft", () => {
+  const make = (x: number) =>
+    studioDesignToPattern({
+      name: "test",
+      threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+      stitches: [
+        [x, 0, 0, 0],
+        [x + 10, 0, 0, 0],
+      ],
+    }).data;
+  const draft = make(0),
+    job = make(100);
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+  useMachineCacheStore.getState().clearResumeState();
+  usePatternStore.getState().setPattern(draft, "my-draft.pes", "project");
+  render(<App />);
+  act(() =>
+    useMachineCacheStore.setState({
+      resumedPattern: {
+        pesData: job,
+        uploadedPesData: job,
+        patternOffset: { x: 45, y: 60 },
+      },
+      resumeFileName: "machine-job.pes",
+    }),
+  );
+  expect(usePatternStore.getState().pesData).toBe(draft);
+  expect(usePatternStore.getState().currentFileName).toBe("my-draft.pes");
+  expect(usePatternStore.getState().uploadedPesData).toBe(job);
+  expect(usePatternStore.getState().uploadedFileName).toBe("machine-job.pes");
+  expect(usePatternStore.getState().uploadedPatternOffset).toEqual({
+    x: 45,
+    y: 60,
+  });
+  act(() => {
+    useMachineCacheStore.getState().clearResumeState();
+    usePatternStore.setState(usePatternStore.getInitialState(), true);
+  });
+});

@@ -18,6 +18,7 @@ interface PatternState {
   patternRotation: number; // rotation in degrees (0-360)
 
   // Uploaded pattern (post-upload, rotation baked in)
+  uploadedFileName: string;
   uploadedPesData: PesPatternData | null; // Pattern with rotation applied
   uploadedPatternOffset: { x: number; y: number }; // Offset with center shift compensation
 
@@ -68,6 +69,7 @@ export const usePatternStore = create<PatternState>((set) => ({
   patternRotation: 0,
 
   // Uploaded pattern
+  uploadedFileName: "",
   uploadedPesData: null,
   uploadedPatternOffset: { x: 0, y: 0 },
 
@@ -85,6 +87,7 @@ export const usePatternStore = create<PatternState>((set) => ({
       currentFileName: fileName,
       patternOffset: { x: 0, y: 0 },
       patternRotation: 0,
+      uploadedFileName: "",
       uploadedPesData: null, // Clear uploaded pattern when loading new
       uploadedPatternOffset: { x: 0, y: 0 },
       patternUploaded: false,
@@ -110,13 +113,12 @@ export const usePatternStore = create<PatternState>((set) => ({
     uploadedOffset: { x: number; y: number },
     fileName?: string,
   ) => {
-    set({
+    set((state) => ({
       uploadedPesData: uploadedData,
       uploadedPatternOffset: uploadedOffset,
       patternUploaded: true,
-      // Optionally set filename if provided (for resume/reconnect scenarios)
-      ...(fileName && { currentFileName: fileName }),
-    });
+      uploadedFileName: fileName || state.currentFileName,
+    }));
     if (isDev) {
       console.log("[PatternStore] Uploaded pattern set");
     }
@@ -129,6 +131,7 @@ export const usePatternStore = create<PatternState>((set) => ({
       console.log("[PatternStore] CLEARING uploaded pattern...");
     }
     set({
+      uploadedFileName: "",
       uploadedPesData: null,
       uploadedPatternOffset: { x: 0, y: 0 },
       patternUploaded: false,

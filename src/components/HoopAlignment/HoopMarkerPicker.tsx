@@ -115,7 +115,7 @@ export function HoopMarkerPicker({
           <DialogTitle>Line up the photo</DialogTitle>
           <DialogDescription>
             {remaining > 0
-              ? `Tap Find the markers, or tap the middle of each of the 4 white squares on the hoop frame, in any order. ${remaining} to go.`
+              ? `Use an upright photo, with the top of the hoop at the top. Tap Find the markers, or tap the middle of each of the 4 white squares on the hoop frame, in any order. ${remaining} to go.`
               : "All four found. Lining up…"}
           </DialogDescription>
         </DialogHeader>

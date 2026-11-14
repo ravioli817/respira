@@ -1,3 +1,4 @@
+// Changed in this fork: a cache failure must not misreport a completed machine upload.
 import { create } from "zustand";
 import type { PesPatternData } from "../formats/import/pesImporter";
 import { uuidToString } from "../services/PatternCacheService";
@@ -85,16 +86,25 @@ export const useMachineUploadStore = create<MachineUploadState>((set) => ({
       // uploaded data is used on resume (prevents inconsistencies from version updates)
       const pesDataToCache = originalPesData || uploadedPesData;
       const uuidStr = uuidToString(uuid);
-      storageService.savePattern(
-        uuidStr,
-        pesDataToCache,
-        fileName,
-        patternOffset,
-        patternRotation,
-        uploadedPesData, // Cache the exact uploaded data
-      );
+      let cacheFailed = false;
+      try {
+        await storageService.savePattern(
+          uuidStr,
+          pesDataToCache,
+          fileName,
+          patternOffset,
+          patternRotation,
+          uploadedPesData, // Cache the exact uploaded data
+        );
+      } catch (error) {
+        cacheFailed = true;
+        console.warn(
+          "[MachineUpload] Could not cache the uploaded job:",
+          error,
+        );
+      }
       console.log(
-        "[MachineUpload] Saved pattern:",
+        "[MachineUpload] Uploaded pattern:",
         fileName,
         "with UUID:",
         uuidStr,
@@ -112,6 +122,11 @@ export const useMachineUploadStore = create<MachineUploadState>((set) => ({
       // Refresh status and pattern info after upload
       await refreshStatus();
       await refreshPatternInfo();
+      if (cacheFailed)
+        useMachineStore.setState({
+          error:
+            "Design uploaded, but its recovery copy could not be saved on this device. Keep this page open while sewing.",
+        });
     } catch (err) {
       throw err instanceof Error ? err : new Error("Failed to upload pattern");
     } finally {

@@ -1,4 +1,5 @@
 // Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
+import { restoreCachedPattern } from "./prepare/restoreCachedPattern";
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useMachineStore } from "./stores/useMachineStore";
@@ -18,13 +19,6 @@ import { loadStudioDesign } from "./studio/loadStudioDesign";
 import type { StudioDesign } from "./studio/studioApp.js";
 import { PracticePanel } from "./practice/PracticePanel";
 import { useNextStep } from "./guide/useNextStep";
-import { transformStitchesRotation } from "./utils/rotationUtils";
-import { encodeStitchesToPen } from "./formats/pen/encoder";
-import { decodePenData } from "./formats/pen/decoder";
-import {
-  calculatePatternCenter,
-  calculateBoundsFromDecodedStitches,
-} from "./components/PatternCanvas/patternCanvasHelpers";
 import "./App.css";
 
 function App() {
@@ -71,7 +65,9 @@ function App() {
     useShallow((state) => ({
       pesData: state.pesData,
       uploadedPesData: state.uploadedPesData,
-      currentFileName: state.currentFileName,
+      currentFileName: state.uploadedPesData
+        ? state.uploadedFileName || state.currentFileName
+        : state.currentFileName,
       setPattern: state.setPattern,
       setUploadedPattern: state.setUploadedPattern,
       setPatternRotation: state.setPatternRotation,
@@ -91,134 +87,29 @@ function App() {
     initializePyodide();
   }, [initializePyodide]);
 
-  // Auto-load cached pattern when available
+  // Recover the actual machine job even when a different local draft is open.
   useEffect(() => {
-    // Only auto-load if we have a resumed pattern and haven't already loaded it
-    if (resumedPattern && !uploadedPesData && !pesData) {
-      if (!resumedPattern.pesData) {
-        console.error(
-          "[App] ERROR: resumedPattern has no pesData!",
-          resumedPattern,
-        );
-        return;
-      }
-
-      console.log(
-        "[App] Loading resumed pattern:",
-        resumeFileName,
-        "Offset:",
-        resumedPattern.patternOffset,
-        "Rotation:",
-        resumedPattern.patternRotation,
-        "Has stitches:",
-        resumedPattern.pesData.stitches?.length || 0,
-        "Has cached uploaded data:",
-        !!resumedPattern.uploadedPesData,
-      );
-
-      const originalPesData = resumedPattern.pesData;
-      const cachedUploadedPesData = resumedPattern.uploadedPesData;
-      const rotation = resumedPattern.patternRotation || 0;
-      const originalOffset = resumedPattern.patternOffset || { x: 0, y: 0 };
-
-      // Set the original pattern data for editing
-      setPattern(originalPesData, resumeFileName || "");
-
-      // Restore the original offset (setPattern resets it to 0,0)
-      setPatternOffset(originalOffset.x, originalOffset.y);
-
-      // Set rotation if present
-      if (rotation !== 0) {
-        setPatternRotation(rotation);
-      }
-
-      // Use cached uploadedPesData if available, otherwise recalculate
-      if (cachedUploadedPesData) {
-        // Use the exact uploaded data from cache
-        // Calculate the adjusted offset (same logic as upload hook)
-        if (rotation !== 0) {
-          // Calculate center shift using the same helper as store selectors
-          const originalCenter = calculatePatternCenter(originalPesData.bounds);
-          const rotatedCenter = calculatePatternCenter(
-            cachedUploadedPesData.bounds,
-          );
-          const centerShiftX = rotatedCenter.x - originalCenter.x;
-          const centerShiftY = rotatedCenter.y - originalCenter.y;
-
-          const adjustedOffset = {
-            x: originalOffset.x + centerShiftX,
-            y: originalOffset.y + centerShiftY,
-          };
-
-          setUploadedPattern(
-            cachedUploadedPesData,
-            adjustedOffset,
-            resumeFileName || undefined,
-          );
-        } else {
-          setUploadedPattern(
-            cachedUploadedPesData,
-            originalOffset,
-            resumeFileName || undefined,
-          );
-        }
-      } else if (rotation !== 0) {
-        // Fallback: recalculate if no cached uploaded data (shouldn't happen for new uploads)
-        // This uses the same transformation logic as usePatternRotationUpload hook
-        console.warn("[App] No cached uploaded data, recalculating rotation");
-        const rotatedStitches = transformStitchesRotation(
-          originalPesData.stitches,
-          rotation,
-          originalPesData.bounds,
-        );
-
-        const penResult = encodeStitchesToPen(rotatedStitches);
-        const penData = new Uint8Array(penResult.penBytes);
-        const decoded = decodePenData(penData);
-        const rotatedBounds = calculateBoundsFromDecodedStitches(decoded);
-
-        // Calculate center shift using the same helper as store selectors
-        const originalCenter = calculatePatternCenter(originalPesData.bounds);
-        const rotatedCenter = calculatePatternCenter(rotatedBounds);
-        const centerShiftX = rotatedCenter.x - originalCenter.x;
-        const centerShiftY = rotatedCenter.y - originalCenter.y;
-
-        const adjustedOffset = {
-          x: originalOffset.x + centerShiftX,
-          y: originalOffset.y + centerShiftY,
-        };
-
-        const rotatedPesData = {
-          ...originalPesData,
-          stitches: rotatedStitches,
-          penData,
-          penStitches: decoded,
-          bounds: rotatedBounds,
-        };
-
-        setUploadedPattern(
-          rotatedPesData,
-          adjustedOffset,
-          resumeFileName || undefined,
-        );
-      } else {
-        // No rotation - uploaded pattern is same as original
-        setUploadedPattern(
-          originalPesData,
-          originalOffset,
-          resumeFileName || undefined,
-        );
-      }
+    if (!resumedPattern || uploadedPesData) return;
+    const restored = restoreCachedPattern(resumedPattern);
+    if (!pesData) {
+      setPattern(restored.original, resumeFileName || "");
+      setPatternOffset(restored.originalOffset.x, restored.originalOffset.y);
+      setPatternRotation(restored.rotation);
     }
+    setUploadedPattern(
+      restored.uploaded,
+      restored.uploadedOffset,
+      resumeFileName || undefined,
+    );
   }, [
     resumedPattern,
     resumeFileName,
     uploadedPesData,
     pesData,
     setPattern,
-    setUploadedPattern,
-    setPatternRotation,
     setPatternOffset,
+    setPatternRotation,
+    setUploadedPattern,
   ]);
 
   return (

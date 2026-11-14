@@ -219,3 +219,97 @@ describe("PP1 print recovery", () => {
     expect(useMachineCacheStore.getState().resumedPattern).toBeNull();
   });
 });
+
+it("clears manual recovery positions on disconnect and ignores a late position response", async () => {
+  await useMachineStore.getState().connect();
+  let finish!: () => void;
+  vi.spyOn(service, "setStitchIndex").mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  useMachineStore.setState({
+    adjustedStitchIndex: 100,
+    lastRolledBackError: 1,
+    pausedStitchIndex: 100,
+  });
+  const pending = useMachineStore.getState().setStitchPosition(500);
+  onDisconnect();
+  finish();
+  await pending;
+  expect(useMachineStore.getState().adjustedStitchIndex).toBeNull();
+  expect(useMachineStore.getState().pausedStitchIndex).toBeNull();
+});
+it("does not restore cached artwork after the connection that requested it has dropped", async () => {
+  await useMachineStore.getState().connect();
+  let finish!: (value: typeof cached) => void;
+  vi.mocked(storage.getPatternByUUID).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = useMachineCacheStore.getState().checkResume();
+  await vi.advanceTimersByTimeAsync(0);
+  onDisconnect();
+  finish(cached);
+  await pending;
+  expect(useMachineCacheStore.getState().resumedPattern).toBeNull();
+  expect(useMachineCacheStore.getState().resumeCheckPending).toBe(false);
+});
+
+it("does not automatically move stitches when reconnecting to an existing interruption", async () => {
+  vi.mocked(service.getMachineState).mockResolvedValue({
+    status: MachineStatus.SEWING_INTERRUPTION,
+    error: 7,
+  });
+  const move = vi.spyOn(service, "setStitchIndex").mockResolvedValue();
+  await useMachineStore.getState().connect();
+  await vi.advanceTimersByTimeAsync(2100);
+  expect(move).not.toHaveBeenCalled();
+  expect(useMachineStore.getState().pausedStitchIndex).toBe(
+    progress.currentStitch,
+  );
+});
+it("keeps the cached recovery copy if machine deletion fails", async () => {
+  await useMachineStore.getState().connect();
+  vi.spyOn(service, "deletePattern").mockRejectedValue(
+    new Error("delete refused"),
+  );
+  const remove = vi.spyOn(storage, "deletePattern").mockResolvedValue();
+  await useMachineStore.getState().deletePattern();
+  expect(remove).not.toHaveBeenCalled();
+  expect(useMachineStore.getState().patternInfo).toEqual(patternInfo);
+});
+import { useMachineUploadStore } from "./useMachineUploadStore";
+it("reports an uploaded job accurately when saving its cache fails", async () => {
+  await useMachineStore.getState().connect();
+  vi.spyOn(service, "uploadPattern").mockResolvedValue(uuid);
+  vi.spyOn(storage, "savePattern").mockRejectedValue(
+    new Error("storage unavailable"),
+  );
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  await expect(
+    useMachineUploadStore
+      .getState()
+      .uploadPattern(pesData.penData, pesData, "job.pes"),
+  ).resolves.toBeUndefined();
+  expect(useMachineStore.getState().error).toMatch(/uploaded.*recovery copy/);
+  expect(useMachineUploadStore.getState().isUploading).toBe(false);
+});
+it("ignores service-count replies from a dropped connection", async () => {
+  await useMachineStore.getState().connect();
+  let finish!: (value: { serviceCount: number; totalCount: number }) => void;
+  vi.mocked(service.getServiceCount).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = useMachineStore.getState().refreshServiceCount();
+  onDisconnect();
+  finish({ serviceCount: 3, totalCount: 4 });
+  await pending;
+  expect(useMachineStore.getState().machineInfo).toBeNull();
+});

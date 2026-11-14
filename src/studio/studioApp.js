@@ -469,8 +469,11 @@ export function mountStudio(root, opts) {
   function cloneLayer(layer) {
     var source=layer.source;
     if(layer.kind==='draw') source=Object.assign({},source,{sizes:Object.assign({},source.sizes),order:source.order.slice(),labels:source.labels.slice(),strokes:source.strokes.map(function(s){return Object.assign({},s,{pts:s.pts.map(function(p){return p.slice();})});})});
-    else if(layer.kind==='image') source=Object.assign({},source,{loading:false,clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
+    else if(layer.kind==='image') source=Object.assign({},source,{clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
     else source=Object.assign({},source);
+    // Undo snapshots of a decoding image must receive the same decoded asset, even if
+    // they become the active object before the decode completes.
+    if(layer.kind==='image' && source.loading && source.loadTicket)source.loadTicket.sources.add(source);
     return Object.assign({},layer,{transform:Object.assign({},layer.transform),source:source,stitchSettings:layer.stitchSettings?Object.assign({},layer.stitchSettings):undefined});
   }
   function snap() { return { layers:S.layers.map(cloneLayer), activeId:S.activeId }; }
@@ -1055,17 +1058,33 @@ export function mountStudio(root, opts) {
     invalidateDesign();
     S.placement=undefined;
     var targetImage = S.image; targetImage.loading = true;
+    var ticket={sources:new Set([targetImage])};targetImage.loadTicket=ticket;
     var done = function (src) {
-      if (destroyed) return;
+      if (destroyed) { if(src.close)src.close(); return; }
+      try {
       var picture = document.createElement('canvas');
       var scale = Math.min(1, 2048 / Math.max(src.width, src.height));
       picture.width = Math.max(1, Math.round(src.width * scale)); picture.height = Math.max(1, Math.round(src.height * scale));
       picture.getContext('2d').drawImage(src, 0, 0, picture.width, picture.height);
-      targetImage.loading = false; delete targetImage.error; targetImage.sourceDataURL = picture.toDataURL('image/png');
-      targetImage.source = picture; targetImage.fileName = f.name; targetImage.clusters = [];
-      processImage(targetImage); if(S.image===targetImage) { $('#file-name').textContent=f.name; renderClusters(); } updateDesign(); scheduleSave();
+      var dataURL=picture.toDataURL('image/png');
+      ticket.sources.forEach(function(im){
+        if(im.loadTicket!==ticket)return; // A newer replacement owns this object now.
+        // Commit only after processing succeeds, so a bad replacement cannot leave
+        // a new image paired with the previous image's processed pixels.
+        var decoded=Object.assign({},im,{sourceDataURL:dataURL,source:picture,fileName:f.name,clusters:[],loading:false});
+        processImage(decoded);Object.assign(im,decoded);delete im.loadTicket;delete im.error;
+        if(S.image===im){$('#file-name').textContent=f.name;renderClusters();}
+      });
+      if(src.close)src.close();
+      updateDesign();scheduleSave();
+      } catch(error) { if(src.close)src.close(); fail(); }
     };
-    var fail = function () { if (destroyed) return; targetImage.loading = false; updateDesign(); toast("That file couldn't be opened as a picture. Try a PNG or JPEG."); };
+    var fail = function () {
+      if(destroyed)return;
+      var affectsCurrent=S.layers.some(function(layer){return layer.source.loadTicket===ticket;});
+      ticket.sources.forEach(function(im){if(im.loadTicket===ticket){im.loading=false;delete im.loadTicket;if(!im.source)im.error="This picture could not be opened. Replace it or remove this part.";}});
+      updateDesign();scheduleSave();if(affectsCurrent)toast("That file couldn't be opened as a picture. Try a PNG or JPEG.");
+    };
     if (window.createImageBitmap) createImageBitmap(f).then(done, function () { viaImg(f, done, fail); });
     else viaImg(f, done, fail);
     e.target.value = '';
@@ -1074,7 +1093,7 @@ export function mountStudio(root, opts) {
   $('#add-picture-file').addEventListener('change',function(e){handlePictureFile(e,true);});
   function viaImg(f, done, fail) {
     var url = URL.createObjectURL(f), img = new Image();
-    img.onload = function () { var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(url); done(c); };
+    img.onload = function () { URL.revokeObjectURL(url); done(img); };
     img.onerror = function () { URL.revokeObjectURL(url); fail(); };
     img.src = url;
   }
@@ -1085,7 +1104,7 @@ export function mountStudio(root, opts) {
   $('#img-bg').addEventListener('change', function (e) { pushUndo(); S.image.removeBg = e.target.checked; reprocessSoon(); });
   $$('#img-clean button').forEach(function (b) {
     b.addEventListener('click', function () {
-      S.image.clean = +b.dataset.clean;
+      pushUndo();S.image.clean = +b.dataset.clean;
       $$('#img-clean button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
       reprocessSoon();
     });
