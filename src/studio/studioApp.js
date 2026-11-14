@@ -958,7 +958,7 @@ export function mountStudio(root, opts) {
     var current=currentLayer(), layer=current&&current.kind===m&&current.visible?current:null;
     if(!layer) layer=S.layers.find(function (l) { return l.id===lastOfKind[m] && l.kind===m && l.visible; });
     if(!layer) layer=S.layers.find(function (l) { return l.kind===m && l.visible; });
-    if(!layer) { if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
+    if(!layer) { if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
     if(!layer.visible) { pushUndo(); S.placement=undefined; layer.visible=true; }
     selectLayer(layer.id);
   }
@@ -973,7 +973,7 @@ export function mountStudio(root, opts) {
     $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#object-count').textContent='('+S.layers.length+')';
     var list=$('#layers'); list.innerHTML='';
-    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (excluded)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){moveDrawing=true;selectLayer(layer.id);}); list.appendChild(button); });
+    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (left out)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){moveDrawing=true;selectLayer(layer.id);}); list.appendChild(button); });
     if(!selected) return;
     if(root.activeElement!==$('#layer-name') && document.activeElement!==$('#layer-name')) $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
     $('#layer-x').value=+selected.transform.x.toFixed(2); $('#layer-y').value=+selected.transform.y.toFixed(2);
@@ -1049,7 +1049,7 @@ export function mountStudio(root, opts) {
   function handlePictureFile(e, asNew) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
-    if(asNew && S.layers.length>=20){toast('A design can contain up to 20 objects.');e.target.value='';return;}
+    if(asNew && S.layers.length>=20){toast('A design can have up to 20 parts.');e.target.value='';return;}
     pushUndo();
     if(asNew){var layer=makeLayer('image');S.layers.push(layer);moveDrawing=true;showPanel('properties');selectLayer(layer.id);}
     invalidateDesign();
@@ -1169,7 +1169,7 @@ export function mountStudio(root, opts) {
     var layer=currentLayer(); if(!layer)return;
     var values=layer.stitchSettings || stitchDefaults(layer,S.settings);
     $('#stitch-custom').checked=!!layer.stitchSettings; $('#stitch-fields').disabled=!layer.stitchSettings;
-    $('#stitch-object-name').textContent='Stitches for: '+layer.name+(layer.stitchSettings?' (custom)':' (project defaults)');
+    $('#stitch-object-name').textContent='Stitches for: '+layer.name+(layer.stitchSettings?' (its own settings)':' (the design\'s settings)');
     var lettering=layer.kind==='text'&&isEmbroideryFont(layer.source.font);
     $('#fill-stitch-fields').hidden=lettering; $('#satin-stitch-fields').hidden=layer.kind==='image'||(layer.kind==='text'&&!lettering);
     Object.keys(values).forEach(function(key){$('#stitch-'+key).value=values[key];});
@@ -1305,7 +1305,7 @@ export function mountStudio(root, opts) {
       var style = $('#shape-style').value, w = +$('#shape-line-width').value;
       var points = shapePoints($('#shape-kind').value, +$('#shape-width').value, +$('#shape-height').value, +$('#shape-x').value, +$('#shape-y').value, style === 'satin' ? w / 2 + 0.3 : 0.3);
       if (!Number.isFinite(w) || w < 1.5 || w > 6) throw new Error('Choose an outline width between 1.5 and 6 mm.');
-      if(shapeAsObject && S.layers.length>=20){toast('A design can contain up to 20 objects.');return;}
+      if(shapeAsObject && S.layers.length>=20){toast('A design can have up to 20 parts.');return;}
       pushUndo();
       if(shapeAsObject){var shape=makeLayer('draw');shape.source.color=S.draw.color;var name=$('#shape-kind').selectedOptions[0].textContent, number=2;shape.name=name;while(S.layers.some(l=>l.name===shape.name))shape.name=name+' '+number++;S.layers.push(shape);moveDrawing=true;selectLayer(shape.id);shapeAsObject=false;}
       if (style === 'fill') {
@@ -1319,7 +1319,7 @@ export function mountStudio(root, opts) {
   });
 
   function addObject(kind) {
-    if(S.layers.length>=20){toast('A design can contain up to 20 objects.');return;}
+    if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;}
     pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
     if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
   }
@@ -1331,7 +1331,7 @@ export function mountStudio(root, opts) {
   $('#layer-name').addEventListener('input',function(e){pushUndo('layer-name');currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
   $('#layer-visible').addEventListener('change',function(e){pushUndo();S.placement=undefined;currentLayer().visible=e.target.checked;syncLayers();updateDesign();scheduleSave();});
   ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo('layer-'+key);S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
-  $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can contain up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
+  $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
   $('#layer-remove').addEventListener('click',function(){if(S.layers.length<2)return;pushUndo();S.placement=undefined;S.layers=S.layers.filter(function(l){return l.id!==S.activeId;});selectLayer(S.layers[0].id);});
   [-1,1].forEach(function(direction){$(direction===-1?'#layer-earlier':'#layer-later').addEventListener('click',function(){var i=S.layers.indexOf(currentLayer()),j=i+direction;if(j<0||j>=S.layers.length)return;pushUndo();S.placement=undefined;var layer=S.layers.splice(i,1)[0];S.layers.splice(j,0,layer);syncLayers();updateDesign();scheduleSave();});});
 

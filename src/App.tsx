@@ -17,6 +17,7 @@ import { ScreenTabs, type Screen } from "./studio/ScreenTabs";
 import { loadStudioDesign } from "./studio/loadStudioDesign";
 import type { StudioDesign } from "./studio/studioApp.js";
 import { PracticePanel } from "./practice/PracticePanel";
+import { useNextStep } from "./guide/useNextStep";
 import { transformStitchesRotation } from "./utils/rotationUtils";
 import { encodeStitchesToPen } from "./formats/pen/encoder";
 import { decodePenData } from "./formats/pen/decoder";
@@ -47,6 +48,8 @@ function App() {
 
   // Which screen is showing: making a design, or running the machine
   const [screen, setScreen] = useState<Screen>("create");
+  // What the machine is waiting for, so the Stitch tab can call for attention from other screens
+  const nextStep = useNextStep();
 
   // A design sent from the Create screen lands where a loaded PES file would, then the Prepare screen opens
   const handleStudioSend = useCallback((design: StudioDesign) => {
@@ -227,6 +230,7 @@ function App() {
         onChange={setScreen}
         patternName={pesData || uploadedPesData ? currentFileName : undefined}
         trailing={<ConnectionBar statusOnly={screen === "stitch"} />}
+        stitchNeedsYou={screen !== "stitch" && !!nextStep?.needsPerson}
       />
 
       {/* Create screen - stays mounted so a drawing in progress survives a visit to the Stitch screen */}

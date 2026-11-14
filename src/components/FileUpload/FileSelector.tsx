@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * FileSelector Component
  *
@@ -59,7 +60,7 @@ export function FileSelector({
             ) : (
               <>
                 <FolderOpenIcon className="w-3.5 h-3.5" />
-                <span>Choose PES File</span>
+                <span>Choose a .pes file</span>
               </>
             )}
           </>
@@ -81,7 +82,7 @@ export function FileSelector({
             ) : (
               <>
                 <FolderOpenIcon className="w-3.5 h-3.5" />
-                <span>Choose PES File</span>
+                <span>Choose a .pes file</span>
               </>
             )}
           </label>

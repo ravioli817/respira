@@ -160,7 +160,7 @@ describe("getNextStep", () => {
       currentStitch: 2000,
     });
     expect(s.tone).toBe("done");
-    expect(s.lines.join(" ")).toMatch(/Delete Pattern/);
+    expect(s.lines.join(" ")).toMatch(/Delete finished pattern/);
     expect(s.needsPerson).toBe(true);
   });
 

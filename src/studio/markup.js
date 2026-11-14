@@ -22,25 +22,25 @@ export const STUDIO_MARKUP = `
         </button>
       </div>
     <div class="panel-toggles" role="group" aria-label="Editor panels">
-      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="true">Objects</button>
-      <button class="btn" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Properties</button>
+      <button class="btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="true">Parts</button>
+      <button class="btn" id="toggle-properties" aria-controls="properties-panel" aria-expanded="true">Settings</button>
     </div>
     <span class="project-status" id="project-status" role="status"></span>
     <button class="btn" id="projects" hidden>Projects</button>
     <button class="btn-primary" id="send">Prepare to stitch</button>
   </header>
   <div class="editor-workspace">
-  <aside class="objects-panel" id="objects-panel" aria-label="Objects and sewing order">
-    <div class="panel-heading"><h2>Objects <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Collapse objects panel">×</button></div>
-    <p class="hint">Sews from first to last</p>
+  <aside class="objects-panel" id="objects-panel" aria-label="Parts of the design, in stitching order">
+    <div class="panel-heading"><h2>Parts <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the parts list">×</button></div>
+    <p class="hint">Stitched in this order, top first.</p>
     <div id="layers" class="layer-list" role="group" aria-label="Select an existing object"></div>
-    <div class="layer-order"><button class="btn" id="layer-earlier">Sew earlier</button><button class="btn" id="layer-later">Sew later</button></div>
-    <button class="btn" id="new-drawing-object">New drawing object</button>
-    <p class="hint">Overlapping included objects both stitch.</p>
+    <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
+    <button class="btn" id="new-drawing-object">Add another drawing</button>
+    <p class="hint">Where parts overlap, both are stitched.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
-      <div class="readout mono" id="readout">Nothing to stitch yet</div>
+      <div class="readout" id="readout">Nothing to stitch yet</div>
       <p id="editing-object" class="hint" aria-live="polite"></p>
       <div class="heading-controls">
         <button class="btn" id="pan-canvas" aria-pressed="false" hidden>Pan</button>
@@ -88,7 +88,7 @@ export const STUDIO_MARKUP = `
     </div>
   </section>
   <aside class="bench" id="properties-panel" aria-label="Selected object properties">
-    <div class="panel-heading"><h2>Properties</h2><button class="icon-btn" id="close-properties" aria-label="Collapse properties panel">×</button></div>
+    <div class="panel-heading"><h2>Tools and settings</h2><button class="icon-btn" id="close-properties" aria-label="Close tools and settings">×</button></div>
       <details class="panel shape-tools" hidden>
         <summary>Add a shape</summary>
         <label class="stack">Shape<select id="shape-kind"><option value="ellipse">Circle / ellipse</option><option value="rectangle">Rectangle</option><option value="triangle">Triangle</option><option value="star">Star</option><option value="heart">Heart</option></select></label>
@@ -132,7 +132,7 @@ export const STUDIO_MARKUP = `
         <div class="palette" id="draw-palette-bench"></div>
       </div>
       <details class="drawing-recolor">
-        <summary>Recolor existing marks</summary>
+        <summary>Recolor what's drawn</summary>
         <p class="hint">Choose a thread in the palette, then apply it to this drawing. The palette alone changes the thread for new marks.</p>
         <label class="stack">Replace drawing color<select id="recolor-from"><option value="all">All existing colors</option></select></label>
         <button class="btn" id="recolor-drawing">Recolor marks</button>
@@ -196,21 +196,21 @@ export const STUDIO_MARKUP = `
   <div class="layer-controls">
     <label class="stack">Width (mm)<input id="object-width" type="number" min="0.1" max="400" step="0.5"></label>
     <label class="stack">Height (mm)<input id="object-height" type="number" min="0.1" max="400" step="0.5"></label>
-    <label class="stack">Object name<input id="layer-name" maxlength="60"></label>
-    <label class="stack">Move X (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Move Y (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
-    <label class="stack">Scale (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
-    <label class="stack">Rotation (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
+    <label class="stack">Name<input id="layer-name" maxlength="60"></label>
+    <label class="stack">Move across (mm)<input id="layer-x" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Move down (mm)<input id="layer-y" type="number" min="-100" max="100" step="0.5" value="0"></label>
+    <label class="stack">Size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
+    <label class="stack">Turn (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
   </div>
-  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Include in stitching</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
+  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Stitch this part</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
     <p class="hint">Resize keeps proportions. Dimensions include rotation.</p>
     </section>
 
 
     <details class="panel" id="object-stitches">
-      <summary>Underlay and pull compensation</summary>
+      <summary>Advanced: underlay and pull</summary>
       <p class="hint" id="stitch-object-name"></p>
-      <label class="check"><input type="checkbox" id="stitch-custom"> Customize stitches for this object</label>
+      <label class="check"><input type="checkbox" id="stitch-custom"> Use different stitch settings for this part</label>
       <fieldset id="stitch-fields" disabled>
         <div id="fill-stitch-fields">
           <label class="stack">Fill underlay<select id="stitch-fillUnderlay"><option value="none">None</option><option value="tatami">Sparse tatami</option><option value="edge">Inset edge walk</option><option value="edge-tatami">Edge walk + sparse tatami</option></select></label>
@@ -230,7 +230,7 @@ export const STUDIO_MARKUP = `
       <p class="hint">Pull compensation extends each fill endpoint or satin edge by this amount at the final size. It does not enlarge the underlay. Line outlines are unchanged. Thin areas may omit inset fill underlay or reduce satin underlay to a center walk. Review Density inspection and test on your fabric.</p>
     </details>
     <details class="panel" id="settings">
-      <summary>Project stitch defaults</summary>
+      <summary>Stitch settings</summary>
       <div class="field-row"><span>Fill density</span>
         <div class="seg small" role="group" aria-label="Fill density" id="density">
           <button data-spacing="0.5" aria-pressed="false">Light</button>
@@ -243,7 +243,7 @@ export const STUDIO_MARKUP = `
     </details>
 
     <details class="panel sequence">
-      <summary>Color sequence <span class="mono muted" id="seq-sum"></span></summary>
+      <summary>Thread order <span class="mono muted" id="seq-sum"></span></summary>
       <ol id="sequence"></ol>
     </details>
 

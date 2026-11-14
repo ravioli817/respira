@@ -191,7 +191,7 @@ function PlaybackSession({
       className="bg-white dark:bg-gray-800 border rounded-xl p-4 flex flex-col gap-3"
     >
       <div>
-        <h2 className="font-bold text-lg">Stitch playback</h2>
+        <h2 className="font-bold text-lg">Watch it stitch</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Preview only · does not move the machine
         </p>

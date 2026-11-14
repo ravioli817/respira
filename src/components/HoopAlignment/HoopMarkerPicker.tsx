@@ -112,11 +112,11 @@ export function HoopMarkerPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Align hoop photo</DialogTitle>
+          <DialogTitle>Line up the photo</DialogTitle>
           <DialogDescription>
             {remaining > 0
-              ? `Auto-detect the markers, or click the center of each of the 4 corner markers (any order). ${remaining} left.`
-              : "All markers placed — aligning…"}
+              ? `Tap Find the markers, or tap the middle of each of the 4 white squares on the hoop frame, in any order. ${remaining} to go.`
+              : "All four found. Lining up…"}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,10 +128,10 @@ export function HoopMarkerPicker({
             disabled={!imageUrl}
           >
             <SparklesIcon className="w-3.5 h-3.5" />
-            Auto-detect markers
+            Find the markers
           </Button>
           <span className="text-xs text-muted-foreground">
-            or click the 4 markers below
+            or tap the 4 markers yourself
           </span>
         </div>
 

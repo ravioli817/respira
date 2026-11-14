@@ -131,7 +131,7 @@ it("shows current/next threads and keeps recovery available for a thread interru
   render(<StitchPanel onPrepare={vi.fn()} />);
   expect(screen.getByText("Current thread")).toBeTruthy();
   expect(screen.getByText("Next thread")).toBeTruthy();
-  expect(screen.getByText(/Recovery — adjust/)).toBeTruthy();
+  expect(screen.getByText(/Go back or forward a few stitches/)).toBeTruthy();
   fireEvent.click(primary().getByRole("button", { name: "Resume Sewing" }));
   await waitFor(() =>
     expect(useMachineStore.getState().resumeSewing).toHaveBeenCalledOnce(),
@@ -140,7 +140,7 @@ it("shows current/next threads and keeps recovery available for a thread interru
 it("does not guess machine threads from an unrelated prepared draft", () => {
   useMachineStore.setState({ patternInfo: info, machineStatus: M.SEWING });
   render(<StitchPanel onPrepare={vi.fn()} />);
-  expect(screen.getByText(/Thread details are unavailable/)).toBeTruthy();
+  expect(screen.getByText(/this device has no copy of/)).toBeTruthy();
   expect(screen.queryByText("Current thread")).toBeNull();
   expect(screen.queryByText(/Stitching Red/)).toBeNull();
 });
@@ -209,7 +209,7 @@ it("treats a machine that is mid-job as holding a job while its details are read
     machineStatus: M.COLOR_CHANGE_WAIT,
   });
   render(<StitchPanel onPrepare={vi.fn()} />);
-  expect(screen.getByText(/Machine job/)).toBeTruthy();
+  expect(screen.getByText(/On the machine/)).toBeTruthy();
   expect(
     screen.getByText(/Reading the job back from the machine/),
   ).toBeTruthy();
@@ -217,4 +217,28 @@ it("treats a machine that is mid-job as holding a job while its details are read
   expect(
     primary().queryByRole("button", { name: /Upload prepared design/ }),
   ).toBeNull();
+});
+it("names the design the way its maker did, and counts threads and stitches in plain words", () => {
+  useMachineStore.setState({
+    patternInfo: info,
+    machineStatus: M.SEWING,
+    sewingProgress: {
+      currentStitch: 3,
+      currentTime: 0,
+      stopTime: 0,
+      positionX: 0,
+      positionY: 0,
+    },
+  });
+  usePatternStore.setState({ uploadedPesData: data });
+  render(<StitchPanel onPrepare={vi.fn()} />);
+  // "two", not "two.pes"
+  expect(screen.getByText("On the machine: two")).toBeTruthy();
+  expect(screen.getByText("Thread 1 of 2")).toBeTruthy();
+  expect(
+    screen.getByText(
+      `3 of ${data.penStitches.stitches.length.toLocaleString()} stitches`,
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Thread block|stitch positions|\.pes/)).toBeNull();
 });

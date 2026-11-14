@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * PositionPresets Component
  *
@@ -127,11 +128,8 @@ export function PositionPresets({
   };
 
   return (
-    <div className="absolute top-2 sm:top-2.5 right-2 sm:right-2.5 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm p-2 sm:p-2.5 rounded-lg shadow-lg z-10">
-      <h4 className="m-0 mb-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-300 dark:border-gray-600 pb-1">
-        Align
-      </h4>
-      <div className="grid grid-cols-3 gap-0.5">
+    <div>
+      <div className="grid grid-cols-3 gap-1">
         {presetGrid.map((row, rowIdx) =>
           row.map(({ preset, label }) => (
             <button
@@ -139,7 +137,8 @@ export function PositionPresets({
               onClick={() => handleClick(preset)}
               disabled={disabled}
               title={label}
-              className={`w-6 h-6 sm:w-7 sm:h-7 rounded border border-gray-300 dark:border-gray-600
+              aria-label={label}
+              className={`size-11 rounded border border-gray-300 dark:border-gray-600
                 flex items-center justify-center
                 hover:bg-primary-100 dark:hover:bg-primary-900 hover:border-primary-400 dark:hover:border-primary-500
                 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent

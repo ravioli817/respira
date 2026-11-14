@@ -28,9 +28,19 @@ import { ZoomControls } from "./ZoomControls";
 import { PatternLayer } from "./PatternLayer";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useCanvasViewport, usePatternTransform } from "@/hooks";
 
-export function PatternCanvas() {
+export function PatternCanvas({
+  showThreads = false,
+}: {
+  /** List the design's threads under the canvas (Prepare; Stitch has its own thread cards). */
+  showThreads?: boolean;
+}) {
   // Machine store
   const { sewingProgress, machineInfo } = useMachineStore(
     useShallow((state) => ({
@@ -159,14 +169,14 @@ export function PatternCanvas() {
           <PhotoIcon className={`w-6 h-6 ${iconColor} flex-shrink-0 mt-0.5`} />
           <div className="flex-1 min-w-0 flex items-center justify-between">
             <div>
-              <CardTitle className="text-sm">Pattern Preview</CardTitle>
+              <CardTitle className="text-sm">Your design in the hoop</CardTitle>
               {hasPattern ? (
                 <CardDescription className="text-xs">
                   {patternDimensions}
                 </CardDescription>
               ) : (
                 <CardDescription className="text-xs">
-                  No pattern loaded
+                  No design yet
                 </CardDescription>
               )}
             </div>
@@ -193,6 +203,22 @@ export function PatternCanvas() {
             >
               Rotate 90°
             </Button>
+            {machineInfo && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline">Line up in the hoop</Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-2">
+                  <PositionPresets
+                    pesData={pesData}
+                    patternRotation={localPatternRotation}
+                    machineInfo={machineInfo}
+                    onPositionSelect={handlePositionPreset}
+                    disabled={false}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         )}
         <div
@@ -280,29 +306,16 @@ export function PatternCanvas() {
           {/* Placeholder overlay when no pattern is loaded */}
           {!hasPattern && (
             <div className="flex items-center justify-center h-full text-gray-600 dark:text-gray-400 italic">
-              Load a PES file to preview the pattern
+              Nothing to show yet. Make a design on Create, or open a .pes file
+              on Prepare.
             </div>
           )}
+        </div>
 
-          {/* Pattern info overlays */}
-          {displayPattern && (
-            <>
-              <ThreadLegend colors={displayPattern.uniqueColors} />
-
-              {pesData &&
-                machineInfo &&
-                !patternUploaded &&
-                !isUploading &&
-                !uploadedPesData && (
-                  <PositionPresets
-                    pesData={pesData}
-                    patternRotation={localPatternRotation}
-                    machineInfo={machineInfo}
-                    onPositionSelect={handlePositionPreset}
-                    disabled={false}
-                  />
-                )}
-
+        {/* Everything that used to float on the canvas sits under it, so the hoop is never covered */}
+        {displayPattern && (
+          <div className="flex-shrink-0 pt-3 space-y-3">
+            <div className="flex items-center justify-between gap-4">
               <PatternPositionIndicator
                 offset={
                   isUploading || patternUploaded || uploadedPesData
@@ -313,16 +326,18 @@ export function PatternCanvas() {
                 isLocked={patternUploaded || !!uploadedPesData}
                 isUploading={isUploading}
               />
-
               <ZoomControls
                 scale={stageScale}
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
                 onZoomReset={handleZoomReset}
               />
-            </>
-          )}
-        </div>
+            </div>
+            {showThreads && (
+              <ThreadLegend colors={displayPattern.uniqueColors} />
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

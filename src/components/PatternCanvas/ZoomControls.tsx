@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * ZoomControls Component
  *
@@ -22,13 +23,14 @@ export function ZoomControls({
   onZoomReset,
 }: ZoomControlsProps) {
   return (
-    <div className="absolute bottom-2 sm:bottom-5 right-2 sm:right-5 flex gap-1.5 sm:gap-2 items-center bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow-lg z-10">
+    <div className="flex flex-shrink-0 gap-2 items-center">
       <Button
         variant="outline"
         size="icon"
-        className="w-7 h-7 sm:w-8 sm:h-8"
+        className="size-10"
         onClick={onZoomIn}
-        title="Zoom In"
+        title="Zoom in"
+        aria-label="Zoom in"
       >
         <PlusIcon className="w-4 h-4 sm:w-5 sm:h-5" />
       </Button>
@@ -38,18 +40,20 @@ export function ZoomControls({
       <Button
         variant="outline"
         size="icon"
-        className="w-7 h-7 sm:w-8 sm:h-8"
+        className="size-10"
         onClick={onZoomOut}
-        title="Zoom Out"
+        title="Zoom out"
+        aria-label="Zoom out"
       >
         <MinusIcon className="w-4 h-4 sm:w-5 sm:h-5" />
       </Button>
       <Button
         variant="outline"
         size="icon"
-        className="w-7 h-7 sm:w-8 sm:h-8 ml-1"
+        className="size-10"
         onClick={onZoomReset}
-        title="Reset Zoom"
+        title="Show the whole hoop"
+        aria-label="Show the whole hoop"
       >
         <ArrowPathIcon className="w-4 h-4 sm:w-5 sm:h-5" />
       </Button>

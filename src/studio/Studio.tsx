@@ -146,7 +146,7 @@ export function Studio({ className, onSend }: StudioProps) {
       work
         .then(() => {
           if (activeId.current === id && revision.current === version) {
-            setStatus("Saved on this device");
+            setStatus("Saved");
             setError("");
           }
         })
@@ -176,7 +176,7 @@ export function Studio({ className, onSend }: StudioProps) {
       onProjects: () => openPanelRef.current(),
       onDirty: () => {
         revision.current++;
-        setStatus("Unsaved changes…");
+        setStatus("Not saved yet…");
       },
       onSave: (data, thumbnail) => {
         void persist(document.id, data, thumbnail);

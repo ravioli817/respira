@@ -77,14 +77,14 @@ export function HoopAlignment() {
           />
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-              Hoop Photo
+              Photo of your hoop
             </h3>
             <p className="text-xs text-gray-600 dark:text-gray-400">
               {status === "aligned"
-                ? "Aligned to hoop markers"
+                ? "Lined up with the hoop"
                 : status === "loaded"
-                  ? "Loaded — align to the markers"
-                  : "Overlay a photo of the hooped fabric"}
+                  ? "Photo added. Now line it up with the hoop"
+                  : "See your fabric under the design while you place it"}
             </p>
           </div>
         </div>
@@ -104,7 +104,7 @@ export function HoopAlignment() {
             onClick={() => fileInputRef.current?.click()}
           >
             <PhotoIcon className="w-3.5 h-3.5" />
-            Load hoop photo
+            Take or choose a photo
           </Button>
         )}
 
@@ -115,7 +115,7 @@ export function HoopAlignment() {
               className="flex-[2]"
               onClick={() => setPickerOpen(true)}
             >
-              Align markers
+              Line it up
             </Button>
             <Button variant="outline" onClick={clear}>
               Remove
@@ -127,7 +127,7 @@ export function HoopAlignment() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <label className="text-xs text-gray-600 dark:text-gray-400">
-                Show overlay
+                Show the photo
               </label>
               <Switch
                 checked={visible}
@@ -137,7 +137,7 @@ export function HoopAlignment() {
             </div>
             <div className="flex items-center justify-between gap-3">
               <label className="text-xs text-gray-600 dark:text-gray-400">
-                Marker check
+                Show where the markers should be
               </label>
               <Switch
                 checked={showMarkerCheck}
@@ -169,7 +169,7 @@ export function HoopAlignment() {
                 className="flex-1"
                 onClick={handleRealign}
               >
-                Re-align
+                Line up again
               </Button>
               <Button variant="outline" size="sm" onClick={clear}>
                 Remove

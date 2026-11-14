@@ -17,6 +17,7 @@ import {
   type StitchCommand,
 } from "./workflow";
 import { preparePattern } from "../prepare/preparePattern";
+import { designName } from "../prepare/designName";
 import { usePatternRotationUpload } from "../hooks/domain/usePatternRotationUpload";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
 import {
@@ -63,14 +64,17 @@ function ThreadCard({
   title,
   block,
   empty,
+  of,
 }: {
   title: string;
   block: ColorBlock | null;
   empty: string;
+  /** How many threads the design uses. */
+  of: number;
 }) {
   return (
     <div className="rounded-lg border bg-white dark:bg-gray-800 p-3 min-w-0">
-      <p className="text-xs uppercase font-semibold text-gray-600 dark:text-gray-300">
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
         {title}
       </p>
       {block ? (
@@ -85,7 +89,7 @@ function ThreadCard({
               {threadLabel(block)}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Thread block {block.colorIndex + 1}
+              Thread {block.colorIndex + 1} of {of}
             </p>
           </div>
         </div>
@@ -330,11 +334,11 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
         <h1 className="font-bold text-lg">Stitch</h1>
         <p className="text-sm truncate text-gray-600 dark:text-gray-300">
           {uploaded
-            ? "Machine job"
+            ? "On the machine"
             : p.data
-              ? "Prepared design"
-              : "No design prepared"}
-          {display ? `: ${p.name}` : ""}
+              ? "Ready to send"
+              : "Nothing prepared yet"}
+          {display ? `: ${designName(p.name)}` : ""}
         </p>
       </div>
       <NextStepCard embedded>
@@ -401,6 +405,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
               title={focus.label}
               block={focus.current}
               empty="No thread data"
+              of={blocks.length}
             />
             <ThreadCard
               title={
@@ -409,14 +414,15 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
                   : "Next thread"
               }
               block={focus.next}
-              empty="No further thread changes"
+              empty="No more thread changes"
+              of={blocks.length}
             />
           </div>
         )}
         {uploaded && !display && (
           <p className="text-sm">
-            Thread details are unavailable for the machine’s loaded job. The
-            local draft is not used to guess its thread colors.
+            The machine holds a design this device has no copy of, so its thread
+            colors cannot be shown here.
           </p>
         )}
         {uploaded && total === 0 && (
@@ -428,8 +434,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
           <div>
             <div className="flex justify-between text-sm mb-2">
               <span>
-                {current.toLocaleString()} / {total.toLocaleString()} stitch
-                positions
+                {current.toLocaleString()} of {total.toLocaleString()} stitches
               </span>
               <span>{percent.toFixed(1)}%</span>
             </div>
@@ -439,7 +444,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
         {uploaded && canShowStepControl(m.status, current > 0) && (
           <fieldset disabled={busy}>
             <legend className="font-semibold text-sm mb-2">
-              Recovery — adjust the stitch position
+              Go back or forward a few stitches
             </legend>
             <StitchStepControl
               currentStitch={current}
@@ -456,7 +461,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
         {blocks.length > 0 && (
           <details>
             <summary className="cursor-pointer text-sm font-semibold">
-              All thread blocks ({blocks.length})
+              All {blocks.length} threads
             </summary>
             {canChoose && (
               <div className="mt-2 flex items-center justify-between gap-3">
@@ -506,7 +511,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
         )}
         <details>
           <summary className="cursor-pointer text-sm font-semibold">
-            Pattern details and other actions
+            More
           </summary>
           <div className="mt-3 space-y-3">
             {display && <PatternInfo pesData={display} showThreadBlocks />}
@@ -525,7 +530,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
               onClick={onPrepare}
               disabled={u.uploading}
             >
-              Review or choose a design on Prepare
+              Go to Prepare
             </Button>
             {uploaded &&
               canStartMaskTrace(m.status, current > 0) &&
@@ -548,7 +553,7 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
                   disabled={busy}
                   onClick={() => void run("delete", true)}
                 >
-                  Delete Pattern
+                  Delete the design from the machine
                 </Button>
               )}
           </div>

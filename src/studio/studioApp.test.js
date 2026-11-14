@@ -725,8 +725,8 @@ it("shows the host's save status and Projects button in the toolbar", () => {
   expect(button("#projects").hidden).toBe(false);
   button("#projects").click();
   expect(onProjects).toHaveBeenCalledOnce();
-  studio.setProjectStatus("Saved on this device");
-  expect(button("#project-status").textContent).toBe("Saved on this device");
+  studio.setProjectStatus("Saved");
+  expect(button("#project-status").textContent).toBe("Saved");
 });
 
 it("saves both new embroidery fonts and trim rules through undo, duplication and v4 reopening", async () => {

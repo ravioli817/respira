@@ -122,7 +122,7 @@ export function DensityInspector({
       className="border rounded-xl bg-white dark:bg-gray-800 p-4 space-y-4"
     >
       <div>
-        <h2 className="text-lg font-bold">Density inspection</h2>
+        <h2 className="text-lg font-bold">Stitch density</h2>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           Needle penetrations per mm², from final machine stitches. Includes
           underlay and lock stitches; ignores jumps, cuts and color stops.

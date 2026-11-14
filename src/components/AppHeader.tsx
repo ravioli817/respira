@@ -71,7 +71,10 @@ export function AppHeader({ compact = false }: { compact?: boolean }) {
     handleOpenChange: handlePopoverOpenChange,
   } = useErrorPopoverState({
     // Stitch already shows error details beside its primary action. Keep the badge manually available.
-    autoOpen: compact,
+    // Off the Stitch screen the box would open over the tabs and toolbar, so a machine fault
+    // (thread break and the like) stays a badge there: the chime and the dot on the Stitch tab
+    // call attention to it. Only a problem with nothing else to show it still opens by itself.
+    autoOpen: compact && !hasError(machineError),
     machineError,
     machineErrorMessage,
     pyodideError,
@@ -185,7 +188,10 @@ export function AppHeader({ compact = false }: { compact?: boolean }) {
                       onClick={disconnect}
                       size="sm"
                       variant="outline"
-                      className="gap-1.5 bg-white/10 hover:bg-danger-600 text-primary-100 hover:text-white border-white/20 hover:border-danger-600 flex-shrink-0"
+                      className={cn(
+                        "gap-1.5 bg-white/10 hover:bg-danger-600 text-primary-100 hover:text-white border-white/20 hover:border-danger-600 flex-shrink-0",
+                        compact && "h-8",
+                      )}
                       aria-label="Disconnect from machine"
                     >
                       <XMarkIcon className="w-3 h-3" />

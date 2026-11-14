@@ -1,3 +1,4 @@
+/* Changed in this fork (Respira with a Create screen): see "This fork" in README.md. */
 @import "tailwindcss";
 
 @plugin "tailwindcss-animate";
@@ -330,4 +331,13 @@
 
 .animate-skeleton {
   animation: skeleton-loading 2s ease-in-out infinite;
+}
+
+/* Fork: larger small text. The app is read on a tablet at arm's length while handling fabric;
+   Respira's 12 px captions are a desk size. Nothing is set below 14 px now. */
+@theme {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: calc(1.375 / 0.9375);
 }

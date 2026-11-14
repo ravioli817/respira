@@ -33,7 +33,7 @@ export function mountStudio(
   destroy(): void;
   snapshot(): ProjectData;
   thumbnail(): string;
-  /** Text for the save status shown in the toolbar, e.g. "Saved on this device". */
+  /** Text for the save status shown in the toolbar, e.g. "Saved". */
   setProjectStatus(text: string): void;
   setPlacement(value: { x: number; y: number; rotation: number }): void;
 };

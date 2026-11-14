@@ -11,6 +11,8 @@ interface ScreenTabsProps {
   patternName?: string;
   /** Shown at the end of the row: connection status and the Connect button. */
   trailing?: ReactNode;
+  /** The machine is waiting for someone and the Stitch screen is not showing. */
+  stitchNeedsYou?: boolean;
 }
 
 const TABS = [
@@ -40,6 +42,7 @@ export function ScreenTabs({
   onChange,
   patternName,
   trailing,
+  stitchNeedsYou = false,
 }: ScreenTabsProps) {
   return (
     <nav
@@ -72,10 +75,19 @@ export function ScreenTabs({
             <span className="flex flex-col leading-tight">
               <span className="text-base font-semibold text-gray-900 dark:text-white">
                 {label}
+                {id === "stitch" && stitchNeedsYou && (
+                  <span
+                    className="ml-2 inline-block w-2.5 h-2.5 rounded-full bg-warning-500 align-middle animate-pulse"
+                    role="img"
+                    aria-label="The machine needs you"
+                  />
+                )}
               </span>
               {/* The hint line needs a wide and tall window; a short one keeps the height for the hoop */}
               <span className="text-xs text-gray-600 dark:text-gray-400 hidden lg:[@media(min-height:800px)]:block">
-                {id === "prepare" && patternName ? patternName : hint}
+                {id === "prepare" && patternName
+                  ? patternName.replace(/\.pes$/i, "")
+                  : hint}
               </span>
             </span>
           </button>

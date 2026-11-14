@@ -357,7 +357,7 @@ export function getNextStep(input: NextStepInput): NextStep | null {
         lines: [
           "Take the frame off the machine and remove your fabric.",
           `Press ${ACCEPT}.`,
-          "Tap Delete Pattern to start something new.",
+          "Tap Delete finished pattern to start something new.",
         ],
         needsPerson: true,
       };

@@ -14,6 +14,7 @@ import { usePatternValidation } from "../hooks/domain/usePatternValidation";
 import { HoopAlignment } from "../components/HoopAlignment";
 import { Switch } from "../components/ui/switch";
 import { usePrepareOptions } from "./prepareOptions";
+import { designName } from "./designName";
 import { useHoopImageStore } from "../stores/useHoopImageStore";
 
 export function PrepareScreen({
@@ -88,10 +89,10 @@ export function PrepareScreen({
             <h1 className="text-xl font-bold">Prepare to stitch</h1>
             {prepared && (
               <p className="font-medium break-words">
-                {fileName}
+                {designName(fileName)}
                 <br />
                 <span className="text-sm font-normal">
-                  Final machine area: {formatPatternDimensions(prepared.data)}
+                  Size when stitched: {formatPatternDimensions(prepared.data)}
                 </span>
               </p>
             )}
@@ -107,13 +108,16 @@ export function PrepareScreen({
             )}
             {stats && (
               <p className="text-sm">
-                {stats.needlePoints.toLocaleString()} needle points ·{" "}
-                {stats.colors} threads · {stats.cuts} cuts
+                {stats.needlePoints.toLocaleString()} stitches, {stats.colors}{" "}
+                {stats.colors === 1 ? "thread" : "threads"}, {stats.cuts}{" "}
+                {stats.cuts === 1 ? "thread cut" : "thread cuts"}
                 {stats.pauses > 0 &&
-                  ` · ${stats.pauses} ${stats.pauses === 1 ? "pause" : "pauses"} after cuts`}
+                  `, ${stats.pauses} ${stats.pauses === 1 ? "pause" : "pauses"} after cuts`}
+                .
                 <br />
-                About {Math.max(1, Math.ceil(stats.needlePoints / 400))} min of
-                sewing at 400 stitches/min, plus thread changes and stops.
+                About {Math.max(1, Math.ceil(stats.needlePoints / 400))}{" "}
+                {Math.ceil(stats.needlePoints / 400) > 1 ? "minutes" : "minute"}{" "}
+                of sewing, plus time to change threads.
               </p>
             )}
             {/* From Jibbe23/respira (2f17126, 6f44986): each cut also stops the machine. */}
@@ -158,7 +162,15 @@ export function PrepareScreen({
           {/* Photo of the hooped fabric under the design, from Dunar Dolorgiet's hoop-photo alignment
               (jhbruhn/respira#95). Placement happens on this screen, so the card lives here. */}
           {prepared && !uploadedPesData && <HoopAlignment />}
-          <FileUpload preparationOnly />
+          {/* Tucked away: most designs come from Create, and this card repeats the summary above */}
+          <details className="rounded-xl border bg-white dark:bg-gray-800">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold min-h-11">
+              Use an embroidery file instead (.pes)
+            </summary>
+            <div className="p-2 pt-0">
+              <FileUpload preparationOnly />
+            </div>
+          </details>
         </div>
         <div className="min-w-0 space-y-3">
           {prepared ? (
@@ -172,24 +184,24 @@ export function PrepareScreen({
                   variant={view === "placement" ? "default" : "outline"}
                   onClick={() => setView("placement")}
                 >
-                  Placement
+                  Place in the hoop
                 </Button>
                 <Button
                   variant={view === "playback" ? "default" : "outline"}
                   onClick={() => setView("playback")}
                 >
-                  Stitch playback
+                  Watch it stitch
                 </Button>
                 <Button
                   variant={view === "density" ? "default" : "outline"}
                   onClick={() => setView("density")}
                 >
-                  Density inspection
+                  Stitch density (advanced)
                 </Button>
               </div>
               {view === "placement" ? (
-                <div className="h-[min(75dvh,720px)] min-h-[400px]">
-                  <PatternCanvas />
+                <div className="h-[min(84dvh,820px)] min-h-[460px]">
+                  <PatternCanvas showThreads />
                 </div>
               ) : view === "density" ? (
                 <DensityInspector
@@ -209,10 +221,11 @@ export function PrepareScreen({
             </>
           ) : (
             <section className="border rounded-xl p-8 bg-white dark:bg-gray-800">
-              <h2 className="font-bold text-lg">Choose a design to review</h2>
+              <h2 className="font-bold text-lg">Nothing to place yet</h2>
               <p className="mt-2">
-                Prepare a design from Create, or choose a PES file. You can
-                review it before connecting.
+                Make a design on Create and tap Prepare to stitch, or open an
+                embroidery file (.pes). The machine does not need to be
+                connected for this.
               </p>
             </section>
           )}

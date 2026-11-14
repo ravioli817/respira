@@ -1,8 +1,9 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * PatternPositionIndicator Component
  *
- * Displays the current pattern position and rotation
- * Shows locked state when pattern is uploaded or being uploaded
+ * One line under the canvas: what dragging does, and where the design sits.
+ * Says so when the design has been sent and can no longer be moved.
  */
 
 import { LockClosedIcon } from "@heroicons/react/24/solid";
@@ -20,42 +21,25 @@ export function PatternPositionIndicator({
   isLocked,
   isUploading,
 }: PatternPositionIndicatorProps) {
+  const fixed = isUploading || isLocked;
   return (
-    <div
-      className={`absolute bottom-16 sm:bottom-20 right-2 sm:right-5 backdrop-blur-sm p-2 sm:p-2.5 px-2.5 sm:px-3.5 rounded-lg shadow-lg z-[11] min-w-[160px] sm:min-w-[180px] transition-colors ${
-        isUploading || isLocked
-          ? "bg-amber-50/95 dark:bg-amber-900/80 border-2 border-amber-300 dark:border-amber-600"
-          : "bg-white/95 dark:bg-gray-800/95"
-      }`}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-          Pattern Position:
-        </div>
-        {(isUploading || isLocked) && (
-          <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-            <LockClosedIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            <span className="text-xs font-bold">
-              {isUploading ? "UPLOADING" : "LOCKED"}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="text-sm font-semibold text-primary-600 dark:text-primary-400 mb-1">
-        X: {(offset.x / 10).toFixed(1)}mm, Y: {(offset.y / 10).toFixed(1)}mm
-      </div>
-      {!isUploading && !isLocked && rotation !== 0 && (
-        <div className="text-sm font-semibold text-primary-600 dark:text-primary-400 mb-1">
-          Rotation: {rotation.toFixed(1)}°
-        </div>
+    <p className="text-sm text-gray-700 dark:text-gray-300 min-w-0">
+      {fixed && (
+        <LockClosedIcon
+          aria-hidden="true"
+          className="inline w-4 h-4 mr-1.5 -mt-0.5 text-amber-600 dark:text-amber-400"
+        />
       )}
-      <div className="text-xs text-gray-600 dark:text-gray-400 italic">
-        {isUploading
-          ? "Uploading pattern..."
-          : isLocked
-            ? "Pattern locked • Drag background to pan"
-            : "Drag pattern to move • Drag background to pan"}
-      </div>
-    </div>
+      {isUploading
+        ? "Sending to the machine…"
+        : isLocked
+          ? "Sent to the machine, so it can't be moved now. Drag to look around."
+          : "Drag the design to move it. Drag the background to look around."}{" "}
+      <span className="whitespace-nowrap tabular-nums text-gray-500 dark:text-gray-400">
+        {(offset.x / 10).toFixed(1)} mm across, {(offset.y / 10).toFixed(1)} mm
+        down from the center
+        {!fixed && rotation !== 0 && `, turned ${rotation.toFixed(0)}°`}
+      </span>
+    </p>
   );
 }

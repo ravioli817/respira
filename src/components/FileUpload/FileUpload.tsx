@@ -186,7 +186,7 @@ export function FileUpload({
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
               {preparationOnly
-                ? "Design details / import PES"
+                ? "Open an embroidery file (.pes)"
                 : "Upload the prepared design"}
             </h3>
             {pesData && displayFileName ? (
