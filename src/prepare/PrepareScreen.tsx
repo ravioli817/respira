@@ -1,5 +1,5 @@
 import { formatPatternDimensions } from "./patternDimensions";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePatternStore } from "../stores/usePatternStore";
 import { useMachineStore } from "../stores/useMachineStore";
@@ -116,65 +116,136 @@ export function PrepareScreen({
   const name = displayName(fileName);
   const minutes = stats ? Math.max(1, Math.ceil(stats.needlePoints / 400)) : 0;
   const onMachine = !!uploadedPesData;
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const reviewRef = useRef<HTMLDivElement>(null);
+  const previousView = useRef(shown);
+  useEffect(() => {
+    if (
+      previousView.current !== shown &&
+      window.matchMedia?.("(max-width: 1023px)").matches
+    )
+      reviewRef.current?.scrollIntoView?.({ block: "start" });
+    previousView.current = shown;
+  }, [shown]);
 
   return (
-    <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,372px)_minmax(0,1fr)] content-start lg:content-normal overflow-y-auto lg:overflow-hidden">
-      {/* Beside the hoop the panel scrolls within its column; stacked above it, it takes its own height. */}
-      <div className="bg-paper text-ink lg:border-r border-line flex flex-col lg:min-h-0">
-        <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-5 p-5 sm:p-6">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-[28px] font-bold leading-[1.15] tracking-tight text-balance">
-              {!prepared
-                ? "Nothing to place yet"
-                : onMachine
-                  ? "This design is on the machine"
-                  : "Put it where you want it"}
-            </h1>
-            <p className="text-ink-soft">
-              {!prepared ? (
-                <>
-                  Draw something on Create, then tap Place. The machine does not
-                  need to be connected for this.
-                </>
-              ) : onMachine ? (
-                <>
-                  It can't be moved now. To place a different design, delete
-                  this one on Stitch first.
-                </>
-              ) : (
-                <>
-                  Drag {name ? `“${name}”` : "your design"} inside the hoop.
-                  Nothing goes to the machine yet.
-                </>
-              )}
+    <main className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,372px)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] content-start lg:content-normal overflow-y-auto lg:overflow-hidden">
+      <section
+        aria-label="Placement summary"
+        className="bg-paper text-ink p-5 sm:p-6 flex flex-col gap-3 lg:border-r border-line lg:col-start-1 lg:row-start-1"
+      >
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[28px] font-bold leading-[1.15] tracking-tight text-balance">
+            {!prepared
+              ? "Nothing to place yet"
+              : onMachine
+                ? "This design is on the machine"
+                : "Put it where you want it"}
+          </h1>
+          <p className="text-ink-soft">
+            {!prepared ? (
+              <>
+                Draw something on Create, then tap Place. The machine does not
+                need to be connected for this.
+              </>
+            ) : onMachine ? (
+              <>
+                It can't be moved now. To place a different design, delete this
+                one on Stitch first.
+              </>
+            ) : (
+              <>
+                Drag {name ? `“${name}”` : "your design"} inside the hoop.
+                Nothing goes to the machine yet.
+              </>
+            )}
+          </p>
+        </div>
+
+        {prepared && stats && (
+          <div className="flex flex-col gap-1">
+            <p>
+              <strong>{formatPatternDimensions(prepared.data)}</strong> when
+              stitched
+            </p>
+            <p>
+              <strong>
+                About {minutes} {minutes === 1 ? "minute" : "minutes"}
+              </strong>{" "}
+              of sewing, {stats.needlePoints.toLocaleString()} stitches
+              {stats.colors > 1 && ", plus time to change threads"}
             </p>
           </div>
+        )}
 
-          {prepared && stats && (
-            <div className="flex flex-col gap-1">
-              <p>
-                <strong>{formatPatternDimensions(prepared.data)}</strong> when
-                stitched
-              </p>
-              <p>
-                <strong>
-                  About {minutes} {minutes === 1 ? "minute" : "minutes"}
-                </strong>{" "}
-                of sewing, {stats.needlePoints.toLocaleString()} stitches
-                {stats.colors > 1 && ", plus time to change threads"}
-              </p>
+        {validation.error && (
+          <p
+            role="alert"
+            className="rounded-xl border-l-8 border-pin bg-danger-50 dark:bg-danger-950 px-4 py-3"
+          >
+            {validation.error}
+          </p>
+        )}
+      </section>
+      <div
+        ref={reviewRef}
+        aria-label="Design review"
+        className={cn(
+          "min-w-0 min-h-[400px] lg:h-auto lg:min-h-0 lg:col-start-2 lg:row-start-1 lg:row-span-3 flex-col",
+          prepared ? "flex" : "hidden lg:flex",
+          shown === "placement" ? "h-[min(64dvh,640px)]" : "h-max",
+        )}
+      >
+        {shown === "placement" || !prepared ? (
+          <PatternCanvas />
+        ) : (
+          <div className="mat-surface p-3 sm:p-5 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <div className="max-w-3xl mx-auto text-ink">
+              {shown === "density" ? (
+                <DensityInspector
+                  pattern={prepared.data}
+                  offset={prepared.offset}
+                  hoopWidth={machineInfo?.maxWidth}
+                  hoopHeight={machineInfo?.maxHeight}
+                />
+              ) : (
+                <StitchPlayback
+                  pattern={prepared.data}
+                  offset={prepared.offset}
+                  hoopWidth={machineInfo?.maxWidth}
+                  hoopHeight={machineInfo?.maxHeight}
+                />
+              )}
             </div>
+          </div>
+        )}
+      </div>
+      <section
+        aria-label="Placement options"
+        className="bg-paper text-ink p-5 sm:p-6 lg:pt-0 lg:min-h-0 lg:overflow-y-auto lg:border-r border-line lg:col-start-1 lg:row-start-2"
+      >
+        {prepared && (
+          <button
+            type="button"
+            className={cn(ROW, "lg:hidden")}
+            aria-expanded={optionsOpen}
+            aria-controls="placement-options"
+            onClick={() => setOptionsOpen(!optionsOpen)}
+          >
+            Threads and options{" "}
+            <span aria-hidden className="ml-auto">
+              {optionsOpen ? "−" : "+"}
+            </span>
+          </button>
+        )}
+        <div
+          id="placement-options"
+          className={cn(
+            "flex-col gap-5 lg:flex",
+            optionsOpen || !prepared ? "flex" : "hidden",
+            prepared && "mt-4 lg:mt-0",
           )}
-
-          {validation.error && (
-            <p
-              role="alert"
-              className="rounded-xl border-l-8 border-pin bg-danger-50 dark:bg-danger-950 px-4 py-3"
-            >
-              {validation.error}
-            </p>
-          )}
-
+        >
           {prepared && (
             <div className="flex flex-col gap-2.5">
               <h2 className="text-xl font-bold">Threads you will need</h2>
@@ -314,52 +385,25 @@ export function PrepareScreen({
             </div>
           </details>
         </div>
-
-        <div className="flex-shrink-0 p-5 sm:p-6 pt-3 sm:pt-3 border-t border-line lg:border-t-0">
-          {prepared ? (
-            <button
-              type="button"
-              className="w-full min-h-[60px] px-4 rounded-[14px] bg-action text-white text-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!validation.fits}
-              onClick={onContinue}
-            >
-              {onMachine ? "Go to Stitch" : "Next: send it and stitch"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="w-full min-h-[60px] px-4 rounded-[14px] bg-action text-white text-xl font-bold cursor-pointer"
-              onClick={onCreate}
-            >
-              Go to Create
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="min-w-0 min-h-[min(36rem,115vw)] lg:min-h-0 flex flex-col">
-        {shown === "placement" || !prepared ? (
-          <PatternCanvas />
+      </section>
+      <div className="bg-paper p-5 sm:p-6 pt-3 sm:pt-3 border-t border-line lg:border-t-0 lg:border-r lg:col-start-1 lg:row-start-3">
+        {prepared ? (
+          <button
+            type="button"
+            className="w-full min-h-[60px] px-4 rounded-[14px] bg-action text-white text-xl font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!validation.fits}
+            onClick={onContinue}
+          >
+            {onMachine ? "Go to Stitch" : "Next: send it and stitch"}
+          </button>
         ) : (
-          <div className="mat-surface flex-1 min-h-0 overflow-y-auto p-3 sm:p-5">
-            <div className="max-w-3xl mx-auto text-ink">
-              {shown === "density" ? (
-                <DensityInspector
-                  pattern={prepared.data}
-                  offset={prepared.offset}
-                  hoopWidth={machineInfo?.maxWidth}
-                  hoopHeight={machineInfo?.maxHeight}
-                />
-              ) : (
-                <StitchPlayback
-                  pattern={prepared.data}
-                  offset={prepared.offset}
-                  hoopWidth={machineInfo?.maxWidth}
-                  hoopHeight={machineInfo?.maxHeight}
-                />
-              )}
-            </div>
-          </div>
+          <button
+            type="button"
+            className="w-full min-h-[60px] px-4 rounded-[14px] bg-action text-white text-xl font-bold cursor-pointer"
+            onClick={onCreate}
+          >
+            Go to Create
+          </button>
         )}
       </div>
     </main>

@@ -1,5 +1,7 @@
 import type { ProjectData } from "../projects/projectFile";
 /** Types for the plain-JavaScript Create screen in studioApp.js. */
+export type StudioSendResult = "sent" | "empty" | "blocked";
+
 export interface StudioDesign {
   name: string;
   projectId?: string;
@@ -37,7 +39,7 @@ export function mountStudio(
   destroy(): void;
   snapshot(): ProjectData;
   thumbnail(): string;
-  /** Hands the design to onSend, as the Next button does. False when there is nothing to stitch yet. */
-  send(): boolean;
+  /** Hands the design to onSend, as the Next button does. Reports sent, genuinely empty, or blocked by generation/validation. */
+  send(): StudioSendResult;
   setPlacement(value: { x: number; y: number; rotation: number }): void;
 };

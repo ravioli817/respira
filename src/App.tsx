@@ -64,12 +64,20 @@ function App() {
           useMachineUploadStore.getState().isUploading ||
           !!pattern.uploadedPesData;
         const openedFile = !!pattern.pesData && !pattern.sourceProjectId;
-        if (
-          !machineBusy &&
-          !openedFile &&
-          useProjectUi.getState().sendToPlace()
-        )
-          return;
+        if (!machineBusy && !openedFile) {
+          const result = useProjectUi.getState().sendToPlace();
+          // Pending or invalid edits stay on Create; a genuinely empty design opens
+          // empty Place for PES import, never the previous project's stitch snapshot.
+          if (result !== "empty") return;
+          if (pattern.pesData)
+            usePatternStore.setState({
+              pesData: null,
+              currentFileName: "",
+              sourceProjectId: null,
+              patternOffset: { x: 0, y: 0 },
+              patternRotation: 0,
+            });
+        }
       }
       setScreen(next);
     },

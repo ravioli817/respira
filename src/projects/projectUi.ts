@@ -1,3 +1,4 @@
+import type { StudioSendResult } from "../studio/studioApp.js";
 import { create } from "zustand";
 
 /**
@@ -13,8 +14,8 @@ interface ProjectUi {
   pxPerMM: number | null;
   /** Opens the list of saved designs. */
   openProjects: () => void;
-  /** Sends the drawing to Place, as the editor's Next button does. False when there is nothing to send. */
-  sendToPlace: () => boolean;
+  /** Sends the drawing to Place, as the editor's Next button does. Distinguishes empty artwork from pending or invalid edits. */
+  sendToPlace: () => StudioSendResult;
 }
 
 export const useProjectUi = create<ProjectUi>(() => ({
@@ -22,7 +23,7 @@ export const useProjectUi = create<ProjectUi>(() => ({
   status: "",
   pxPerMM: null,
   openProjects: () => {},
-  sendToPlace: () => false,
+  sendToPlace: () => "blocked",
 }));
 
 /**

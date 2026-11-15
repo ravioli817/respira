@@ -22,7 +22,7 @@ vi.mock("./studioApp.js", () => ({
       snapshot: () => emptyProject(),
       thumbnail: () => "",
       setPlacement: () => {},
-      send: () => false,
+      send: () => "empty",
     };
   },
 }));

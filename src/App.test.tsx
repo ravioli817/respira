@@ -93,7 +93,7 @@ describe("Create handoff navigation", () => {
 describe("The Place step in the top bar", () => {
   const sendToPlace = vi.fn();
   beforeEach(() => {
-    sendToPlace.mockReset().mockReturnValue(true);
+    sendToPlace.mockReset().mockReturnValue("sent");
     useProjectUi.setState({ sendToPlace });
     usePatternStore.setState(usePatternStore.getInitialState(), true);
   });
@@ -107,7 +107,7 @@ describe("The Place step in the top bar", () => {
   });
 
   it("opens Place as it is when there is nothing to send yet", () => {
-    sendToPlace.mockReturnValue(false);
+    sendToPlace.mockReturnValue("empty");
     render(<App />);
     fireEvent.click(screen.getByText("Place step"));
     expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
@@ -174,4 +174,68 @@ it("restores the cached machine job without overwriting a different prepared dra
     useMachineCacheStore.getState().clearResumeState();
     usePatternStore.setState(usePatternStore.getInitialState(), true);
   });
+});
+
+it("keeps Create open when the latest edit cannot replace an older prepared snapshot", () => {
+  const previous = studioDesignToPattern({
+    name: "previous",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setPattern(previous, "previous.pes", "project");
+  const sendToPlace = vi.fn(() => "blocked" as const);
+  useProjectUi.setState({ sendToPlace });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(sendToPlace).toHaveBeenCalledOnce();
+  expect(screen.getByTestId("active-screen").textContent).toBe("create");
+  expect(usePatternStore.getState().pesData).toBe(previous);
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+});
+
+it("still opens the machine's uploaded job without handing off the edited drawing", () => {
+  const job = studioDesignToPattern({
+    name: "job",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setUploadedPattern(job, { x: 0, y: 0 }, "job.pes");
+  const sendToPlace = vi.fn(() => "blocked" as const);
+  useProjectUi.setState({ sendToPlace });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(sendToPlace).not.toHaveBeenCalled();
+  expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+});
+
+it("keeps initial pending or invalid artwork on Create even without an older snapshot", () => {
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+  useProjectUi.setState({ sendToPlace: () => "blocked" });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(screen.getByTestId("active-screen").textContent).toBe("create");
+});
+it("does not expose the previous snapshot after all artwork is cleared", () => {
+  const previous = studioDesignToPattern({
+    name: "old",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setPattern(previous, "old.pes", "project");
+  useProjectUi.setState({ sendToPlace: () => "empty" });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  expect(usePatternStore.getState().pesData).toBeNull();
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
 });

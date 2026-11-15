@@ -867,6 +867,7 @@ export function mountStudio(root, opts) {
     S.stats = E.planStats(S.plan);
     var bounds = S.stats.bounds;
     if (bounds && (bounds[0] < 0 || bounds[1] < 0 || bounds[2] > 100 || bounds[3] > 100)) { failDesign('Stitches extend beyond the hoop. Move the layer inward or reduce its size.'); return; }
+    if (handoffBlocked && S.stats.stitches) { setStatus(''); handoffBlocked=false; }
     renderStats();
     render();
     scheduleSave();
@@ -1259,12 +1260,18 @@ export function mountStudio(root, opts) {
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   }
   function hasDesign() { return !!(S.plan && S.stats && S.stats.stitches); }
+  var handoffBlocked=false;
   function sendDesign() {
-    if (!hasDesign()) return false;
-    setStatus('');
+    if (!hasDesign()) {
+      handoffBlocked=true;
+      var reason=$('#note').hidden?$('#readout').textContent:$('#note').textContent;
+      setStatus('The current design is not ready to place. '+reason,'err');
+      return S.plan && S.stats && S.stats.stitches===0 ? 'empty' : 'blocked';
+    }
+    handoffBlocked=false;setStatus('');
     var refusal = opts.onSend ? opts.onSend(buildDesign()) : 'Sending is not available here.';
-    if (refusal) setStatus(refusal, 'err');
-    return true;
+    if (refusal) { setStatus(refusal, 'err'); return 'blocked'; }
+    return 'sent';
   }
   $('#send').addEventListener('click', sendDesign);
   $('#save').addEventListener('click', function () {
@@ -1487,7 +1494,7 @@ export function mountStudio(root, opts) {
   nameChanged();
   return {
     snapshot: snapshot, thumbnail: thumbnail,
-    // The top bar's Place step does what the Next button does. False when there is nothing to stitch yet.
+    // Distinguish an empty design from a pending/invalid edit so navigation cannot use stale stitches.
     send: sendDesign,
     setPlacement: function (value) { if (JSON.stringify(value) !== JSON.stringify(S.placement)) { S.placement = value; scheduleSave(); } },
     destroy: function () { destroyed = true; textToken++; [digitizeTimer, txtTimer, imgTimer, saveTimer, toastTimer, clearArmed].forEach(clearTimeout); cleanups.forEach(function (fn) { fn(); }); if (styleEl) styleEl.remove(); holder.remove(); }

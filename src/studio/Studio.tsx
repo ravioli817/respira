@@ -276,7 +276,7 @@ export function Studio({ className, onSend, onOpened }: StudioProps) {
   useEffect(() => {
     useProjectUi.setState({
       openProjects: openPanel,
-      sendToPlace: () => editor.current?.send() ?? false,
+      sendToPlace: () => editor.current?.send() ?? "blocked",
     });
   });
   useEffect(() => {

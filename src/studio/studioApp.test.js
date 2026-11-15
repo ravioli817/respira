@@ -381,9 +381,7 @@ it("recolors only the selected drawing, supports one-step undo/redo and survives
   const original = studio.snapshot().layers[0];
   button("#layer-duplicate").click();
   const copyId = studio.snapshot().activeLayerId;
-  root
-    .querySelector('#draw-palette-bench [aria-label="Blue"]')
-    .click();
+  root.querySelector('#draw-palette-bench [aria-label="Blue"]').click();
   button("#recolor-drawing").click();
   await vi.advanceTimersByTimeAsync(60);
   const saved = studio.snapshot(),
@@ -743,7 +741,7 @@ it("tells the host the design's name, names threads by their number, and sends w
   expect(root.querySelector(".thread-name").textContent).toBe("Leaf Green");
   expect(root.querySelector(".thread-code").textContent).toBe("Brother 509");
   // The top bar's Place step uses send(): the Next button without the tap.
-  expect(studio.send()).toBe(true);
+  expect(studio.send()).toBe("sent");
   expect(onSend).toHaveBeenCalledOnce();
 });
 
@@ -886,4 +884,34 @@ it("keeps the prior picture intact when a replacement cannot be processed", asyn
   await vi.advanceTimersByTimeAsync(70);
   expect(studio.snapshot().layers.at(-1).source.fileName).toBe("good.png");
   expect(button("#toast").textContent).toMatch(/couldn't be opened/);
+});
+
+it("refuses the top-bar handoff during generation and invalid lettering, then sends the corrected design", async () => {
+  button("#add-text-layer").click();
+  input("#txt", "Bharti updated");
+  expect(studio.send()).toBe("blocked");
+  expect(onSend).not.toHaveBeenCalled();
+  expect(button("#save-status").textContent).toMatch(/not ready to place/);
+  await vi.advanceTimersByTimeAsync(250);
+  expect(button("#save-status").textContent).toBe("");
+  expect(studio.send()).toBe("sent");
+  expect(onSend).toHaveBeenCalledOnce();
+  onSend.mockClear();
+  input("#txt", "Bharti 😀");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(studio.send()).toBe("blocked");
+  expect(onSend).not.toHaveBeenCalled();
+  expect(button("#save-status").textContent).toContain("😀");
+  input("#txt", "Bharti");
+  await vi.advanceTimersByTimeAsync(250);
+  expect(button("#save-status").textContent).toBe("");
+  expect(studio.send()).toBe("sent");
+  expect(onSend).toHaveBeenCalledOnce();
+});
+it("distinguishes genuinely empty artwork from a blocked generation", async () => {
+  button("#clear").click();
+  button("#clear").click();
+  await vi.advanceTimersByTimeAsync(70);
+  expect(studio.send()).toBe("empty");
+  expect(onSend).not.toHaveBeenCalled();
 });
