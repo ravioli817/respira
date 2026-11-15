@@ -96,7 +96,7 @@ describe("getNextStep", () => {
     expect(step({ hasPattern: false, patternUploaded: false }).title).toMatch(
       /Pick a design/,
     );
-    expect(step({ patternUploaded: false }).title).toMatch(/Upload/);
+    expect(step({ patternUploaded: false }).title).toMatch(/Send your design/);
   });
 
   it("says which machine button to press for the outline trace", () => {
@@ -148,8 +148,9 @@ describe("getNextStep", () => {
       currentStitch: 500,
     });
     expect(s.tone).toBe("problem");
-    expect(s.title).toMatch(/Upper Thread/i);
-    expect(s.lines.join(" ")).toMatch(/rethread/i);
+    // Plain words, not the machine's "Upper Thread Error".
+    expect(s.title).toBe("The upper thread broke or ran out");
+    expect(s.lines[0]).toMatch(/^Rethread the machine with /);
     expect(s.lines[s.lines.length - 1]).toMatch(/Resume Sewing/);
     expect(s.needsPerson).toBe(true);
   });
@@ -160,7 +161,7 @@ describe("getNextStep", () => {
       currentStitch: 2000,
     });
     expect(s.tone).toBe("done");
-    expect(s.lines.join(" ")).toMatch(/Delete finished pattern/);
+    expect(s.lines.join(" ")).toMatch(/Delete finished design/);
     expect(s.needsPerson).toBe(true);
   });
 

@@ -2,17 +2,18 @@
 /**
  * PatternPositionIndicator Component
  *
- * One line under the canvas: what dragging does, and where the design sits.
+ * One line on the mat under the hoop: where the design sits, and what dragging does.
  * Says so when the design has been sent and can no longer be moved.
  */
 
-import { LockClosedIcon } from "@heroicons/react/24/solid";
+import { describePosition } from "./describePosition";
 
 interface PatternPositionIndicatorProps {
   offset: { x: number; y: number };
   rotation?: number;
   isLocked: boolean;
   isUploading: boolean;
+  hasPattern?: boolean;
 }
 
 export function PatternPositionIndicator({
@@ -20,26 +21,18 @@ export function PatternPositionIndicator({
   rotation = 0,
   isLocked,
   isUploading,
+  hasPattern = true,
 }: PatternPositionIndicatorProps) {
-  const fixed = isUploading || isLocked;
+  const turn = Math.round(((rotation % 360) + 360) % 360);
   return (
-    <p className="text-sm text-gray-700 dark:text-gray-300 min-w-0">
-      {fixed && (
-        <LockClosedIcon
-          aria-hidden="true"
-          className="inline w-4 h-4 mr-1.5 -mt-0.5 text-amber-600 dark:text-amber-400"
-        />
-      )}
-      {isUploading
-        ? "Sending to the machine…"
-        : isLocked
-          ? "Sent to the machine, so it can't be moved now. Drag to look around."
-          : "Drag the design to move it. Drag the background to look around."}{" "}
-      <span className="whitespace-nowrap tabular-nums text-gray-500 dark:text-gray-400">
-        {(offset.x / 10).toFixed(1)} mm across, {(offset.y / 10).toFixed(1)} mm
-        down from the center
-        {!fixed && rotation !== 0 && `, turned ${rotation.toFixed(0)}°`}
-      </span>
+    <p className="flex-1 basis-56 min-w-0 text-center text-white">
+      {!hasPattern
+        ? "Nothing in the hoop yet. Draw something on Create, then tap Place."
+        : isUploading
+          ? "Sending to the machine…"
+          : isLocked
+            ? "On the machine: it stitches exactly here."
+            : `${describePosition(offset)}${turn ? `, turned ${turn}°` : ""}. Drag it to move it.`}
     </p>
   );
 }

@@ -9,7 +9,22 @@ import {
 import { usePatternStore } from "../stores/usePatternStore";
 import { useMachineUploadStore } from "../stores/useMachineUploadStore";
 import { NextStepCard } from "../guide/NextStepCard";
-import { threadLabel } from "../guide/nextStep";
+import {
+  stepLook,
+  threadLabel,
+  threadParts,
+  type StepLook,
+} from "../guide/nextStep";
+import { useNextStep } from "../guide/useNextStep";
+import {
+  chime,
+  primeAudio,
+  setSoundEnabled,
+  useSound,
+} from "../guide/attention";
+import { displayName } from "../projects/projectUi";
+import { StitchSeam } from "./StitchSeam";
+import { cn } from "@/lib/utils";
 import {
   stitchAction,
   threadFocus,
@@ -18,7 +33,6 @@ import {
 } from "./workflow";
 import { preparePattern } from "../prepare/preparePattern";
 import { usePrepareOptions } from "../prepare/prepareOptions";
-import { designName } from "../prepare/designName";
 import { usePatternRotationUpload } from "../hooks/domain/usePatternRotationUpload";
 import { usePatternValidation } from "../hooks/domain/usePatternValidation";
 import {
@@ -37,9 +51,7 @@ import { calculatePatternTime } from "../utils/timeCalculation";
 import { ProgressStats } from "../components/ProgressMonitor/ProgressStats";
 import { PatternInfo } from "../components/PatternInfo";
 import { StitchStepControl } from "../components/ProgressMonitor/StitchStepControl";
-import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
-import type { ColorBlock } from "../components/ProgressMonitor/types";
 
 function currentWorkflow(): WorkflowState {
   const m = useMachineStore.getState(),
@@ -61,43 +73,38 @@ function currentWorkflow(): WorkflowState {
     finished: useJobState.getState().finished,
   };
 }
-function ThreadCard({
-  title,
-  block,
-  empty,
-  of,
-}: {
-  title: string;
-  block: ColorBlock | null;
-  empty: string;
-  /** How many threads the design uses. */
-  of: number;
-}) {
+/** The one large button in the instruction card, coloured to stand out on each look of card. */
+const ACTION_BUTTON: Record<StepLook, string> = {
+  yours: "bg-[#17212b] text-white",
+  fault: "bg-white text-[#17212b]",
+  machine: "bg-white text-[#17212b]",
+  plain: "bg-action text-white",
+};
+/** Where a button would be, a strip saying which button to press on the machine itself. */
+const MACHINE_STRIP: Record<StepLook, string> = {
+  yours: "bg-black/10",
+  fault: "bg-white/15",
+  machine: "bg-white/15",
+  plain: "bg-secondary",
+};
+/** Quiet full-width buttons in the lower half of the panel. */
+const ROW_BUTTON =
+  "flex items-center justify-between gap-3 w-full min-h-[52px] px-4 py-2 rounded-xl border border-line-strong bg-paper text-left cursor-pointer hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed";
+
+function Chevron() {
   return (
-    <div className="rounded-lg border bg-white dark:bg-gray-800 p-3 min-w-0">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-        {title}
-      </p>
-      {block ? (
-        <div className="flex gap-2 mt-2 items-start">
-          <span
-            aria-hidden="true"
-            className="w-7 h-7 shrink-0 rounded border"
-            style={{ background: block.threadHex }}
-          />
-          <div>
-            <p className="font-semibold text-sm break-words">
-              {threadLabel(block)}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Thread {block.colorIndex + 1} of {of}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="mt-2 text-sm">{empty}</p>
-      )}
-    </div>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      className="size-4 flex-shrink-0 transition-transform group-open:rotate-90"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 3l5 5-5 5" />
+    </svg>
   );
 }
 export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
@@ -214,9 +221,6 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     if (!canChoose) setChoosing(false);
   }
   const isChoosing = choosing && canChoose;
-  const percent = total
-    ? Math.min(100, Math.max(0, (current / total) * 100))
-    : 0;
   async function run(command: StitchCommand, secondary = false) {
     if (acting.current) return;
     const now = currentWorkflow();
@@ -331,45 +335,54 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
     if (previous !== null && previous !== current) void startFrom(previous);
   }
   const supported = isBluetoothSupported();
+  const step = useNextStep();
+  const look = step ? stepLook(step) : "plain";
+  const sound = useSound();
+  // At a thread change the card itself ends with what to press, so the strip would only repeat it.
+  const cardSaysIt =
+    !!step?.spool && m.status === MachineStatus.COLOR_CHANGE_WAIT;
+  const name = displayName(uploaded ? p.uploadedName || p.name : p.name);
+  const started = uploaded && current > 0;
+  const minutes = (n: number) => `${n} ${n === 1 ? "minute" : "minutes"}`;
+  const small = blocks.length > 8;
   return (
     <section
       aria-label="Stitch control panel"
-      className="bg-white dark:bg-gray-800 border rounded-xl shadow-sm lg:overflow-y-auto min-h-0"
+      className="bg-paper text-ink lg:border-r border-line lg:overflow-y-auto lg:min-h-0 flex flex-col"
     >
-      <div className="border-b px-4 py-3">
-        <h1 className="font-bold text-lg">Stitch</h1>
-        <p className="text-sm truncate text-gray-600 dark:text-gray-300">
-          {uploaded
-            ? "On the machine"
-            : p.data
-              ? "Ready to send"
-              : "Nothing prepared yet"}
-          {display
-            ? `: ${designName(uploaded ? p.uploadedName || p.name : p.name)}`
-            : ""}
-        </p>
-      </div>
-      <NextStepCard embedded>
-        <div className="mt-3" aria-label="Next action">
+      <h1 className="sr-only">Stitch</h1>
+      <NextStepCard>
+        <div aria-label="Next action" className="flex flex-col gap-3">
           {action.kind === "app" &&
           (action.command !== "connect" || supported) ? (
-            <Button
-              className="w-full min-h-11 whitespace-normal"
+            <button
+              type="button"
+              className={cn(
+                "w-full min-h-16 px-4 py-2 rounded-[14px] text-[22px] leading-tight font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
+                ACTION_BUTTON[look],
+              )}
               disabled={busy || (action.command === "upload" && !bounds.fits)}
               onClick={() => void run(action.command!)}
             >
               {pending ? "Working…" : action.label}
-            </Button>
+            </button>
           ) : (
-            <p className="rounded-lg p-3 bg-gray-100 dark:bg-gray-700 font-semibold text-sm">
-              {action.command === "connect"
-                ? "This browser cannot connect with Bluetooth."
-                : action.label}
-            </p>
+            !cardSaysIt && (
+              <p
+                className={cn(
+                  "rounded-xl px-4 py-3 font-bold",
+                  MACHINE_STRIP[look],
+                )}
+              >
+                {action.command === "connect"
+                  ? "This browser cannot connect with Bluetooth."
+                  : action.label}
+              </p>
+            )
           )}
           {action.command === "connect" && !supported && (
             <a
-              className="text-sm underline"
+              className="underline"
               href="https://apps.apple.com/app/id1492822055"
               target="_blank"
               rel="noreferrer"
@@ -377,15 +390,10 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
               Open the app in Bluefy on iPad
             </a>
           )}
-          {action.command === "resume" && (
-            <p className="text-sm mt-2">
-              Fix the thread or fabric issue above before resuming.
-            </p>
-          )}
           {action.command === "upload" && bounds.error && (
             <p
               role="alert"
-              className="text-sm text-red-700 dark:text-red-300 mt-2"
+              className="rounded-xl border-l-8 border-pin bg-white text-[#17212b] px-4 py-3"
             >
               {bounds.error}
             </p>
@@ -393,65 +401,162 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
           {(localError || m.message) && (
             <p
               role="alert"
-              className="text-sm text-red-700 dark:text-red-300 mt-2"
+              className="rounded-xl border-l-8 border-pin bg-white text-[#17212b] px-4 py-3"
             >
               {localError || m.message}
             </p>
           )}
           {u.uploading && (
-            <div className="mt-3">
-              <Progress value={u.progress} aria-label="Upload progress" />
-              <p className="text-sm mt-1">{u.progress.toFixed(0)}% uploaded</p>
+            <div>
+              <Progress value={u.progress} aria-label="Sending progress" />
+              <p className="mt-1">{u.progress.toFixed(0)}% sent</p>
             </div>
           )}
         </div>
       </NextStepCard>
-      <div className="p-4 pt-0 space-y-4">
-        {display && (
-          <div className="grid grid-cols-2 gap-2">
-            <ThreadCard
-              title={focus.label}
-              block={focus.current}
-              empty="No thread data"
-              of={blocks.length}
-            />
-            <ThreadCard
-              title={
-                m.status === MachineStatus.COLOR_CHANGE_WAIT && !pausedAfterCut
-                  ? "After that"
-                  : "Next thread"
-              }
-              block={focus.next}
-              empty="No more thread changes"
-              of={blocks.length}
-            />
-          </div>
-        )}
+
+      <div className="flex-1 flex flex-col gap-5 px-5 sm:px-7 py-5">
+        <p className="text-ink-soft truncate">
+          {uploaded
+            ? "On the machine"
+            : p.data
+              ? "Ready to send"
+              : "Nothing placed yet"}
+          {display && name ? `: ${name}` : ""}
+        </p>
         {uploaded && !display && (
-          <p className="text-sm">
+          <p>
             The machine holds a design this device has no copy of, so its thread
             colors cannot be shown here.
           </p>
         )}
         {uploaded && total === 0 && (
-          <p className="text-sm" role="status">
-            Reading the job back from the machine…
-          </p>
+          <p role="status">Reading the job back from the machine…</p>
         )}
+
         {uploaded && total > 0 && (
-          <div>
-            <div className="flex justify-between text-sm mb-2">
+          <div className="flex flex-col gap-2">
+            <StitchSeam blocks={blocks} current={current} total={total} />
+            <p className="flex flex-wrap justify-between gap-x-4">
               <span>
                 {current.toLocaleString()} of {total.toLocaleString()} stitches
               </span>
-              <span>{percent.toFixed(1)}%</span>
-            </div>
-            <Progress value={percent} aria-label="Sewing progress" />
+              {blocks.length > 0 && (
+                <span>
+                  {done
+                    ? "All stitched"
+                    : started
+                      ? `about ${minutes(Math.max(1, timing.remainingMinutes))} of sewing left`
+                      : `about ${minutes(Math.max(1, timing.totalMinutes))} of sewing`}
+                </span>
+              )}
+            </p>
           </div>
         )}
+
+        {blocks.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {canChoose && (
+              <div className="flex items-center justify-between gap-3 min-h-11">
+                <label htmlFor="choose-start-thread">
+                  Start from a chosen thread
+                </label>
+                <Switch
+                  id="choose-start-thread"
+                  checked={isChoosing}
+                  disabled={busy}
+                  onCheckedChange={setChoosingStart}
+                />
+              </div>
+            )}
+            {isChoosing && (
+              <p className="text-ink-soft">
+                Tap the thread to start from. Everything before it is skipped.
+                Switch this off to go back to where it was.
+              </p>
+            )}
+            <ol
+              aria-label="Threads, in sewing order"
+              className={cn(
+                "grid gap-x-2 gap-y-3",
+                small
+                  ? "grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))]"
+                  : "grid-cols-4",
+              )}
+            >
+              {blocks.map((block, i) => {
+                const stitched = done || (started && i < focus.index);
+                const now = !done && i === focus.index;
+                const thread = threadParts(block).name || `Thread ${i + 1}`;
+                const swatch = (
+                  <span
+                    className={cn(
+                      "flex items-center justify-center rounded-full border-2 border-ink",
+                      small ? "size-11" : "size-14",
+                      now &&
+                        "ring-[3px] ring-ink ring-offset-[3px] ring-offset-paper",
+                    )}
+                    style={{ background: block.threadHex }}
+                  >
+                    {stitched && (
+                      <svg
+                        role="img"
+                        aria-label="Stitched"
+                        viewBox="0 0 24 24"
+                        className="size-6 rounded-full bg-white/85 p-0.5"
+                        fill="none"
+                        stroke="#17212b"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M5 12.5l4.5 4.5L19 7.5" />
+                      </svg>
+                    )}
+                  </span>
+                );
+                const label = now ? (
+                  <strong>
+                    {thread},{" "}
+                    {isChoosing ? "starts here" : started ? "now" : "first"}
+                  </strong>
+                ) : (
+                  <span>{thread}</span>
+                );
+                return (
+                  <li
+                    key={i}
+                    aria-current={now ? "step" : undefined}
+                    title={`Thread ${i + 1} of ${blocks.length}: ${threadLabel(block)}`}
+                    className="min-w-0"
+                  >
+                    {isChoosing ? (
+                      <button
+                        type="button"
+                        aria-label={`${i + 1}. ${threadLabel(block)}${now ? ", starts here" : ""}`}
+                        className="flex flex-col items-center gap-1.5 w-full pt-1.5 text-center leading-tight rounded-xl cursor-pointer hover:bg-accent disabled:opacity-60"
+                        disabled={busy}
+                        onClick={() => void startFrom(block.startStitch)}
+                      >
+                        {swatch}
+                        {label}
+                      </button>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5 pt-1.5 text-center leading-tight">
+                        {swatch}
+                        {label}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        )}
+
         {uploaded && canShowStepControl(m.status, current > 0) && (
           <fieldset disabled={busy}>
-            <legend className="font-semibold text-sm mb-2">
+            <legend className="font-bold mb-2">
               Go back or forward a few stitches
             </legend>
             <StitchStepControl
@@ -466,106 +571,99 @@ export function StitchPanel({ onPrepare }: { onPrepare: () => void }) {
             />
           </fieldset>
         )}
-        {blocks.length > 0 && (
-          <details>
-            <summary className="cursor-pointer text-sm font-semibold">
-              All {blocks.length} threads
-            </summary>
-            {canChoose && (
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <label htmlFor="choose-start-thread" className="text-sm">
-                  Start from a chosen thread
-                </label>
-                <Switch
-                  id="choose-start-thread"
-                  checked={isChoosing}
-                  disabled={busy}
-                  onCheckedChange={setChoosingStart}
-                />
-              </div>
-            )}
-            {isChoosing && (
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                Tap the thread to start from. Everything before it is skipped.
-                Switch this off to go back to where it was.
-              </p>
-            )}
-            <ol className="mt-2 space-y-2 text-sm max-h-60 overflow-y-auto">
-              {blocks.map((block, i) => (
-                <li
-                  key={i}
-                  className={`rounded border ${isChoosing ? "" : "p-2"} ${i === focus.index ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20" : ""}`}
-                >
-                  {isChoosing ? (
-                    <button
-                      type="button"
-                      className="w-full min-h-11 p-2 text-left cursor-pointer disabled:opacity-60"
-                      disabled={busy}
-                      onClick={() => void startFrom(block.startStitch)}
-                    >
-                      {i + 1}. {threadLabel(block)}
-                      {i === focus.index ? " · starts here" : ""}
-                    </button>
-                  ) : (
-                    <>
-                      {i + 1}. {threadLabel(block)}
-                      {i === focus.index ? " · " + focus.label : ""}
-                    </>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </details>
-        )}
-        <details>
-          <summary className="cursor-pointer text-sm font-semibold">
-            More
-          </summary>
-          <div className="mt-3 space-y-3">
-            {display && <PatternInfo pesData={display} showThreadBlocks />}
-            {display && m.patternInfo && (
-              <ProgressStats
-                currentStitch={current}
-                totalStitches={total}
-                elapsedMinutes={timing.elapsedMinutes}
-                totalMinutes={timing.totalMinutes}
-                speed={m.patternInfo.speed}
-              />
-            )}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={onPrepare}
-              disabled={u.uploading}
-            >
-              Go to Prepare
-            </Button>
-            {uploaded &&
-              canStartMaskTrace(m.status, current > 0) &&
-              action.command !== "trace" && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={() => void run("trace", true)}
-                >
-                  Trace outline again
-                </Button>
-              )}
-            {uploaded &&
-              canDeletePattern(m.status) &&
-              action.command !== "delete" && (
-                <Button
-                  variant="outline"
-                  className="w-full"
+
+        {/* What else can be done right now, in plain view rather than behind a menu. */}
+        {uploaded &&
+          ((canStartMaskTrace(m.status, current > 0) &&
+            action.command !== "trace") ||
+            (canDeletePattern(m.status) && action.command !== "delete")) && (
+            <div className="flex flex-wrap gap-2.5">
+              {canStartMaskTrace(m.status, current > 0) &&
+                action.command !== "trace" && (
+                  <button
+                    type="button"
+                    className={cn(ROW_BUTTON, "flex-1 basis-48 w-auto")}
+                    disabled={busy}
+                    onClick={() => void run("trace", true)}
+                  >
+                    Trace outline again
+                  </button>
+                )}
+              {canDeletePattern(m.status) && action.command !== "delete" && (
+                <button
+                  type="button"
+                  className={cn(ROW_BUTTON, "flex-1 basis-48 w-auto")}
                   disabled={busy}
                   onClick={() => void run("delete", true)}
                 >
-                  Delete the design from the machine
-                </Button>
+                  Delete it from the machine
+                </button>
               )}
-          </div>
-        </details>
+            </div>
+          )}
+
+        <div className="mt-auto flex flex-wrap items-start gap-3">
+          <details className="group flex-1 basis-56 min-w-0">
+            <summary
+              className={cn(
+                ROW_BUTTON,
+                "list-none [&::-webkit-details-marker]:hidden",
+              )}
+            >
+              Design details
+              <Chevron />
+            </summary>
+            <div className="mt-3 space-y-3">
+              {!display && (
+                <p className="text-ink-soft">
+                  Size, stitch count and speed show here once a design is
+                  placed.
+                </p>
+              )}
+              {display && <PatternInfo pesData={display} showThreadBlocks />}
+              {display && m.patternInfo && (
+                <ProgressStats
+                  currentStitch={current}
+                  totalStitches={total}
+                  elapsedMinutes={timing.elapsedMinutes}
+                  totalMinutes={timing.totalMinutes}
+                  speed={m.patternInfo.speed}
+                />
+              )}
+            </div>
+          </details>
+          <button
+            type="button"
+            aria-pressed={sound}
+            className={cn(ROW_BUTTON, "w-auto flex-shrink-0")}
+            onClick={() => {
+              setSoundEnabled(!sound);
+              if (!sound) {
+                primeAudio();
+                chime("action");
+              }
+            }}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-[22px]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 10v4h4l5 4V6l-5 4z" />
+              {sound ? (
+                <path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11" />
+              ) : (
+                <path d="M17 9.5l5 5M22 9.5l-5 5" />
+              )}
+            </svg>
+            {sound ? "Chime on" : "Chime off"}
+          </button>
+        </div>
       </div>
     </section>
   );

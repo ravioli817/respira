@@ -15,7 +15,7 @@ import {
   calculatePatternCenter,
   convertPenStitchesToPesFormat,
 } from "./patternCanvasHelpers";
-import { Stitches, PatternBounds, CurrentPosition } from "./KonvaComponents";
+import { Stitches, CurrentPosition } from "./KonvaComponents";
 
 interface PatternLayerProps {
   pesData: PesPatternData;
@@ -121,7 +121,6 @@ export const PatternLayer = memo(function PatternLayer({
           currentStitchIndex={currentStitchIndex}
           showProgress={showProgress}
         />
-        <PatternBounds bounds={pesData.bounds} />
       </Group>
 
       {/* Transformer only for interactive layer */}
@@ -139,12 +138,17 @@ export const PatternLayer = memo(function PatternLayer({
           enabledAnchors={[]}
           rotateEnabled={true}
           borderEnabled={true}
-          borderStroke="#FF6B6B"
+          borderStroke="#17212b"
           borderStrokeWidth={2}
+          borderDash={[8, 6]}
+          anchorFill="#ffffff"
+          anchorStroke="#17212b"
+          anchorStrokeWidth={2}
+          anchorCornerRadius={11}
           rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
           ignoreStroke={true}
-          rotateAnchorOffset={20}
-          anchorSize={16}
+          rotateAnchorOffset={24}
+          anchorSize={22}
         />
       )}
 

@@ -16,7 +16,7 @@ export function loadStudioDesign(design: StudioDesign): string | null {
     return "A design is being sent to the machine right now. Wait for it to finish.";
   }
   if (selectPatternUploaded(useMachineStore.getState())) {
-    return "The machine already holds a design. Finish it or delete it on the Stitch screen, then prepare this one.";
+    return "The machine already holds a design. Finish it or delete it on Stitch, then place this one.";
   }
 
   try {

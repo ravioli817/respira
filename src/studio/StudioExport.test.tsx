@@ -10,20 +10,19 @@ import {
 import { Studio } from "./Studio";
 import { emptyProject } from "../projects/projectFile";
 import { listProjects, saveProject } from "../projects/projectStore";
-// The Projects button is part of the editor's own toolbar, so the stand-in editor hands back
-// the callback the real button would call.
-const editor = vi.hoisted(() => ({
-  options: undefined as { onProjects?: () => void } | undefined,
-}));
+import { useProjectUi } from "../projects/projectUi";
+// The list of designs is opened from the top bar, through the shared projectUi store. The stand-in
+// editor only records that it was mounted, which is when the list has something to save.
+const editor = vi.hoisted(() => ({ mounted: false }));
 vi.mock("./studioApp.js", () => ({
-  mountStudio: (_root: unknown, options: { onProjects?: () => void }) => {
-    editor.options = options;
+  mountStudio: () => {
+    editor.mounted = true;
     return {
       destroy: () => {},
       snapshot: () => emptyProject(),
       thumbnail: () => "",
       setPlacement: () => {},
-      setProjectStatus: () => {},
+      send: () => "empty",
     };
   },
 }));
@@ -49,18 +48,16 @@ beforeEach(() => {
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 });
 afterEach(() => {
-  editor.options = undefined;
+  editor.mounted = false;
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-/** Project actions live in the Projects panel; open it and return the Export button. */
+/** Design actions live in the list of designs; open it and return the Export button. */
 async function openPanelAndFindExport() {
-  await waitFor(() =>
-    expect(editor.options?.onProjects).toBeTypeOf("function"),
-  );
-  act(() => editor.options!.onProjects!());
-  return screen.findByRole("button", { name: "Export project" });
+  await waitFor(() => expect(editor.mounted).toBe(true));
+  act(() => useProjectUi.getState().openProjects());
+  return screen.findByRole("button", { name: "Export design" });
 }
 it("finishes the local save before downloading an editable backup", async () => {
   const pending: Array<() => void> = [];
@@ -90,7 +87,7 @@ it("still downloads the backup when browser storage fails", async () => {
   await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledOnce());
   expect(screen.getByRole("alert").textContent).toContain("Could not save");
 });
-it("opens the Projects panel with Export reachable even when saved projects cannot be read", async () => {
+it("opens the list of designs with Export reachable even when saved designs cannot be read", async () => {
   vi.mocked(saveProject).mockRejectedValue(new Error("storage is gone"));
   vi.mocked(listProjects).mockRejectedValueOnce(new Error("storage is gone"));
   render(<Studio onSend={() => null} />);

@@ -9,20 +9,24 @@ import type { StudioDesign } from "./studio/studioApp.js";
 
 vi.mock("./studio/loadStudioDesign", () => ({ loadStudioDesign: vi.fn() }));
 vi.mock("./prepare/PrepareScreen", () => ({ PrepareScreen: () => null }));
-vi.mock("./prepare/ConnectionBar", () => ({ ConnectionBar: () => null }));
-vi.mock("./components/AppHeader", () => ({ AppHeader: () => null }));
 vi.mock("./components/LeftSidebar", () => ({ LeftSidebar: () => null }));
 vi.mock("./components/PatternCanvas", () => ({ PatternCanvas: () => null }));
-vi.mock("./components/PatternCanvasPlaceholder", () => ({
-  PatternCanvasPlaceholder: () => null,
-}));
 vi.mock("./components/BluetoothDevicePicker", () => ({
   BluetoothDevicePicker: () => null,
 }));
 vi.mock("./practice/PracticePanel", () => ({ PracticePanel: () => null }));
-vi.mock("./studio/ScreenTabs", () => ({
-  ScreenTabs: ({ screen: active }: { screen: string }) => (
-    <div data-testid="active-screen">{active}</div>
+vi.mock("./shell/TopBar", () => ({
+  TopBar: ({
+    screen: active,
+    onChange,
+  }: {
+    screen: string;
+    onChange: (screen: string) => void;
+  }) => (
+    <div>
+      <div data-testid="active-screen">{active}</div>
+      <button onClick={() => onChange("prepare")}>Place step</button>
+    </div>
   ),
 }));
 vi.mock("./studio/Studio", () => ({
@@ -78,13 +82,55 @@ describe("Create handoff navigation", () => {
     expect(screen.getByRole("alert").textContent).toBe(refusal);
   });
 
-  it("opens Prepare after a successful handoff", () => {
+  it("opens Place after a successful handoff", () => {
     vi.mocked(loadStudioDesign).mockReturnValue(null);
     render(<App />);
     fireEvent.click(screen.getByText("Send"));
     expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
   });
 });
+
+describe("The Place step in the top bar", () => {
+  const sendToPlace = vi.fn();
+  beforeEach(() => {
+    sendToPlace.mockReset().mockReturnValue("sent");
+    useProjectUi.setState({ sendToPlace });
+    usePatternStore.setState(usePatternStore.getInitialState(), true);
+  });
+
+  it("carries the drawing over from Create, as the Next button does", () => {
+    render(<App />);
+    fireEvent.click(screen.getByText("Place step"));
+    expect(sendToPlace).toHaveBeenCalledOnce();
+    // The editor's own handoff moves the screen on (or shows why it could not).
+    expect(screen.getByTestId("active-screen").textContent).toBe("create");
+  });
+
+  it("opens Place as it is when there is nothing to send yet", () => {
+    sendToPlace.mockReturnValue("empty");
+    render(<App />);
+    fireEvent.click(screen.getByText("Place step"));
+    expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  });
+
+  it("does not replace an embroidery file that was opened on Place", () => {
+    const file = studioDesignToPattern({
+      name: "file",
+      threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+      stitches: [
+        [0, 0, 0, 0],
+        [10, 0, 0, 0],
+      ],
+    }).data;
+    usePatternStore.getState().setPattern(file, "opened.pes");
+    render(<App />);
+    fireEvent.click(screen.getByText("Place step"));
+    expect(sendToPlace).not.toHaveBeenCalled();
+    expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  });
+});
+
+import { useProjectUi } from "./projects/projectUi";
 
 import { act } from "@testing-library/react";
 import { usePatternStore } from "./stores/usePatternStore";
@@ -128,4 +174,68 @@ it("restores the cached machine job without overwriting a different prepared dra
     useMachineCacheStore.getState().clearResumeState();
     usePatternStore.setState(usePatternStore.getInitialState(), true);
   });
+});
+
+it("keeps Create open when the latest edit cannot replace an older prepared snapshot", () => {
+  const previous = studioDesignToPattern({
+    name: "previous",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setPattern(previous, "previous.pes", "project");
+  const sendToPlace = vi.fn(() => "blocked" as const);
+  useProjectUi.setState({ sendToPlace });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(sendToPlace).toHaveBeenCalledOnce();
+  expect(screen.getByTestId("active-screen").textContent).toBe("create");
+  expect(usePatternStore.getState().pesData).toBe(previous);
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+});
+
+it("still opens the machine's uploaded job without handing off the edited drawing", () => {
+  const job = studioDesignToPattern({
+    name: "job",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setUploadedPattern(job, { x: 0, y: 0 }, "job.pes");
+  const sendToPlace = vi.fn(() => "blocked" as const);
+  useProjectUi.setState({ sendToPlace });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(sendToPlace).not.toHaveBeenCalled();
+  expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+});
+
+it("keeps initial pending or invalid artwork on Create even without an older snapshot", () => {
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
+  useProjectUi.setState({ sendToPlace: () => "blocked" });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(screen.getByTestId("active-screen").textContent).toBe("create");
+});
+it("does not expose the previous snapshot after all artwork is cleared", () => {
+  const previous = studioDesignToPattern({
+    name: "old",
+    threads: [{ index: 5, name: "red", rgb: [237, 23, 31] }],
+    stitches: [
+      [0, 0, 0, 0],
+      [10, 0, 0, 0],
+    ],
+  }).data;
+  usePatternStore.getState().setPattern(previous, "old.pes", "project");
+  useProjectUi.setState({ sendToPlace: () => "empty" });
+  render(<App />);
+  fireEvent.click(screen.getByText("Place step"));
+  expect(screen.getByTestId("active-screen").textContent).toBe("prepare");
+  expect(usePatternStore.getState().pesData).toBeNull();
+  usePatternStore.setState(usePatternStore.getInitialState(), true);
 });

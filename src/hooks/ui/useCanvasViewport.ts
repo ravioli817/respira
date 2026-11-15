@@ -1,3 +1,4 @@
+// Changed in this fork (Respira with a Create screen): see "This fork" in README.md.
 /**
  * useCanvasViewport Hook
  *
@@ -23,13 +24,24 @@ interface UseCanvasViewportOptions {
   pesData: PesPatternData | null;
   uploadedPesData: PesPatternData | null;
   machineInfo: MachineInfo | null;
+  /**
+   * Stage scale at which the hoop measures its true size on this screen (screen pixels per 0.1 mm).
+   * Used as the starting view whenever the whole hoop fits at that size.
+   */
+  realScale?: number;
 }
+
+/** Room kept around a real-size hoop for its frame and the ruler above it, in screen pixels. */
+const REAL_SIZE_MARGIN = 44;
+/** The Skitch hoop, for laying the view out before a machine has said what it has (0.1 mm). */
+const DEFAULT_HOOP = 1000;
 
 export function useCanvasViewport({
   containerRef,
   pesData,
   uploadedPesData,
   machineInfo,
+  realScale,
 }: UseCanvasViewportOptions) {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [stageScale, setStageScale] = useState(1);
@@ -39,6 +51,10 @@ export function useCanvasViewport({
   // Track the last processed pattern to detect changes during render
   const [lastProcessedPattern, setLastProcessedPattern] =
     useState<PesPatternData | null>(null);
+  // The container size the view was last laid out for, and whether the person has zoomed or
+  // panned since. An untouched view follows the container (a rotated iPad, a screen shown again).
+  const [laidOutFor, setLaidOutFor] = useState({ width: 0, height: 0 });
+  const [touched, setTouched] = useState(false);
 
   // Track container size with ResizeObserver
   useEffect(() => {
@@ -65,29 +81,36 @@ export function useCanvasViewport({
   // Reset viewport when pattern changes (during render, not in effect)
   // This follows the React-recommended pattern for deriving state from props
   const currentPattern = uploadedPesData || pesData;
+  const patternChanged = currentPattern !== lastProcessedPattern;
+  const resized =
+    containerSize.width !== laidOutFor.width ||
+    containerSize.height !== laidOutFor.height;
   if (
-    currentPattern &&
-    currentPattern !== lastProcessedPattern &&
-    containerSize.width > 0
+    containerSize.width > 0 &&
+    containerSize.height > 0 &&
+    (patternChanged || (resized && !touched))
   ) {
-    const { bounds } = currentPattern;
-    const viewWidth = machineInfo
-      ? machineInfo.maxWidth
-      : bounds.maxX - bounds.minX;
-    const viewHeight = machineInfo
-      ? machineInfo.maxHeight
-      : bounds.maxY - bounds.minY;
+    // The view is the hoop, with or without a design in it.
+    const viewWidth = machineInfo?.maxWidth ?? DEFAULT_HOOP;
+    const viewHeight = machineInfo?.maxHeight ?? DEFAULT_HOOP;
 
-    const newInitialScale = calculateInitialScale(
+    const fitScale = calculateInitialScale(
       containerSize.width,
       containerSize.height,
       viewWidth,
       viewHeight,
     );
+    const fitsAtRealSize =
+      !!realScale &&
+      viewWidth * realScale + 2 * REAL_SIZE_MARGIN <= containerSize.width &&
+      viewHeight * realScale + 2 * REAL_SIZE_MARGIN <= containerSize.height;
+    const newInitialScale = fitsAtRealSize ? realScale : fitScale;
 
     // Update state during render when pattern changes
     // This is the recommended React pattern for resetting state based on props
     setLastProcessedPattern(currentPattern);
+    setLaidOutFor(containerSize);
+    setTouched(false);
     setInitialScale(newInitialScale);
     setStageScale(newInitialScale);
     setStagePos({ x: containerSize.width / 2, y: containerSize.height / 2 });
@@ -132,6 +155,7 @@ export function useCanvasViewport({
 
       const scaleBy = 1.1;
       const direction = accumulatedDelta > 0 ? -1 : 1;
+      setTouched(true);
 
       setStageScale((oldScale) => {
         const newScale = Math.max(
@@ -164,6 +188,7 @@ export function useCanvasViewport({
 
   // Zoom control handlers
   const handleZoomIn = useCallback(() => {
+    setTouched(true);
     setStageScale((oldScale) => {
       const newScale = Math.max(0.1, Math.min(oldScale * 1.2, 2));
 
@@ -181,6 +206,7 @@ export function useCanvasViewport({
   }, [containerSize]);
 
   const handleZoomOut = useCallback(() => {
+    setTouched(true);
     setStageScale((oldScale) => {
       const newScale = Math.max(0.1, Math.min(oldScale / 1.2, 2));
 
@@ -198,6 +224,8 @@ export function useCanvasViewport({
   }, [containerSize]);
 
   const handleZoomReset = useCallback(() => {
+    setTouched(false);
+    setLaidOutFor(containerSize);
     setStageScale(initialScale);
     setStagePos({ x: containerSize.width / 2, y: containerSize.height / 2 });
   }, [initialScale, containerSize]);
@@ -208,6 +236,8 @@ export function useCanvasViewport({
       const stage = e.target.getStage();
       if (stage) {
         stage.container().style.cursor = "grabbing";
+        // Dragging the background moves the view; dragging the design does not.
+        if (e.target === stage) setTouched(true);
       }
     },
     [],
@@ -218,6 +248,9 @@ export function useCanvasViewport({
       const stage = e.target.getStage();
       if (stage) {
         stage.container().style.cursor = "grab";
+        // Keep the view's recorded position in step with where it was dragged to, so the zoom
+        // buttons carry on from there instead of from where the drag began.
+        if (e.target === stage) setStagePos({ x: stage.x(), y: stage.y() });
       }
     },
     [],
@@ -227,6 +260,7 @@ export function useCanvasViewport({
     // State
     stagePos,
     stageScale,
+    initialScale,
     containerSize,
 
     // Handlers

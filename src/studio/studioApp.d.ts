@@ -1,5 +1,7 @@
 import type { ProjectData } from "../projects/projectFile";
 /** Types for the plain-JavaScript Create screen in studioApp.js. */
+export type StudioSendResult = "sent" | "empty" | "blocked";
+
 export interface StudioDesign {
   name: string;
   projectId?: string;
@@ -20,9 +22,13 @@ export interface StudioOptions {
   project?: ProjectData;
   onDirty?: () => void;
   onSave?: (data: ProjectData, thumbnail: string) => void;
-  /** Called when the toolbar's Projects button is tapped. The button is hidden without it. */
-  onProjects?: () => void;
-  /** Called when "Prepare to stitch" is tapped. Return a message to show if the design cannot be taken. */
+  /** Looks up a palette colour's thread number, e.g. "Brother 509". Return "" when there is none. */
+  threadCode?: (r: number, g: number, b: number) => string;
+  /** Called with the design's name at the start and whenever it changes. */
+  onName?: (name: string) => void;
+  /** Called with screen pixels per millimetre at real size, as guessed for this device or checked with a card. */
+  onScale?: (pxPerMM: number) => void;
+  /** Called when "Next: place it in the hoop" is tapped. Return a message to show if the design cannot be taken. */
   onSend?: (design: StudioDesign) => string | null | undefined | void;
 }
 
@@ -33,7 +39,7 @@ export function mountStudio(
   destroy(): void;
   snapshot(): ProjectData;
   thumbnail(): string;
-  /** Text for the save status shown in the toolbar, e.g. "Saved". */
-  setProjectStatus(text: string): void;
+  /** Hands the design to onSend, as the Next button does. Reports sent, genuinely empty, or blocked by generation/validation. */
+  send(): StudioSendResult;
   setPlacement(value: { x: number; y: number; rotation: number }): void;
 };

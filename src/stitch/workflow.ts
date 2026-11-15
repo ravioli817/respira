@@ -37,9 +37,9 @@ export interface StitchAction {
 }
 /** Chooses a single primary action. Physical buttons are instructions, never remote commands. */
 export function stitchAction(s: WorkflowState): StitchAction {
-  if (s.uploading) return { kind: "wait", label: "Uploading the design…" };
+  if (s.uploading) return { kind: "wait", label: "Sending the design…" };
   if (s.deleting)
-    return { kind: "wait", label: "Deleting the machine pattern…" };
+    return { kind: "wait", label: "Deleting the design from the machine…" };
   if (!s.connected)
     return { kind: "app", command: "connect", label: "Connect to Machine" };
   const error = hasError(s.error) ? getErrorDetails(s.error) : null;
@@ -80,7 +80,7 @@ export function stitchAction(s: WorkflowState): StitchAction {
     if (!canUploadPattern(s.status))
       return { kind: "wait", label: "Wait for the machine to be ready" };
     return s.hasPattern
-      ? { kind: "app", command: "upload", label: "Upload prepared design" }
+      ? { kind: "app", command: "upload", label: "Send to the machine" }
       : { kind: "app", command: "prepare", label: "Choose a design" };
   }
   switch (s.status) {
@@ -125,7 +125,7 @@ export function stitchAction(s: WorkflowState): StitchAction {
         return {
           kind: "app",
           command: "delete",
-          label: "Delete finished pattern",
+          label: "Delete finished design",
         };
       return { kind: "app", command: "trace", label: "Trace outline" };
     default:

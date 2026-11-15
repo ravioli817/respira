@@ -6,15 +6,15 @@ import { useMachineStore } from "./stores/useMachineStore";
 import { useMachineCacheStore } from "./stores/useMachineCacheStore";
 import { usePatternStore } from "./stores/usePatternStore";
 import { useUIStore } from "./stores/useUIStore";
-import { AppHeader } from "./components/AppHeader";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { PatternCanvas } from "./components/PatternCanvas";
-import { PatternCanvasPlaceholder } from "./components/PatternCanvasPlaceholder";
 import { BluetoothDevicePicker } from "./components/BluetoothDevicePicker";
 import { PrepareScreen } from "./prepare/PrepareScreen";
-import { ConnectionBar } from "./prepare/ConnectionBar";
 import { Studio } from "./studio/Studio";
-import { ScreenTabs, type Screen } from "./studio/ScreenTabs";
+import { TopBar, type Screen } from "./shell/TopBar";
+import { useProjectUi } from "./projects/projectUi";
+import { selectPatternUploaded } from "./stores/useMachineStore";
+import { useMachineUploadStore } from "./stores/useMachineUploadStore";
 import { loadStudioDesign } from "./studio/loadStudioDesign";
 import type { StudioDesign } from "./studio/studioApp.js";
 import { PracticePanel } from "./practice/PracticePanel";
@@ -24,7 +24,7 @@ import "./App.css";
 function App() {
   // Set page title with version
   useEffect(() => {
-    document.title = `Respira v${__APP_VERSION__}`;
+    document.title = `Stitch Sketchbook v${__APP_VERSION__}`;
   }, []);
 
   // Initialize machine store subscriptions (once on mount)
@@ -45,18 +45,49 @@ function App() {
   // What the machine is waiting for, so the Stitch tab can call for attention from other screens
   const nextStep = useNextStep();
 
-  // A design sent from the Create screen lands where a loaded PES file would, then the Prepare screen opens
+  // A design sent from the Create screen lands where a loaded PES file would, then the Place screen opens
   const handleStudioSend = useCallback((design: StudioDesign) => {
     const refusal = loadStudioDesign(design);
     if (refusal === null) setScreen("prepare");
     return refusal;
   }, []);
 
+  // Tapping the Place step from Create carries the drawing over, exactly as the Next button does.
+  // It only switches screens when Place is showing something a drawing must not replace: the job
+  // the machine holds, or an embroidery file opened on Place.
+  const goTo = useCallback(
+    (next: Screen) => {
+      if (next === "prepare" && screen === "create") {
+        const pattern = usePatternStore.getState();
+        const machineBusy =
+          selectPatternUploaded(useMachineStore.getState()) ||
+          useMachineUploadStore.getState().isUploading ||
+          !!pattern.uploadedPesData;
+        const openedFile = !!pattern.pesData && !pattern.sourceProjectId;
+        if (!machineBusy && !openedFile) {
+          const result = useProjectUi.getState().sendToPlace();
+          // Pending or invalid edits stay on Create; a genuinely empty design opens
+          // empty Place for PES import, never the previous project's stitch snapshot.
+          if (result !== "empty") return;
+          if (pattern.pesData)
+            usePatternStore.setState({
+              pesData: null,
+              currentFileName: "",
+              sourceProjectId: null,
+              patternOffset: { x: 0, y: 0 },
+              patternRotation: 0,
+            });
+        }
+      }
+      setScreen(next);
+    },
+    [screen],
+  );
+
   // Pattern store - for auto-loading cached pattern
   const {
     pesData,
     uploadedPesData,
-    currentFileName,
     setPattern,
     setUploadedPattern,
     setPatternRotation,
@@ -65,9 +96,6 @@ function App() {
     useShallow((state) => ({
       pesData: state.pesData,
       uploadedPesData: state.uploadedPesData,
-      currentFileName: state.uploadedPesData
-        ? state.uploadedFileName || state.currentFileName
-        : state.currentFileName,
       setPattern: state.setPattern,
       setUploadedPattern: state.setUploadedPattern,
       setPatternRotation: state.setPatternRotation,
@@ -113,14 +141,10 @@ function App() {
   ]);
 
   return (
-    <div className="h-dvh flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
-      {/* Full header with the workflow steps on Stitch; one short line elsewhere, so the hoop has room */}
-      <AppHeader compact={screen !== "stitch"} />
-      <ScreenTabs
+    <div className="h-dvh flex flex-col bg-page text-ink overflow-hidden">
+      <TopBar
         screen={screen}
-        onChange={setScreen}
-        patternName={pesData || uploadedPesData ? currentFileName : undefined}
-        trailing={<ConnectionBar statusOnly={screen === "stitch"} />}
+        onChange={goTo}
         stitchNeedsYou={screen !== "stitch" && !!nextStep?.needsPerson}
       />
 
@@ -132,6 +156,7 @@ function App() {
             : "hidden"
         }
         onSend={handleStudioSend}
+        onOpened={() => setScreen("create")}
       />
 
       {screen === "prepare" && (
@@ -141,25 +166,20 @@ function App() {
         />
       )}
 
+      {/* Stitch stays mounted too: its panel watches the job and chimes from any screen */}
       <div
         className={
           screen === "stitch"
-            ? "flex-1 p-4 sm:p-5 lg:p-6 w-full overflow-y-auto lg:overflow-hidden flex flex-col"
+            ? "flex-1 min-h-0 w-full overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,520px)_minmax(0,1fr)] content-start lg:content-normal"
             : "hidden"
         }
       >
-        <div className="flex-1 grid grid-cols-1 content-start lg:content-normal lg:grid-cols-[480px_1fr] gap-4 md:gap-5 lg:gap-6 lg:overflow-hidden">
-          {/* Left Column - Controls */}
-          <LeftSidebar onPrepare={() => setScreen("prepare")} />
+        {/* Left: what to do now, progress and threads */}
+        <LeftSidebar onPrepare={() => setScreen("prepare")} />
 
-          {/* Right Column - Pattern Preview */}
-          <div className="flex flex-col lg:overflow-hidden lg:h-full">
-            {pesData || uploadedPesData ? (
-              <PatternCanvas />
-            ) : (
-              <PatternCanvasPlaceholder />
-            )}
-          </div>
+        {/* Right: the hoop on the cutting mat */}
+        <div className="flex flex-col min-h-[min(34rem,100vw)] lg:min-h-0 lg:h-full">
+          <PatternCanvas quickPlacement={false} />
         </div>
       </div>
 
