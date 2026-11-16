@@ -1005,7 +1005,7 @@ it("merges two drawings into one where they sit, and undo brings both back", asy
   expect(button("#layer-merge").hidden).toBe(true);
 });
 
-it("crops a picture and switches its thread matching, each as one undoable step", async () => {
+it("crops a picture as one undoable step, and shows one swatch for each thread", async () => {
   let decode;
   vi.stubGlobal(
     "createImageBitmap",
@@ -1054,13 +1054,8 @@ it("crops a picture and switches its thread matching, each as one undoable step"
   await vi.advanceTimersByTimeAsync(150);
   expect(source().crop).toBeUndefined();
 
-  expect(source().vivid).toBeUndefined();
-  root.querySelector('#img-vivid [data-vivid="1"]').click();
-  await vi.advanceTimersByTimeAsync(150);
-  expect(source().vivid).toBe(true);
-  expect(
-    root.querySelector('#img-vivid [data-vivid="1"]').getAttribute("aria-pressed"),
-  ).toBe("true");
+  // One way of matching threads: there is no switch between two.
+  expect(root.querySelector("#img-vivid")).toBeNull();
   // One swatch per thread, with its name in full.
   expect(root.querySelectorAll("#clusters .cluster .swatch").length).toBe(
     root.querySelectorAll("#clusters .cluster").length,
@@ -1136,4 +1131,248 @@ it("adds an embroidery file as a layer, keeps it through saving, and sends its s
     expect(button("#toast").textContent).toMatch(/not a Brother \.pes file/),
   );
   expect(studio.snapshot().layers).toHaveLength(before + 1);
+});
+
+// A flat "portrait": a pale edge, a blue-gray wall, skin, dark hair and a maroon top. With the
+// background kept, the hair and the top fall into one colour; with it removed they are two.
+let stripe = false;
+function portrait(w, h) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const u = x / w,
+        v = y / h;
+      let c = [244, 241, 234];
+      if (u > 0.14 && u < 0.86 && v > 0.14 && v < 0.86) c = [120, 137, 155];
+      if (u > 0.3 && u < 0.7 && v > 0.25 && v < 0.7) c = [208, 162, 132];
+      if (u > 0.28 && u < 0.72 && v > 0.16 && v < 0.3) c = [74, 58, 50];
+      if (u > 0.3 && u < 0.7 && v > 0.7 && v < 0.86) c = [124, 47, 58];
+      // On request, a green stripe down the face: 1 mm wide at the size the picture is added at.
+      if (stripe && u > 0.49 && u < 0.51 && v > 0.3 && v < 0.7) c = [30, 110, 60];
+      data.set([c[0], c[1], c[2], 255], (y * w + x) * 4);
+    }
+  return { data };
+}
+
+describe("the colours of a picture", () => {
+  const rows = () =>
+    [...root.querySelectorAll("#clusters .cluster")].map(
+      (row) =>
+        row.querySelector("strong").textContent +
+        (row.querySelector(".pill").getAttribute("aria-pressed") === "true"
+          ? ""
+          : " (skipped)"),
+    );
+  const settle = () => vi.advanceTimersByTimeAsync(150);
+  const colors = async (k) => {
+    input("#img-k", k);
+    await settle();
+  };
+  const background = async () => {
+    button("#img-bg").click();
+    await settle();
+  };
+  const pick = async (row, thread) => {
+    root.querySelectorAll("#clusters .cluster .swatch")[row].click();
+    root.querySelector(`#sheet-palette [aria-label="${thread}"]`).click();
+    button("#sheet-close").click();
+    await settle();
+  };
+
+  beforeEach(async () => {
+    stripe = false;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () =>
+        new Proxy(canvasContext(), {
+          get: (target, key) =>
+            key === "getImageData"
+              ? (_x, _y, w, h) => portrait(w, h)
+              : target[key],
+        }),
+    );
+    let decode;
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(() => new Promise((resolve) => (decode = resolve))),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,cGljdHVyZQ==",
+    );
+    Object.defineProperty(button("#add-picture-file"), "files", {
+      configurable: true,
+      value: [new File(["x"], "portrait.png")],
+    });
+    button("#add-picture-file").dispatchEvent(new Event("change"));
+    decode({ width: 400, height: 400, close: vi.fn() });
+    await vi.advanceTimersByTimeAsync(70);
+  });
+
+  it("are the same for the same settings, whichever way the settings were reached", async () => {
+    const four = rows();
+    expect(four).toHaveLength(4);
+    expect(new Set(four).size).toBe(4);
+
+    // Taking the background out of "removed" and putting it back changes nothing.
+    await background();
+    const kept = rows();
+    expect(kept).not.toEqual(four);
+    await background();
+    expect(rows()).toEqual(four);
+    await background();
+    expect(rows()).toEqual(kept);
+    await background();
+
+    // Six colours, reached directly, one step at a time, and by way of the background.
+    await colors(6);
+    const six = rows();
+    for (const k of [1, 2, 3, 4, 5, 6]) await colors(k);
+    expect(rows()).toEqual(six);
+    await background();
+    await colors(3);
+    await background();
+    await colors(6);
+    expect(rows()).toEqual(six);
+    await colors(4);
+    expect(rows()).toEqual(four);
+
+    // So do size and speck clean-up.
+    input("#img-size", 40);
+    await settle();
+    root.querySelector('#img-clean [data-clean="3"]').click();
+    await settle();
+    input("#img-size", 50);
+    await settle();
+    root.querySelector('#img-clean [data-clean="2"]').click();
+    await settle();
+    expect(rows()).toEqual(four);
+  });
+
+  it("keep a thread picked by hand with its colour, and nothing else", async () => {
+    const four = rows();
+    expect(button("#img-rematch").hidden).toBe(true);
+    await pick(0, "Lime Green");
+    const mine = ["Lime Green", ...four.slice(1)];
+    expect(rows()).toEqual(mine);
+    expect(button("#img-rematch").hidden).toBe(false);
+    expect(root.querySelector("#clusters .cluster small").textContent).toMatch(
+      /your pick/,
+    );
+
+    // The pick follows its colour through other settings and is there on the way back.
+    await background();
+    expect(rows()).toContain("Lime Green");
+    await colors(1);
+    expect(rows()).not.toContain("Lime Green");
+    await colors(4);
+    await background();
+    expect(rows()).toEqual(mine);
+
+    // Skipping a colour is kept the same way.
+    root.querySelectorAll("#clusters .cluster .pill")[1].click();
+    await settle();
+    const skipped = [mine[0], mine[1] + " (skipped)", ...mine.slice(2)];
+    expect(rows()).toEqual(skipped);
+    await colors(6);
+    await colors(4);
+    expect(rows()).toEqual(skipped);
+
+    // It is saved with the design and comes back with it.
+    const saved = studio.snapshot();
+    expect(saved.layers.at(-1).source.choices).toHaveLength(2);
+
+    // One button goes back to the matched threads; a skipped colour stays skipped.
+    button("#img-rematch").click();
+    await settle();
+    expect(rows()).toEqual([four[0], four[1] + " (skipped)", ...four.slice(2)]);
+    expect(button("#img-rematch").hidden).toBe(true);
+    button("#undo").click();
+    await settle();
+    expect(rows()).toEqual(skipped);
+  });
+
+  it("fold a part too thin to stitch into the colour beside it, unless clean-up is Light", async () => {
+    const thin = /thinner than about 1\.2 mm/;
+    const clean = async (level) => {
+      root.querySelector(`#img-clean [data-clean="${level}"]`).click();
+      await settle();
+      await vi.advanceTimersByTimeAsync(100);
+    };
+    stripe = true;
+    await colors(5);
+    await vi.advanceTimersByTimeAsync(100);
+    // Medium: the stripe has gone into the skin either side of it, so it is not a thread to buy
+    // and there is nothing to warn about.
+    expect(rows()).toHaveLength(4);
+    expect(button("#note").textContent).not.toMatch(thin);
+
+    // Light keeps it, and the warning says what would deal with it.
+    await clean(1);
+    expect(rows()).toHaveLength(5);
+    expect(button("#note").textContent).toMatch(thin);
+    expect(button("#note").textContent).toMatch(/Set Clean up specks to Medium/);
+
+    await clean(3);
+    expect(rows()).toHaveLength(4);
+    expect(button("#note").textContent).not.toMatch(thin);
+
+    // Shown at twice the size the stripe is 2 mm wide, which stitches: it is kept, with no warning.
+    input("#layer-size", "200");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(rows()).toHaveLength(5);
+    expect(button("#note").textContent).not.toMatch(thin);
+    input("#layer-size", "100");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(rows()).toHaveLength(4);
+  });
+
+  it("come back as they were saved, also from a design saved before hand picks were kept", async () => {
+    vi.stubGlobal(
+      "Image",
+      class {
+        width = 400;
+        height = 400;
+        set src(value) {
+          this.url = value;
+          Promise.resolve().then(() => this.onload?.());
+        }
+      },
+    );
+    const reopen = async (project) => {
+      studio.destroy();
+      studio = mountStudio(root, { project, onSend });
+      await vi.advanceTimersByTimeAsync(100);
+    };
+    const four = rows();
+    await pick(3, "Dark Brown");
+    const mine = [...four.slice(0, 3), "Dark Brown"];
+    expect(rows()).toEqual(mine);
+    const saved = studio.snapshot();
+    await reopen(saved);
+    expect(rows()).toEqual(mine);
+    expect(studio.snapshot().layers.at(-1).source).toEqual(
+      saved.layers.at(-1).source,
+    );
+    await background();
+    await background();
+    expect(rows()).toEqual(mine);
+
+    // An earlier version saved a thread and stitch-or-skip for each colour and nothing else, with no
+    // way to tell a thread picked by hand from one left over from another setting. Its threads are
+    // matched again (or every colour would count as picked, and the settings would change nothing);
+    // a colour can only have been skipped by hand, so that is kept.
+    const old = structuredClone(saved);
+    const source = old.layers.at(-1).source;
+    delete source.choices;
+    source.clusters[0].thread = 5;
+    source.clusters[1].on = false;
+    await reopen(old);
+    const matched = [four[0], four[1] + " (skipped)", four[2], four[3]];
+    expect(rows()).toEqual(matched);
+    expect(button("#img-rematch").hidden).toBe(true);
+    expect(root.querySelector("#clusters").textContent).not.toMatch(/your pick/);
+    expect(studio.snapshot().layers.at(-1).source.choices).toHaveLength(1);
+    await colors(2);
+    await colors(4);
+    expect(rows()).toEqual(matched);
+  });
 });

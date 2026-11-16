@@ -24,13 +24,16 @@ export interface ProjectData {
     k: number;
     removeBg: boolean;
     clean: number;
-    /** Match the picture's colours to stronger threads (for photos that come out gray). */
-    vivid?: boolean;
     /** The part of the picture to stitch, in fractions of its width and height. */
     crop?: { x: number; y: number; w: number; h: number };
     sourceDataURL?: string;
     fileName?: string;
     clusters?: Array<{ rgb: number[]; thread: number; on: boolean }>;
+    /**
+     * What was chosen by hand for a colour of the picture (`rgb`): a thread other than the matched
+     * one, or `on: false` to skip it. Everything else about the colours is worked out from the settings.
+     */
+    choices?: Array<{ rgb: number[]; thread?: number; on?: false }>;
   };
   text: {
     value: string;
@@ -286,7 +289,6 @@ export function validateProject(value: unknown): ProjectData {
       k: number(im.k, 1, 8, true),
       removeBg: bool(im.removeBg),
       clean: number(im.clean, 1, 3, true),
-      ...(im.vivid === undefined ? {} : { vivid: bool(im.vivid) }),
       ...(im.crop === undefined ? {} : { crop: validateCrop(im.crop) }),
       sourceDataURL,
       fileName: im.fileName === undefined ? "" : string(im.fileName, 500),
@@ -299,6 +301,22 @@ export function validateProject(value: unknown): ProjectData {
               if (rgb.length !== 3) return fail();
               return { rgb, thread: color(c.thread), on: bool(c.on) };
             }),
+      ...(im.choices === undefined
+        ? {}
+        : {
+            choices: array(im.choices, 24).map((value) => {
+              const c = object(value);
+              const rgb = array(c.rgb, 3).map((v) => number(v, 0, 255));
+              if (rgb.length !== 3) return fail();
+              if (c.on !== undefined && c.on !== false) return fail();
+              if (c.thread === undefined && c.on === undefined) return fail();
+              return {
+                rgb,
+                ...(c.thread === undefined ? {} : { thread: color(c.thread) }),
+                ...(c.on === undefined ? {} : { on: false as const }),
+              };
+            }),
+          }),
     },
     text: {
       value: string(t.value, 2000),

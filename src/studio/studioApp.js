@@ -13,6 +13,8 @@ import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
 import { guessPxPerMM } from './realSize.js';
 import { assignThreads } from './threadMatch.js';
+import { applyChoices, choose, forgetThreads, skipsFromSaved } from './pictureChoices.js';
+import { foldThin, thinRadius } from './thinDetails.js';
 import { FULL_CROP, isFullCrop, dragCrop, cropPixels } from './crop.js';
 import { parsePes } from './pesImport.js';
 
@@ -63,7 +65,7 @@ export function mountStudio(root, opts) {
     hoop: { real: true, pxmm: null },      // pxmm: CSS px per mm once the size was checked against a card
     settings: { spacing: 0.4, angle: 45, underlay: true },
     draw: { tool: 'satin', color: 37, sizes: { satin: 3, brush: 6, eraser: 6 }, pressure: true, strokes: [], labels: new Uint8Array(GRID * GRID), order: [], example: false },
-    image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [] },
+    image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [], choices: [] },
     text: { value: 'Bharti', font: 'SmallSatin', widthMM: 80, color: 5, heightMM: 8, letterSpacing: 0.5, lineGap: 2, align: 'center' },
     name: '', nameAuto: true, placement: undefined,
     design: null, parts: [], layers: [], activeId: null, plan: null, stats: null, note: ''
@@ -489,7 +491,7 @@ export function mountStudio(root, opts) {
   function cloneLayer(layer) {
     var source=layer.source;
     if(layer.kind==='draw') source=Object.assign({},source,{sizes:Object.assign({},source.sizes),order:source.order.slice(),labels:source.labels.slice(),strokes:source.strokes.map(function(s){return Object.assign({},s,{pts:s.pts.map(function(p){return p.slice();})});})});
-    else if(layer.kind==='image') source=Object.assign({},source,{crop:source.crop?Object.assign({},source.crop):undefined,clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
+    else if(layer.kind==='image') source=Object.assign({},source,{crop:source.crop?Object.assign({},source.crop):undefined,clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});}),choices:(source.choices||[]).map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
     else if(layer.kind==='stitches') source=Object.assign({},source,{slots:source.slots.slice()});   // the runs of stitches never change, so they are shared
     else source=Object.assign({},source);
     // Undo snapshots of a decoding image must receive the same decoded asset, even if
@@ -633,9 +635,15 @@ export function mountStudio(root, opts) {
     ox.drawImage(cur, 0, 0, w, h);
     return ox.getImageData(0, 0, w, h).data;
   }
-  function processImage(im) {
+  // The size a picture's layer is shown at (1 = as worked out). Thin parts are measured at that size.
+  function pictureScale(im) {
+    var layer = S.layers.filter(function (l) { return l.source === im; })[0];
+    return layer ? layer.transform.scale : 1;
+  }
+  function processImage(im, scale) {
     im = im || S.image; var src = im.source;
     if (!src) { im.proc = null; return; }
+    scale = scale || pictureScale(im);
     var cut = cropPixels(im.crop, src.width, src.height);
     var iw = cut.sw, ih = cut.sh, longMM = clamp(im.sizeMM, 10, HOOP);
     var wmm = iw >= ih ? longMM : longMM * iw / ih, hmm = ih > iw ? longMM : longMM * ih / iw;
@@ -678,7 +686,7 @@ export function mountStudio(root, opts) {
       if (flat) solid.push(i);
     }
     var pool = solid.length >= 200 ? solid : idxs;
-    if (!idxs.length) { im.proc = { gw: gw, gh: gh, lab: new Uint8Array(n), wmm: wmm, hmm: hmm }; im.clusters = []; return; }
+    if (!idxs.length) { im.proc = { gw: gw, gh: gh, lab: new Uint8Array(n), wmm: wmm, hmm: hmm, scale: scale }; im.clusters = []; return; }
     var sample = pool.length > 14000 ? pool.filter(function (v, k2) { return k2 % Math.ceil(pool.length / 14000) === 0; }) : pool;
     var centers = kmeans(pix, sample, Math.min(im.k, sample.length));
     var lab = new Uint8Array(n);
@@ -725,6 +733,9 @@ export function mountStudio(root, opts) {
       if (bestL >= 0) fixed[p1] = bestL;
     }
     lab = fixed;
+    // fold parts too thin to stitch (under about 1.2 mm as placed) into the colour beside them; the
+    // lightest clean-up keeps them, for a picture whose fine lines matter more than a clean fill
+    if (im.clean > 1) lab = foldThin(lab, gw, gh, thinRadius(scale));
     // merge specks into their surroundings
     var minPx = MIN_SPECK[im.clean] || 75, visited = new Uint8Array(n), st2 = new Int32Array(n);
     for (i = 0; i < n; i++) {
@@ -750,23 +761,20 @@ export function mountStudio(root, opts) {
     }
     var areas = new Array(centers.length + 1).fill(0);
     for (i = 0; i < n; i++) areas[lab[i]]++;
-    var old = im.clusters;
     // Each colour of the picture gets its own thread, matched by eye rather than by RGB (threadMatch.js).
+    // Nothing is taken from the colours that were on screen before, so the same settings give the same
+    // threads however they were reached. (Threads used to be carried over from the nearest earlier
+    // colour, and unticking and re-ticking "Remove the background" left two areas with one thread.)
+    // Only what was chosen by hand is kept, and it is tied to a colour of the picture (pictureChoices.js).
     var found = centers.map(function (c, ci) { return { rgb: [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])], area: areas[ci + 1] }; });
-    var matched = assignThreads(PEC, found, !!im.vivid);
+    var matched = assignThreads(PEC, found);
     var clusters = centers.map(function (c, ci) {
-      var rgbv = found[ci].rgb;
-      var cl = { id: ci + 1, rgb: rgbv, thread: matched[ci], on: true, area: areas[ci + 1] };
-      if (old && old.length === centers.length) {
-        var bestOld = null, bd = Infinity;
-        old.forEach(function (o2) { var d2 = Math.pow(o2.rgb[0] - rgbv[0], 2) + Math.pow(o2.rgb[1] - rgbv[1], 2) + Math.pow(o2.rgb[2] - rgbv[2], 2); if (d2 < bd) { bd = d2; bestOld = o2; } });
-        if (bestOld && bd < 40 * 40) { cl.thread = bestOld.thread; cl.on = bestOld.on; }
-      }
-      return cl;
+      return { id: ci + 1, rgb: found[ci].rgb, auto: matched[ci], thread: matched[ci], on: true, picked: false, area: areas[ci + 1] };
     }).filter(function (cl) { return cl.area > 0; });
-    clusters.sort(function (a, b) { return b.area - a.area; });
-    im.clusters = clusters;
-    im.proc = { gw: gw, gh: gh, lab: lab, wmm: wmm, hmm: hmm };
+    clusters.sort(function (a, b) { return b.area - a.area || a.id - b.id; });
+    im.choices = im.choices || [];
+    im.clusters = applyChoices(clusters, im.choices);
+    im.proc = { gw: gw, gh: gh, lab: lab, wmm: wmm, hmm: hmm, scale: scale };
   }
   function imageDesign(im) {
     im = im || S.image; var P = im.proc, labels = new Uint8Array(GRID * GRID), order = [];
@@ -856,7 +864,12 @@ export function mountStudio(root, opts) {
         if(layer.source.error)throw new Error(layer.source.error);
         var source = layer.source, design;
         if (layer.kind === 'draw') design = { labels: source.labels, order: source.order, lines: source.strokes };
-        else if (layer.kind === 'image') design = imageDesign(source);
+        else if (layer.kind === 'image') {
+          // What counts as too thin depends on the size the layer is shown at, so a picture that has
+          // been resized is worked out again (once the handle is let go, not on every move of it).
+          if (source.source && source.proc && source.proc.scale !== layer.transform.scale && !(active && active.resize)) { processImage(source); if (S.image === source) renderClusters(); }
+          design = imageDesign(source);
+        }
         else if (layer.kind === 'stitches') design = { paths: source.paths.map(function (path) { return { color: source.slots[path.slot] || 20, pts: path.pts }; }) };
         else if (isEmbroideryFont(source.font)) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
         else {
@@ -951,7 +964,7 @@ export function mountStudio(root, opts) {
   function currentLayer() { return S.layers.find(function (l) { return l.id === S.activeId; }); }
   function freshSource(kind) {
     if (kind === 'draw') return { tool:'satin',color:37,sizes:{satin:3,brush:6,eraser:6},pressure:true,order:[],example:false,labels:new Uint8Array(GRID*GRID),strokes:[] };
-    if (kind === 'image') return { source:null, fileName:'', sizeMM:50,k:4,removeBg:true,clean:2,proc:null,clusters:[] };
+    if (kind === 'image') return { source:null, fileName:'', sizeMM:50,k:4,removeBg:true,clean:2,proc:null,clusters:[],choices:[] };
     // An embroidery file: `slots` is the thread for each colour stop, `paths` its runs of stitches
     // in hoop millimetres. The stitches are kept as they are; only threads and placement change.
     if (kind === 'stitches') return { fileName:'', slots:[], paths:[] };
@@ -989,7 +1002,6 @@ export function mountStudio(root, opts) {
     $('#img-size').value=S.image.sizeMM; $('#img-size-out').textContent=S.image.sizeMM+' mm';
     $('#img-k').value=S.image.k; $('#img-k-out').textContent=S.image.k; $('#img-bg').checked=S.image.removeBg;
     $$('#img-clean button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.clean === S.image.clean)); });
-    syncVivid();
     $('#file-name').textContent=S.image.fileName || 'No picture selected'; renderClusters();
     $('#txt').value=S.text.value; fontSel.value=S.text.font; $('#txt-w').value=S.text.widthMM; $('#txt-w-out').textContent=S.text.widthMM+' mm';
     $('#txt-height').value=S.text.heightMM ?? 8; $('#txt-spacing').value=S.text.letterSpacing ?? 0.5; $('#txt-linegap').value=S.text.lineGap ?? 2; $('#txt-align').value=S.text.align || 'center';
@@ -1156,8 +1168,8 @@ export function mountStudio(root, opts) {
         if(im.loadTicket!==ticket)return; // A newer replacement owns this object now.
         // Commit only after processing succeeds, so a bad replacement cannot leave
         // a new image paired with the previous image's processed pixels.
-        var decoded=Object.assign({},im,{sourceDataURL:dataURL,source:picture,fileName:f.name,clusters:[],crop:undefined,loading:false});
-        processImage(decoded);Object.assign(im,decoded);delete im.loadTicket;delete im.error;
+        var decoded=Object.assign({},im,{sourceDataURL:dataURL,source:picture,fileName:f.name,clusters:[],choices:[],crop:undefined,loading:false});
+        processImage(decoded,pictureScale(im));Object.assign(im,decoded);delete im.loadTicket;delete im.error;
         if(S.image===im){$('#file-name').textContent=f.name;renderClusters();}
       });
       if(src.close)src.close();
@@ -1185,16 +1197,8 @@ export function mountStudio(root, opts) {
   var imgTimer = null;
   function reprocessSoon() { S.placement=undefined; invalidateDesign(); clearTimeout(imgTimer); var im=S.image; imgTimer=setTimeout(function(){processImage(im); if(S.image===im) renderClusters(); updateDesign(); scheduleSave();},120); }
   $('#img-size').addEventListener('input', function (e) { pushUndo('img-size'); S.image.sizeMM = +e.target.value; $('#img-size-out').textContent = e.target.value + ' mm'; reprocessSoon(); });
-  $('#img-k').addEventListener('input', function (e) { pushUndo('img-k'); S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; S.image.clusters = []; reprocessSoon(); });
+  $('#img-k').addEventListener('input', function (e) { pushUndo('img-k'); S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; reprocessSoon(); });
   $('#img-bg').addEventListener('change', function (e) { pushUndo(); S.image.removeBg = e.target.checked; reprocessSoon(); });
-  // "Vivid" rematches every colour of the picture, so thread choices made by hand start again.
-  function syncVivid() { $$('#img-vivid button').forEach(function (b) { b.setAttribute('aria-pressed', String((b.dataset.vivid === '1') === !!S.image.vivid)); }); }
-  $$('#img-vivid button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var vivid = b.dataset.vivid === '1'; if (vivid === !!S.image.vivid) return;
-      pushUndo(); S.image.vivid = vivid; S.image.clusters = []; syncVivid(); reprocessSoon();
-    });
-  });
   $$('#img-clean button').forEach(function (b) {
     b.addEventListener('click', function () {
       pushUndo();S.image.clean = +b.dataset.clean;
@@ -1206,6 +1210,14 @@ export function mountStudio(root, opts) {
     var box = $('#clusters'); box.innerHTML = '';
     $('#img-crop').disabled = !S.image.source;
     var total = S.image.clusters.reduce(function (s, c) { return s + c.area; }, 0) || 1;
+    $('#img-rematch').hidden = !S.image.clusters.some(function (c) { return c.picked; });
+    // What is chosen by hand for one colour: a thread, or to stitch or skip it. It is kept for that colour.
+    function chosen(cl, change) {
+      pushUndo(); S.placement=undefined;
+      S.image.choices = choose(S.image.choices || [], S.image.clusters, cl, change);
+      applyChoices(S.image.clusters, S.image.choices);
+      renderClusters(); updateDesign(); scheduleSave();
+    }
     S.image.clusters.forEach(function (cl) {
       // One swatch per row: the thread that will be stitched. (A second, smaller swatch used to show
       // the picture's own colour beside it, which read as the same colour shown twice and not matching.)
@@ -1213,18 +1225,25 @@ export function mountStudio(root, opts) {
       var sw = document.createElement('button'); sw.type = 'button'; sw.className = 'swatch'; sw.style.setProperty('--c', rgb(cl.thread));
       sw.setAttribute('aria-label', 'Change thread, now ' + threadTitle(cl.thread));
       sw.title = 'Change this thread';
-      sw.addEventListener('click', function () { openSheet(cl.thread, function (t) { pushUndo(); S.placement=undefined; cl.thread = t; renderClusters(); updateDesign(); scheduleSave(); }); });
+      sw.addEventListener('click', function () { openSheet(cl.thread, function (t) { chosen(cl, { thread: t }); }); });
       var share = Math.max(1, Math.round(cl.area / total * 100)) + '% of the picture', code = threadCode(cl.thread);
       var nm = document.createElement('span'); nm.className = 'nm';
       var title = document.createElement('strong'); title.textContent = threadName(cl.thread);
-      var detail = document.createElement('small'); detail.textContent = (code ? code + ' · ' : '') + share;
+      var detail = document.createElement('small'); detail.textContent = (code ? code + ' · ' : '') + share + (cl.picked ? ' · your pick' : '');
       nm.appendChild(title); nm.appendChild(detail);
       var tg = document.createElement('button'); tg.type = 'button'; tg.className = 'pill'; tg.setAttribute('aria-pressed', String(cl.on)); tg.textContent = cl.on ? 'Stitch' : 'Skip';
-      tg.addEventListener('click', function () { pushUndo(); S.placement=undefined; cl.on = !cl.on; renderClusters(); updateDesign(); scheduleSave(); });
+      tg.addEventListener('click', function () { chosen(cl, { on: !cl.on }); });
       row.appendChild(sw); row.appendChild(nm); row.appendChild(tg);
       box.appendChild(row);
     });
   }
+
+  $('#img-rematch').addEventListener('click', function () {
+    pushUndo(); S.placement=undefined;
+    S.image.choices = forgetThreads(S.image.choices || []);
+    applyChoices(S.image.clusters, S.image.choices);
+    renderClusters(); updateDesign(); scheduleSave();
+  });
 
   // crop sheet: the picture with a box over it; only what is inside the box gets stitched
   var cropDraft = null, cropDrag = null;
@@ -1250,8 +1269,7 @@ export function mountStudio(root, opts) {
     var next = isFullCrop(cropDraft) ? undefined : cropDraft, im = S.image;
     closeCrop();
     if (JSON.stringify(next) === JSON.stringify(im.crop)) return;
-    // A different part of the picture has different colours, so thread choices start again.
-    pushUndo(); im.crop = next; im.clusters = []; reprocessSoon();
+    pushUndo(); im.crop = next; reprocessSoon();
   });
   $('#crop-box').addEventListener('pointerdown', function (e) {
     if (!cropDraft || (e.button && e.button !== 0)) return;
@@ -1423,11 +1441,20 @@ export function mountStudio(root, opts) {
     if(kind==='draw') return {tool:source.tool,color:source.color,sizes:source.sizes,pressure:source.pressure,order:source.order,example:source.example,labels:rle(source.labels),strokes:source.strokes.map(function(st){return {k:st.kind,c:st.color,p:st.pts.map(function(p){return p.slice();})};})};
     if(kind==='text') return Object.assign({},source);
     if(kind==='stitches') return {fileName:source.fileName,slots:source.slots.slice(),paths:source.paths.map(function(path){var flat=[];path.pts.forEach(function(q){flat.push(q[0],q[1]);});return {s:path.slot,p:flat};})};
-    return {sizeMM:source.sizeMM,k:source.k,removeBg:source.removeBg,clean:source.clean,vivid:source.vivid?true:undefined,crop:source.crop?Object.assign({},source.crop):undefined,sourceDataURL:source.sourceDataURL || (source.source && source.source.toDataURL ? source.source.toDataURL('image/png'):undefined),fileName:source.fileName,clusters:source.clusters.map(function(c){return {rgb:c.rgb,thread:c.thread,on:c.on};})};
+    return {sizeMM:source.sizeMM,k:source.k,removeBg:source.removeBg,clean:source.clean,crop:source.crop?Object.assign({},source.crop):undefined,sourceDataURL:source.sourceDataURL || (source.source && source.source.toDataURL ? source.source.toDataURL('image/png'):undefined),fileName:source.fileName,clusters:source.clusters.map(function(c){return {rgb:c.rgb,thread:c.thread,on:c.on};}),
+      choices:source.choices&&source.choices.length?source.choices.map(function(c){var out={rgb:c.rgb.slice()};if(c.thread!==undefined)out.thread=c.thread;if(c.on===false)out.on=false;return out;}):undefined};
+  }
+  // A picture read from a saved design. Its colours are worked out again once it has decoded; what
+  // comes from the file is what was chosen by hand. (`saved` is the file's own copy of the source.)
+  function savedPicture(im, saved) {
+    im.clusters=im.clusters||[];
+    im.choices=Array.isArray(saved.choices)?saved.choices.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});}):skipsFromSaved(im.clusters);
+    return im;
   }
   function deserializeSource(kind, source) {
     if(kind==='draw') return Object.assign(freshSource(kind),source,{labels:unrle(source.labels,GRID*GRID),strokes:source.strokes.map(function(st){return {kind:st.k,color:st.c,pts:st.p.map(function(p){return p.slice();})};})});
     if(kind==='stitches') return {fileName:source.fileName||'',slots:source.slots.slice(),paths:source.paths.map(function(path){var pts=[];for(var i=0;i+1<path.p.length;i+=2)pts.push([path.p[i],path.p[i+1]]);return {slot:path.s,pts:pts};})};
+    if(kind==='image') return savedPicture(Object.assign(freshSource(kind),source),source);
     return Object.assign(freshSource(kind),source);
   }
   function snapshot() {
@@ -1466,7 +1493,7 @@ export function mountStudio(root, opts) {
       S.draw.example = !!d.example;
       S.draw.labels = d.labels ? unrle(d.labels, GRID * GRID) : new Uint8Array(GRID * GRID);
       S.draw.strokes = (d.strokes || []).map(function (st) { return { kind: st.k, color: st.c, pts: st.p }; });
-      if (s.image) Object.assign(S.image, s.image);
+      if (s.image) savedPicture(Object.assign(S.image, s.image), s.image);
       if (s.text) S.text = Object.assign(S.text, s.text);
       if (s.name) { S.name = s.name; S.nameAuto = false; }
       return s.mode || 'draw';

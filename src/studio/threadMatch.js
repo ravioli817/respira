@@ -29,33 +29,45 @@ var NEUTRAL = 0.02;
 var HUE_WEIGHT = 2.5, CHROMA_WEIGHT = 1.5;
 /** Added distance for giving a coloured area a gray thread, or a gray area a coloured one. */
 var WRONG_KIND = 0.08;
-/** An averaged picture colour is duller than the picture looks; "Vivid" strengthens it much more. */
-var TRUE_BOOST = 1.15, VIVID_BOOST = 2;
-
+/** Added distance for a thread whose tint points another way round the colour wheel. */
+var WRONG_HUE = 0.08;
+/** Two tints count as the same up to 40 degrees apart, and as plainly different from 80. */
+var HUE_SAME = Math.cos(40 * Math.PI / 180), HUE_OTHER = Math.cos(80 * Math.PI / 180);
 /**
- * How far a thread is from a picture colour; smaller is closer. `vivid` strengthens the picture's
- * colour first, for photos whose muted tones would otherwise all land on grays.
+ * An averaged picture colour is a little duller than the picture looks, so it is strengthened by this
+ * much before matching. (A stronger "Vivid" setting was tried as a switch and taken out: it turned
+ * skin into Tangerine and khaki into Pumpkin, and one way of matching is easier to trust than two.)
  */
-export function threadDistance(rgb, thread, vivid) {
+var BOOST = 1.15;
+
+/** How far a thread is from a picture colour; smaller is closer. */
+export function threadDistance(rgb, thread) {
   var p = perceptual(rgb[0], rgb[1], rgb[2]), t = perceptual(thread[0], thread[1], thread[2]);
   var pc = Math.hypot(p[1], p[2]), tc = Math.hypot(t[1], t[2]);
   // A colour with no tint at all is left alone: boosting it would only amplify noise.
-  var boost = pc < 0.006 ? 1 : vivid ? VIVID_BOOST : TRUE_BOOST;
+  var boost = pc < 0.006 ? 1 : BOOST;
   var a = p[1] * boost, b = p[2] * boost; pc *= boost;
   var dl = p[0] - t[0], dc = pc - tc;
   var dh2 = Math.max(0, (a - t[1]) * (a - t[1]) + (b - t[2]) * (b - t[2]) - dc * dc);
   var d = Math.sqrt(dl * dl + CHROMA_WEIGHT * dc * dc + HUE_WEIGHT * dh2);
   if (tc < NEUTRAL && pc > 0.03) d += WRONG_KIND;
   if (pc < 0.012 && tc > 0.05) d += WRONG_KIND;
+  // Both have a tint. Where the tints point different ways, agreeing in lightness is not enough:
+  // without this, dark brown hair went to Peacock Blue (a teal) ahead of Dark Gray and Dark Brown,
+  // because two weak tints are never far apart however opposite they are.
+  if (pc > NEUTRAL && tc > NEUTRAL) {
+    var cos = (a * t[1] + b * t[2]) / (pc * tc);
+    d += WRONG_HUE * Math.min(1, Math.max(0, (HUE_SAME - cos) / (HUE_SAME - HUE_OTHER)));
+  }
   return d;
 }
 
 /** Thread numbers from the palette, nearest first. Entry 0 and "Applique" (64) are not threads. */
-export function rankThreads(palette, rgb, vivid) {
+export function rankThreads(palette, rgb) {
   var ranked = [];
   for (var i = 1; i < palette.length; i++) {
     if (i === 64) continue;
-    ranked.push([i, threadDistance(rgb, palette[i], vivid)]);
+    ranked.push([i, threadDistance(rgb, palette[i])]);
   }
   ranked.sort(function (x, y) { return x[1] - y[1]; });
   return ranked;
@@ -66,11 +78,11 @@ export function rankThreads(palette, rgb, vivid) {
  * larger area already has it and another thread is nearly as close; then it takes that one, so two
  * areas of a picture stay two colours in the stitching.
  */
-export function assignThreads(palette, colors, vivid) {
+export function assignThreads(palette, colors) {
   var order = colors.map(function (c, i) { return i; }).sort(function (x, y) { return (colors[y].area || 0) - (colors[x].area || 0); });
   var taken = {}, result = new Array(colors.length);
   order.forEach(function (index) {
-    var ranked = rankThreads(palette, colors[index].rgb, vivid), best = ranked[0];
+    var ranked = rankThreads(palette, colors[index].rgb), best = ranked[0];
     var pick = best;
     if (taken[best[0]]) {
       // "Nearly as close": within half as far again, or a small step, of the nearest thread.

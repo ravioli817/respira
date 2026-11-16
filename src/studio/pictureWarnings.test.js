@@ -25,6 +25,19 @@ it("warns on a thin picture at final size and clears after enlargement or exclus
     ]),
   ).toEqual([]);
 });
+it("says what is left to do: turn on the folding, or deal with a part that stands alone", () => {
+  const layer = { id: "pic", name: "Logo", kind: "image", visible: true };
+  const [light] = pictureDetailWarnings([
+    { layer: { ...layer, source: { clean: 1 } }, design: bar() },
+  ]);
+  expect(light).toMatch(/Set Clean up specks to Medium/);
+  // With the folding on, what is still thin had no colour beside it to go into.
+  const [medium] = pictureDetailWarnings([
+    { layer: { ...layer, source: { clean: 2 } }, design: bar() },
+  ]);
+  expect(medium).toMatch(/stand on their own/);
+  expect(medium).not.toMatch(/Set Clean up/);
+});
 it("detects a fine color stripe inside a larger solid silhouette", () => {
   const design = bar();
   for (let y = 220; y < 280; y++)

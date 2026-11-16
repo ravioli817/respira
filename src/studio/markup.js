@@ -188,14 +188,10 @@ export const STUDIO_MARKUP = `
           <button data-clean="3" aria-pressed="false">Strong</button>
         </div>
       </div>
-      <div class="field-row"><span>Threads</span>
-        <div class="seg small" role="group" aria-label="How the picture's colors are matched to threads" id="img-vivid">
-          <button data-vivid="0" aria-pressed="true">True</button>
-          <button data-vivid="1" aria-pressed="false">Vivid</button>
-        </div>
-      </div>
+      <p class="hint">Medium and Strong also fold parts too thin to stitch (under about 1.2 mm) into the color beside them. Light keeps fine lines.</p>
       <div class="clusters" id="clusters"></div>
-      <p class="hint">Tap a thread to change it. Skip one to leave the fabric showing there. Vivid picks stronger threads when a photo comes out mostly gray.</p>
+      <button class="btn" id="img-rematch" hidden>Back to matched threads</button>
+      <p class="hint">Tap a thread to change it; your pick stays with that color when you change the settings above. Skip one to leave the fabric showing there.</p>
     </section>
 
     <section class="panel first" id="panel-stitches" hidden>

@@ -216,7 +216,7 @@ it("round-trips v4 lettering fonts and trim rules, while still importing older p
   expect(importProject(exportProject(emptyProject())).v).toBe(1);
 });
 
-it("round-trips version 5: an embroidery-file layer and a cropped, vivid picture", () => {
+it("round-trips version 5: an embroidery-file layer and a cropped picture with hand-picked threads", () => {
   const data = emptyProject();
   const stitches = {
     fileName: "bought-rose.pes",
@@ -228,10 +228,13 @@ it("round-trips version 5: an embroidery-file layer and a cropped, vivid picture
   };
   const picture = {
     ...data.image,
-    vivid: true,
     crop: { x: 0.1, y: 0.2, w: 0.5, h: 0.6 },
     fileName: "",
     clusters: [],
+    choices: [
+      { rgb: [74, 58, 50], thread: 24 },
+      { rgb: [244, 241, 234], on: false as const },
+    ],
   };
   const project = {
     ...data,
@@ -261,9 +264,30 @@ it("round-trips version 5: an embroidery-file layer and a cropped, vivid picture
   expect(roundtrip.v).toBe(5);
   expect(roundtrip.layers?.[0].source).toEqual(stitches);
   expect(roundtrip.layers?.[1].source).toMatchObject({
-    vivid: true,
     crop: { x: 0.1, y: 0.2, w: 0.5, h: 0.6 },
+    choices: picture.choices,
   });
+  // A hand choice names a colour and either a thread or "skip"; anything else is refused.
+  for (const choice of [
+    { rgb: [1, 2], thread: 5 },
+    { rgb: [1, 2, 3] },
+    { rgb: [1, 2, 3], thread: 99 },
+    { rgb: [1, 2, 3], on: true },
+  ])
+    expect(() =>
+      importProject(
+        exportProject({
+          ...project,
+          layers: [
+            project.layers[0],
+            {
+              ...project.layers[1],
+              source: { ...picture, choices: [choice] },
+            },
+          ],
+        } as never),
+      ),
+    ).toThrow();
   const withSource = (source: unknown) => ({
     ...project,
     layers: [{ ...project.layers[0], source }, project.layers[1]],
