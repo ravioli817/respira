@@ -349,7 +349,9 @@ export function mountStudio(root, opts) {
   function toMM(e) {
     var r = over.getBoundingClientRect();
     var point=[clamp((e.clientX-r.left)/r.width*HOOP,0,HOOP),clamp((e.clientY-r.top)/r.height*HOOP,0,HOOP)];
-    return transformPoint(point,currentLayer().transform,true).map(function(v){return clamp(v,0,HOOP);});
+    point=transformPoint(point,currentLayer().transform,true);
+    // Lines and satin are kept as points, which may lie off the drawing's own sheet; paint may not.
+    return S.draw.tool==='line'||S.draw.tool==='satin'?point:point.map(function(v){return clamp(v,0,HOOP);});
   }
   function widthFor(e) {
     var d = S.draw;
@@ -379,6 +381,24 @@ export function mountStudio(root, opts) {
       octx.beginPath(); octx.moveTo(last[0] * k, last[1] * k); octx.lineTo(p[0] * k, p[1] * k); octx.stroke();
     }
   }
+  // A drawing keeps its marks on its own 100 mm sheet, which moves, turns and resizes with the
+  // layer. Once the layer has been moved, part of the hoop lies off that sheet and nothing could be
+  // drawn there (a drawing moved 30 mm left took no marks in the right-hand 30 mm). So before a
+  // mark is made the drawing is redrawn where it sits and its sheet is squared with the hoop again.
+  // Left alone if that would cut off marks that sit outside the hoop.
+  function settleForDrawing() {
+    var layer = currentLayer(), t = layer.transform;
+    if (layer.kind !== 'draw' || (!t.x && !t.y && t.scale === 1 && !t.rotation)) return;
+    var d, source = layer.source, had = 0, kept = 0, i;
+    try { d = settled(layer); } catch (error) { return; }
+    for (i = 0; i < source.labels.length; i++) if (source.labels[i]) had++;
+    for (i = 0; i < d.labels.length; i++) if (d.labels[i]) kept++;
+    if (kept < had * t.scale * t.scale * 0.97 - 4) return;
+    source.labels = d.labels; source.order = d.order.slice();
+    source.strokes = d.lines.map(function (line) { return { kind: line.kind, color: line.color, pts: line.pts.map(function (q) { return [q[0], q[1], q[2] || 0]; }) }; });
+    layer.transform = identityTransform();
+    syncLayers();
+  }
   over.addEventListener('pointerdown', function (e) {
     if (active || (e.button && e.button !== 0)) return;
     if(panCanvas){e.preventDefault();var viewport=$('#canvas-viewport');active={id:e.pointerId,pan:true,x:e.clientX,y:e.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};try{over.setPointerCapture(e.pointerId);}catch(err){}return;}
@@ -394,6 +414,7 @@ export function mountStudio(root, opts) {
     else if (e.pointerType === 'touch' && penSeen) return;
     if (e.button && e.button !== 0) return;
     e.preventDefault();
+    settleForDrawing();
     if (S.draw.tool === 'bucket') { var p = toMM(e); bucketFill(p[0], p[1]); return; }
     try { over.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     active = { id: e.pointerId, pts: [] };

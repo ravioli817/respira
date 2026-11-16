@@ -1535,3 +1535,36 @@ it("preserves PES cut flags and repeated-color stops through v6 files, undo and 
       .legacyCommands,
   ).toBe(true);
 });
+it("takes a line anywhere in the hoop on a drawing that has been moved", () => {
+  // Moved 30 mm right and 20 mm down, the drawing took no marks in the left 30 mm or the top 20 mm.
+  const draw = (x, y) => {
+    const moved = reviewDrawing("moved", 5);
+    moved.transform = { x, y, scale: 1, rotation: 0 };
+    reviewLayers([moved]);
+    vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 100,
+    });
+    button('[data-tool="line"]').click();
+    const event = (type, cx, cy) =>
+      button("#overlay").dispatchEvent(
+        new MouseEvent(type, { clientX: cx, clientY: cy, bubbles: true }),
+      );
+    event("pointerdown", 5, 5);
+    event("pointermove", 15, 10);
+    event("pointerup", 15, 10);
+    return studio.snapshot().layers[0];
+  };
+  // The drawing is redrawn where it sits, so its own sheet covers the hoop again.
+  const layer = draw(30, 20);
+  expect(layer.transform).toEqual({ x: 0, y: 0, scale: 1, rotation: 0 });
+  expect(layer.source.strokes[0].p[0].slice(0, 2)).toEqual([50, 40]);
+  expect(layer.source.strokes.at(-1).p[0].slice(0, 2)).toEqual([5, 5]);
+  expect(layer.source.strokes.at(-1).p.at(-1).slice(0, 2)).toEqual([15, 10]);
+  // With a mark pushed off the hoop it is left as it is, and the line still lands under the pen.
+  const off = draw(-30, -20);
+  expect(off.transform).toEqual({ x: -30, y: -20, scale: 1, rotation: 0 });
+  expect(off.source.strokes.at(-1).p[0].slice(0, 2)).toEqual([35, 25]);
+});
