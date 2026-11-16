@@ -53,7 +53,7 @@ export const STUDIO_MARKUP = `
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Where layers overlap, both are stitched.</p>
+    <p class="hint">Where layers overlap, both are stitched. Merge requires adjacent included drawings with matching stitch settings.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">

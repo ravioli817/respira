@@ -444,7 +444,27 @@ const holder = {};
   // ---------- design -> plan ----------
   // design: { labels: Uint8Array(GRID*GRID) of thread index (0 = empty),
   //           order: [thread...] fill order, lines: [{kind:'satin'|'run', color, pts:[[x,y,w]]}] }
+  // Imported PES runs already contain their needle placement. Do not resample, join,
+  // or add drawing tie stitches. The PEN encoder remains responsible for machine locks.
+  // Operation metadata flags: 1 requests a cut; 2 preserves an imported point.
+  function importedPlan(paths) {
+    var blocks=[], block=null, last=null, slot=null;
+    paths.forEach(function(path){
+      if(!path.pts.length)return;
+      if(!block || path.slot!==slot){
+        block={color:path.color,ops:[],forceColorChange:blocks.length>0};
+        blocks.push(block);slot=path.slot;
+      }
+      var first=path.pts[0];
+      if(path.trimBefore && last)block.ops.push([last[0],last[1],CMD.TRIM,1]);
+      if(path.jump || !last)block.ops.push([first[0],first[1],CMD.JUMP,2]);
+      for(var i=path.jump?1:0;i<path.pts.length;i++)block.ops.push([path.pts[i][0],path.pts[i][1],CMD.STITCH,2]);
+      last=path.pts[path.pts.length-1];
+    });
+    return {blocks:blocks};
+  }
   function plan(design, settings) {
+    if(design.rawStitches)return importedPlan(design.paths || []);
     var s = {
       angle: 45, spacing: 0.4, stitchLen: 3.5, underlay: true, satinSpacing: 0.45, runLen: 2.0, maxStitch: 7.0
     };
@@ -517,16 +537,17 @@ const holder = {};
   // ---------- plan -> machine stream (0.1 mm units, centred on the hoop) ----------
   function toStream(p) {
     var S = [], colors = [];
-    var R = function (v) { return Math.round((v - HOOP / 2) * 10); };
+    // Imported coordinates can sit on a half-step after centering; avoid floating-point tie drift.
+    var R = function (v, raw) { return Math.round((v - HOOP / 2) * 10 + (raw ? 1e-8 : 0)); };
     var blocks = p.blocks.filter(function (b) { return b.ops.some(function (op) { return op[2] === CMD.STITCH; }); });
     blocks.forEach(function (b, bi) {
       if (bi > 0) { var L = S[S.length - 1]; S.push([L[0], L[1], CMD.COLOR_CHANGE]); }
       colors.push(b.color);
       b.ops.forEach(function (op) {
-        var X = R(op[0]), Y = R(op[1]), last = S[S.length - 1];
+        var X = R(op[0],op[3]&2), Y = R(op[1],op[3]&2), last = S[S.length - 1];
         if (op[2] === CMD.TRIM) { S.push(op[3] ? [last[0], last[1], CMD.TRIM, 1] : [last[0], last[1], CMD.TRIM]); return; }
-        if (op[2] === CMD.STITCH && last && last[2] === CMD.STITCH && last[0] === X && last[1] === Y) return;
-        S.push([X, Y, op[2]]);
+        if (!(op[3]&2) && op[2] === CMD.STITCH && last && last[2] === CMD.STITCH && last[0] === X && last[1] === Y) return;
+        S.push(op[3]&2 ? [X,Y,op[2],2] : [X, Y, op[2]]);
       });
     });
     if (S.length) { var E = S[S.length - 1]; S.push([E[0], E[1], CMD.END]); }
@@ -553,7 +574,7 @@ const holder = {};
       if(s[2]===CMD.TRIM && s[3]===1){requestedCut=true;continue;}
       if(s[2]===CMD.JUMP && requestedCut){out.push([s[0],s[1],0x10|0x20,color]);requestedCut=false;continue;}
       var last = out[out.length - 1];
-      if (last && last[0] === s[0] && last[1] === s[1]) continue;
+      if (!(s[3]&2) && last && last[0] === s[0] && last[1] === s[1]) continue;
       out.push([s[0], s[1], s[2] === CMD.JUMP ? 0x10 : s[2] === CMD.TRIM ? 0x20 : 0x00, color]);
     }
     return out;
@@ -646,7 +667,7 @@ const holder = {};
     b.u8(0); b.u8(0); b.i24(0); b.u8(0x31); b.u8(0xff); b.u8(0xf0);
     b.i16(Math.round(ext[2] - ext[0])); b.i16(Math.round(ext[3] - ext[1]));
     b.i16(0x1e0); b.i16(0x1b0);
-    var colorTwo = true, jumping = true, init = true, xx = 0, yy = 0;
+    var colorTwo = true, jumping = true, init = true, pendingTrim = false, xx = 0, yy = 0;
     for (i = 0; i < S.length; i++) {
       var s = S[i], dx = Math.round(s[0] - xx), dy = Math.round(s[1] - yy), c = s[2];
       xx += dx; yy += dy;
@@ -655,9 +676,12 @@ const holder = {};
         pecValue(b, dx, false, 0); pecValue(b, dy, false, 0);
       } else if (c === CMD.JUMP) {
         jumping = true;
-        var f = init ? 0x10 : 0x20;
+        var f = init || ((s[3]&2) && !pendingTrim) ? 0x10 : 0x20;
+        pendingTrim=false;
         pecValue(b, dx, true, f); pecValue(b, dy, true, f);
+      } else if (c === CMD.TRIM) { pendingTrim=true;
       } else if (c === CMD.COLOR_CHANGE) {
+        pendingTrim=false;
         if (jumping) { pecValue(b, 0, false, 0); pecValue(b, 0, false, 0); jumping = false; }
         b.u8(0xfe); b.u8(0xb0); b.u8(colorTwo ? 2 : 1);
         colorTwo = !colorTwo;

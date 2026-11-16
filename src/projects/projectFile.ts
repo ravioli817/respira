@@ -1,5 +1,5 @@
 export interface ProjectData {
-  v: 1 | 2 | 3 | 4 | 5;
+  v: 1 | 2 | 3 | 4 | 5 | 6;
   activeLayerId?: string;
   layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
@@ -85,7 +85,10 @@ export type DesignLayer = {
 export interface StitchFileSource {
   fileName: string;
   slots: number[];
-  paths: Array<{ s: number; p: number[] }>;
+  /** Older PES layers lack command metadata; retain their re-import notice after migration. */
+  legacyCommands?: boolean;
+  /** j: first point is a jump, t: cut before that jump (v6). */
+  paths: Array<{ s: number; p: number[]; j?: boolean; t?: boolean }>;
 }
 export interface SavedProject {
   id: string;
@@ -191,14 +194,32 @@ function validateStitchFile(value: unknown): StitchFileSource {
     const path = object(value),
       p = array(path.p, 400000).map((v) => number(v, -100, 200));
     points += p.length;
-    if (p.length < 4 || p.length % 2 || points > 600000) return fail();
-    return { s: number(path.s, 0, slots.length - 1, true), p };
+    if (
+      p.length < (path.j === undefined ? 4 : 2) ||
+      p.length % 2 ||
+      points > 600000
+    )
+      return fail();
+    if (path.t === true && path.j !== true) return fail();
+    return {
+      s: number(path.s, 0, slots.length - 1, true),
+      p,
+      ...(path.j === undefined ? {} : { j: bool(path.j) }),
+      ...(path.t === undefined ? {} : { t: bool(path.t) }),
+    };
   });
-  if (!paths.length) return fail();
+  if (
+    !paths.length ||
+    !paths.some((path) => path.j !== true || path.p.length > 2)
+  )
+    return fail();
   return {
     fileName: src.fileName === undefined ? "" : string(src.fileName, 500),
     slots,
     paths,
+    ...(src.legacyCommands === undefined
+      ? {}
+      : { legacyCommands: bool(src.legacyCommands) }),
   };
 }
 
@@ -221,7 +242,12 @@ export function validateProject(value: unknown): ProjectData {
     t = object(s.text),
     settings = object(s.settings);
   if (
-    (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5) ||
+    (s.v !== 1 &&
+      s.v !== 2 &&
+      s.v !== 3 &&
+      s.v !== 4 &&
+      s.v !== 5 &&
+      s.v !== 6) ||
     !["draw", "image", "text", "stitches"].includes(String(s.mode))
   )
     return fail();
@@ -346,7 +372,7 @@ export function validateProject(value: unknown): ProjectData {
         : {}),
     },
   };
-  if (s.v === 2 || s.v === 3 || s.v === 4 || s.v === 5) {
+  if (s.v === 2 || s.v === 3 || s.v === 4 || s.v === 5 || s.v === 6) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
       const l = object(value),
@@ -451,7 +477,8 @@ export function importProject(text: string): ProjectData {
       file.version !== 2 &&
       file.version !== 3 &&
       file.version !== 4 &&
-      file.version !== 5) ||
+      file.version !== 5 &&
+      file.version !== 6) ||
     object(file.data).v !== file.version
   )
     return fail();

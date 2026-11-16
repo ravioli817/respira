@@ -15,7 +15,7 @@ function fail(message) { throw new Error(message); }
 
 /**
  * @param {Uint8Array} bytes the file
- * @returns {{ slots: number[], paths: Array<{ slot: number, pts: number[][] }>, stitches: number, width: number, height: number }}
+ * @returns {{ slots: number[], paths: Array<{ slot: number, pts: number[][], jump: boolean, trimBefore: boolean }>, stitches: number, width: number, height: number }}
  *   `slots` are thread numbers in the machine's palette (1 to 63), one per colour stop in sewing
  *   order; each path is one unbroken run of stitches in hoop millimetres, the design centred on the
  *   middle of the hoop (50, 50). `width` and `height` are the design's size in millimetres.
@@ -36,11 +36,17 @@ export function parsePes(bytes) {
     slots.push(thread >= 1 && thread <= 63 ? thread : thread === 64 ? 29 : 20);
   }
 
+  var lengthAt=pec+514;
+  var blockEnd=pec+512+(bytes[lengthAt]|(bytes[lengthAt+1]<<8)|(bytes[lengthAt+2]<<16));
+  if(blockEnd<=pec+STITCHES_AT || blockEnd>bytes.length)fail('That .pes file has incomplete stitch data.');
+  var ended=false;
   var pos = pec + STITCHES_AT, x = 0, y = 0, slot = 0, paths = [], run = null, stitches = 0;
   function coordinate() {
+    if(pos >= blockEnd) fail("That .pes file has incomplete stitch data.");
     var a = bytes[pos], value, flags = 0;
     if (a & 0x80) {
       // Two bytes: a 12-bit signed step, with "jump" and "cut the thread" marked in the first byte.
+      if(pos+1 >= blockEnd) fail("That .pes file has incomplete stitch data.");
       flags = a & 0x30;
       value = ((a & 0x0f) << 8) | bytes[pos + 1];
       if (value & 0x800) value -= 0x1000;
@@ -51,29 +57,34 @@ export function parsePes(bytes) {
     }
     return [value, flags];
   }
-  while (pos + 1 < bytes.length) {
-    if (bytes[pos] === 0xff) break;                                    // end of the design
+  while (pos < blockEnd) {
+    if (bytes[pos] === 0xff) { ended=true; break; }                                    // end of the design
     if (bytes[pos] === 0xfe && bytes[pos + 1] === 0xb0) {               // thread change
+      if(pos+2 >= blockEnd || slot+1 >= slots.length) fail("That .pes file has an invalid thread stop.");
       pos += 3; slot++; run = null;
       continue;
     }
-    var dx = coordinate(); if (pos >= bytes.length) break;
+    var dx = coordinate(); if (pos >= blockEnd) break;
     var dy = coordinate();
     x += dx[0]; y += dy[0];
     var point = [x / 10, y / 10];
     if (dx[1] || dy[1]) {
       // A jump or a cut: the needle travels here without sewing, and the next run starts from here.
-      run = { slot: Math.min(slot, slots.length - 1), pts: [point] };
+      run = { slot: slot, pts: [point], jump: true, trimBefore: !!((dx[1]|dy[1]) & 0x20) };
       paths.push(run);
     } else {
-      if (!run) { run = { slot: Math.min(slot, slots.length - 1), pts: [] }; paths.push(run); }
+      if (!run) { run = { slot: slot, pts: [], jump: false, trimBefore: false }; paths.push(run); }
       run.pts.push(point);
       stitches++;
     }
   }
-  paths = paths.filter(function (path) { return path.pts.length > 1; });
-  if (!paths.length) fail('That .pes file has no stitches in it.');
+  if(!ended)fail('That .pes file has incomplete stitch data.');
+  // Keep single needle points and consecutive jumps as well as complete runs.
+  if (!stitches) fail('That .pes file has no stitches in it.');
 
+  // An empty color stop has no needle position for the machine's stop/lock sequence.
+  // Refuse it rather than silently discarding a material-placement stop.
+  for (var used=0;used<=slot;used++) if(!paths.some(function(p){return p.slot===used && p.pts.length>(p.jump?1:0);})) fail('That .pes file contains an empty thread section. Remove empty stops in the source design first.');
   var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   paths.forEach(function (path) {
     path.pts.forEach(function (p) {
@@ -87,4 +98,11 @@ export function parsePes(bytes) {
     path.pts = path.pts.map(function (p) { return [+(p[0] + shiftX).toFixed(2), +(p[1] + shiftY).toFixed(2)]; });
   });
   return { slots: slots, paths: paths, stitches: stitches, width: width, height: height };
+}
+
+/** Keep imported runs distinct from generated lettering paths. */
+export function stitchFileDesign(source) {
+  return { rawStitches: true, paths: source.paths.map(path => ({
+    ...path, color: source.slots[path.slot],
+  })) };
 }

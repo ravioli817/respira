@@ -265,7 +265,9 @@ export function encodeStitchesToPen(
         // With stopAfterTrim the cut becomes a cut-and-pause at the current position,
         // the same record a color change uses, and the jump that follows carries no
         // second cut. No pause right before a color change: the machine stops there anyway.
-        const stop = stopAfterTrim && !colorChangesWithin(stitches, i, 2);
+        const terminalJump = i === stitches.length - 1 || (cmd & END) !== 0;
+        const stop =
+          !terminalJump && stopAfterTrim && !colorChangesWithin(stitches, i, 2);
         if (stop) {
           trimStops.push(penStitches.length / 4);
           penStitches.push(
@@ -278,10 +280,18 @@ export function encodeStitchesToPen(
           ...encodeFlagged(
             absX,
             absY,
-            0,
+            terminalJump ? PEN_DATA_END : 0,
             PEN_FEED_DATA | (stop ? 0 : PEN_CUT_DATA),
           ),
         );
+
+        // Imported files can end with a trim/jump: finish there without sewing new locks
+        // after the cut or leaving the stream without an end marker.
+        if (terminalJump) {
+          prevX = absX;
+          prevY = absY;
+          break;
+        }
 
         // Add starting lock stitches at new position
         // Loop A: Jump/Entry Vector - Look FORWARD at upcoming stitches

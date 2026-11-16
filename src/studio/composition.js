@@ -19,15 +19,15 @@ export function transformDesign(design,t) {
       if(sx>=0&&sy>=0&&sx<500&&sy<500) labels[y*500+x]=input[sy*500+sx];
     }
   }
-  return {labels,order:design.order || [],lines:(design.lines || []).map(line=>({...line,pts:line.pts.map(p=>[...transformPoint(p,t),(p[2]||0)*t.scale])})),paths:(design.paths||[]).map(path=>({...path,pts:path.pts.map(p=>transformPoint(p,t))}))};
+  return {rawStitches:design.rawStitches,labels,order:design.order || [],lines:(design.lines || []).map(line=>({...line,pts:line.pts.map(p=>[...transformPoint(p,t),(p[2]||0)*t.scale])})),paths:(design.paths||[]).map(path=>({...path,pts:path.pts.map(p=>transformPoint(p,t))}))};
 }
 /** Preserve layer order. Only adjacent same-thread blocks can share a color stop. */
 export function composePlans(plans) {
   const blocks=[];
   for(const plan of plans) for(const block of plan.blocks) {
     const previous=blocks.at(-1);
-    if(previous?.color===block.color) {const end=previous.ops.at(-1); previous.ops.push([end[0],end[1],E.CMD.TRIM],...block.ops);}
-    else blocks.push({color:block.color,ops:block.ops.slice()});
+    if(previous?.color===block.color && !block.forceColorChange) {const end=previous.ops.at(-1); previous.ops.push([end[0],end[1],E.CMD.TRIM],...block.ops);}
+    else blocks.push({...block,ops:block.ops.slice()});
   }
   return {blocks};
 }

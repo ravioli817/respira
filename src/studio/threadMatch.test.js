@@ -61,14 +61,30 @@ describe("matching a picture's colours to threads", () => {
     ]);
   });
 
-  it("lets two areas share a thread when no other thread is close", () => {
-    const threads = assignThreads(
-      PEC,
-      [
-        { rgb: [237, 23, 31], area: 2 },
-        { rgb: [236, 24, 32], area: 1 },
-      ],
-    );
-    expect(threads.map(name)).toEqual(["Red", "Red"]);
+  it("keeps automatic colors distinct even when the nearest alternatives are farther away", () => {
+    const threads = assignThreads(PEC, [
+      { rgb: [237, 23, 31], area: 2 },
+      { rgb: [236, 24, 32], area: 1 },
+    ]);
+    expect(name(threads[0])).toBe("Red");
+    expect(new Set(threads).size).toBe(2);
   });
+});
+it("does not repeat Beige when more similar image regions are added", () => {
+  const regions = [
+    { rgb: [65, 75, 9], area: 23 },
+    { rgb: [85, 90, 92], area: 16 },
+    { rgb: [215, 205, 198], area: 14 },
+    { rgb: [160, 220, 235], area: 13 },
+    { rgb: [180, 178, 210], area: 12 },
+    { rgb: [239, 227, 185], area: 10 },
+    { rgb: [254, 182, 65], area: 6 },
+    { rgb: [238, 226, 184], area: 6 },
+  ];
+  for (let count = 2; count <= 8; count++)
+    expect(new Set(assignThreads(PEC, regions.slice(0, count))).size).toBe(
+      count,
+    );
+  const names = assignThreads(PEC, regions).map(name);
+  expect(names.filter((n) => n === "Beige")).toHaveLength(1);
 });

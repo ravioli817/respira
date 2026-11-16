@@ -5,7 +5,7 @@ import {
   choose,
   forgetThreads,
   matchChoices,
-  skipsFromSaved,
+  choicesFromSaved,
 } from "./pictureChoices.js";
 
 /** Colours of a picture as worked out from its settings: each with its automatic thread. */
@@ -19,7 +19,8 @@ const WALL = [120, 137, 155],
   HAIR = [74, 58, 50];
 const four = () => worked([WALL, 32], [SKIN, 35], [TOP, 49], [HAIR, 23]);
 // The same picture with its background kept: the top and the hair have run together.
-const merged = () => worked([[244, 241, 234], 29], [WALL, 32], [SKIN, 35], [[103, 52, 55], 49]);
+const merged = () =>
+  worked([[244, 241, 234], 29], [WALL, 32], [SKIN, 35], [[103, 52, 55], 49]);
 
 describe("choices made by hand for a picture's colours", () => {
   it("leave every colour on its automatic thread when there are none", () => {
@@ -52,7 +53,11 @@ describe("choices made by hand for a picture's colours", () => {
     const start = applyChoices(four(), []);
     const choices = choose([], start, start[0], { thread: 4 });
     // More colours: the wall has split into a lighter and a darker blue-gray.
-    const split = worked([[128, 145, 163], 32], [[110, 127, 146], 19], [SKIN, 35]);
+    const split = worked(
+      [[128, 145, 163], 32],
+      [[110, 127, 146], 19],
+      [SKIN, 35],
+    );
     expect(threads(applyChoices(split, choices))).toEqual([4, 19, 35]);
     // Two choices that both sit nearest one colour: the nearer has it.
     const both = [
@@ -72,7 +77,12 @@ describe("choices made by hand for a picture's colours", () => {
     applyChoices(clusters, choices);
     choices = choose(choices, clusters, clusters[3], { on: false });
     expect(choices).toEqual([{ rgb: HAIR, thread: 50, on: false }]);
-    expect(threads(applyChoices(clusters, choices))).toEqual([32, 35, 49, "skip"]);
+    expect(threads(applyChoices(clusters, choices))).toEqual([
+      32,
+      35,
+      49,
+      "skip",
+    ]);
     choices = choose(choices, clusters, clusters[3], { on: true });
     expect(choices).toEqual([{ rgb: HAIR, thread: 50 }]);
     // Picking the automatic thread again leaves nothing to remember.
@@ -115,7 +125,7 @@ describe("choices made by hand for a picture's colours", () => {
     expect(choices[0].rgb).toEqual([0, 45, 0]);
   });
 
-  it("take only what was skipped from a design saved before choices were kept", () => {
+  it("preserve threads and skipped colors from a design saved before choices were kept", () => {
     // Thread and stitch-or-skip for each colour, with no word on which threads were picked by hand.
     const saved = [
       { rgb: WALL, thread: 32, on: true },
@@ -123,12 +133,48 @@ describe("choices made by hand for a picture's colours", () => {
       { rgb: TOP, thread: 49, on: false },
       { rgb: HAIR, thread: 23, on: true },
     ];
-    const choices = skipsFromSaved(saved);
-    expect(choices).toEqual([{ rgb: TOP, on: false }]);
-    expect(choices[0].rgb).not.toBe(TOP);
-    // The threads are matched again, so no colour is marked as picked.
+    const choices = choicesFromSaved(saved);
+    expect(choices).toEqual(
+      saved.map((c) => ({
+        rgb: c.rgb,
+        thread: c.thread,
+        ...(c.on === false ? { on: false } : {}),
+      })),
+    );
+    expect(choices[0].rgb).not.toBe(WALL);
+    // A manual assignment survives even when the automatic match would differ.
     const clusters = applyChoices(four(), choices);
-    expect(threads(clusters)).toEqual([32, 35, "skip", 23]);
-    expect(clusters.some((c) => c.picked)).toBe(false);
+    expect(threads(clusters)).toEqual([32, 57, "skip", 23]);
+    expect(clusters[1].picked).toBe(true);
   });
+});
+
+import { StitchEngine as E } from "./engine.js";
+it("reserves manual choices so automatically matched regions cannot collide with them", () => {
+  const source = () =>
+    worked([[239, 227, 185], 47], [[10, 85, 163], 2], [[238, 226, 184], 47]);
+  const choices = [{ rgb: [239, 227, 185], thread: 2 }];
+  const clusters = applyChoices(source(), choices, E.PEC);
+  expect(clusters[0].thread).toBe(2);
+  expect(new Set(clusters.map((c) => c.thread)).size).toBe(3);
+  expect(clusters[0].picked).toBe(true);
+  expect(clusters.slice(1).every((c) => !c.picked)).toBe(true);
+  expect(applyChoices(source(), choices, E.PEC).map((c) => c.thread)).toEqual(
+    clusters.map((c) => c.thread),
+  );
+  expect(
+    applyChoices(source(), forgetThreads(choices), E.PEC).map((c) => c.thread),
+  ).toEqual(applyChoices(source(), [], E.PEC).map((c) => c.thread));
+});
+it("allows deliberate manual duplicates without letting automatic colors reuse that thread", () => {
+  const clusters = worked(
+    [[239, 227, 185], 47],
+    [[238, 226, 184], 63],
+    [[237, 225, 183], 29],
+  );
+  const choices = clusters.slice(0, 2).map((c) => ({ rgb: c.rgb, thread: 47 }));
+  const result = applyChoices(clusters, choices, E.PEC);
+  expect(result[0].thread).toBe(47);
+  expect(result[1].thread).toBe(47);
+  expect(result[2].thread).not.toBe(47);
 });

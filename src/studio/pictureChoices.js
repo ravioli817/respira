@@ -1,3 +1,4 @@
+import { assignThreads } from './threadMatch.js';
 // What a person has chosen by hand for the colours of a picture: a different thread for one of them,
 // or to skip it.
 //
@@ -40,8 +41,21 @@ export function matchChoices(clusters, choices) {
  * Sets each colour's `thread`, `on` and `picked` from its automatic match (`auto`) and the choices.
  * @returns the same clusters
  */
-export function applyChoices(clusters, choices) {
+export function applyChoices(clusters, choices, palette) {
   var winner = matchChoices(clusters, choices);
+  if(palette) {
+    // Recompute from source colors each time. Manual overrides reserve their thread;
+    // only the remaining automatic rows compete for the remaining palette entries.
+    var base=assignThreads(palette,clusters), reserved=[], automatic=[], indexes=[];
+    clusters.forEach(function(cluster,i){
+      cluster.auto=base[i];
+      var choice=winner[i]>=0?choices[winner[i]]:null;
+      if(choice && choice.thread!==undefined)reserved.push(choice.thread);
+      else {automatic.push(cluster);indexes.push(i);}
+    });
+    var matched=assignThreads(palette,automatic,reserved);
+    indexes.forEach(function(index,i){clusters[index].auto=matched[i];});
+  }
   clusters.forEach(function (cluster, i) {
     var choice = winner[i] >= 0 ? choices[winner[i]] : null;
     cluster.picked = !!choice && choice.thread !== undefined && choice.thread !== cluster.auto;
@@ -73,14 +87,8 @@ export function forgetThreads(choices) {
   return choices.filter(function (c) { return c.on === false; }).map(function (c) { return { rgb: c.rgb.slice(), on: false }; });
 }
 
-/**
- * The choices to start from for a design saved before choices were kept. Such a design lists a thread
- * and stitch-or-skip for each colour, with nothing to say which threads were picked by hand and which
- * were only matched (or left over from an earlier setting, which is how they used to go wrong). A
- * skipped colour can only have been skipped by hand, so that is kept. The threads are matched again:
- * keeping them all would mark every colour "your pick" and leave the settings nothing to change.
- * @param saved the saved colours: `[{ rgb, thread, on }]`
- */
-export function skipsFromSaved(saved) {
-  return saved.filter(function (c) { return c.on === false; }).map(function (c) { return { rgb: c.rgb.slice(), on: false }; });
+/** Preserve all legacy assignments: old files cannot distinguish automatic from hand-picked threads.
+ * Rematching is an explicit user action, never a side effect of opening/autosaving a design. */
+export function choicesFromSaved(saved) {
+  return saved.map(c => ({rgb:c.rgb.slice(),thread:c.thread,...(c.on===false?{on:false}:{})}));
 }
