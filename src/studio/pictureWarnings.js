@@ -4,7 +4,7 @@ import { StitchEngine as E } from './engine.js';
  * Thin parts that touch another color are folded into it before this runs (thinDetails.js), unless
  * the picture's clean-up is Light; so the wording says which of the two cases is left.
  */
-export function pictureDetailWarnings(parts) {
+export function pictureDetailIssues(parts) {
   const messages=[];
   for(const {layer,design} of parts) {
     if(layer.kind!=='image'||layer.visible===false||!design.labels)continue;
@@ -16,9 +16,11 @@ export function pictureDetailWarnings(parts) {
       if(E.thinShare(mask,E.GRID,E.GRID,3)>0.12){thin=true;break;}
     }
     const folded=!!layer.source&&layer.source.clean>1;
-    if(thin)messages.push(folded
+    if(thin)messages.push({layerId:layer.id, message:folded
       ? `${layer.name}: some details thinner than about 1.2 mm stand on their own, with no other color beside them to fold into, and may not stitch clearly. Enlarge this picture or skip that color.`
-      : `${layer.name}: some picture details are thinner than about 1.2 mm at this size and may not stitch clearly. Set Clean up specks to Medium to fold them into the color beside them, or enlarge this picture.`);
+      : `${layer.name}: some picture details are thinner than about 1.2 mm at this size and may not stitch clearly. Set Clean up specks to Medium to fold them into the color beside them, or enlarge this picture.`, action:'settings'});
   }
   return messages;
 }
+
+export function pictureDetailWarnings(parts) { return pictureDetailIssues(parts).map(issue=>issue.message); }

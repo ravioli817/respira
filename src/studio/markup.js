@@ -1,6 +1,25 @@
 // The Create screen's markup. Mounted into a shadow root by mountStudio().
 export const STUDIO_MARKUP = `
 <main class="studio">
+  <dialog id="simplify-dialog" aria-labelledby="simplify-title">
+    <h2 id="simplify-title">Simplify design</h2>
+    <p>Preview changes before applying. Original artwork stays editable; these settings follow later edits.</p>
+    <div class="simplify-layout">
+      <div class="simplify-art"><canvas id="simplify-canvas" width="500" height="500" role="img" aria-label="Stitch comparison in the hoop"></canvas><button class="btn" id="simplify-before" aria-pressed="false">Show before</button></div>
+      <div class="simplify-controls">
+        <label class="check"><input type="checkbox" id="simplify-covered"> Remove covered fills</label>
+        <label class="stack">Overlap margin (mm)<input id="simplify-overlap" type="number" min="0.4" max="2" step="0.2" value="0.6"></label>
+        <p class="hint">Leaves a margin under later filled shapes. Satin outlines, embroidery lettering and PES files do not count as covering fills.</p>
+        <label class="stack">Remove fill islands smaller than (mm²)<input id="simplify-area" type="number" min="0" max="10" step="0.2" value="0"></label>
+        <p class="hint">0 keeps all details. Letter details are protected.</p>
+        <label class="stack">Maximum artwork colors<input id="simplify-colors" type="number" min="0" max="63" step="1" value="0"></label>
+        <p class="hint">0 keeps all colors. Combines similar colors into existing Brother threads. Imported PES layers stay unchanged and may add colors.</p>
+        <div id="simplify-summary" aria-live="polite"></div>
+        <p class="hint">Counts include machine lock stitches. Time assumes 400 stitches/minute, excluding threading and stops. Check Place after positioning.</p>
+      </div>
+    </div>
+    <div class="simplify-actions"><button class="btn" id="simplify-reset">Restore original artwork</button><button class="btn" id="simplify-cancel">Cancel</button><button class="btn primary" id="simplify-apply">Apply</button></div>
+  </dialog>
   <div class="editor-workspace">
   <nav class="rail" aria-label="Tools">
     <div class="tools" role="group" aria-label="Draw with">
@@ -53,7 +72,7 @@ export const STUDIO_MARKUP = `
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Where layers overlap, both are stitched. Merge requires adjacent included drawings with matching stitch settings.</p>
+    <p class="hint">Overlapping fills can be reduced with Simplify design. Merge requires adjacent included drawings with matching stitch settings.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
@@ -70,6 +89,7 @@ export const STUDIO_MARKUP = `
       </div>
       <p id="editing-object" class="hint" aria-live="polite"></p>
       <div class="heading-controls">
+        <button class="btn" id="simplify-open">Simplify design</button>
         <button class="btn" id="pan-canvas" aria-pressed="false" hidden>Pan</button>
         <div class="seg small" role="group" aria-label="Show">
           <button id="view-design" data-view="design" aria-pressed="true">Design</button>
@@ -95,7 +115,7 @@ export const STUDIO_MARKUP = `
     </div>
     <!-- On a narrow screen the thread colors and line width dock here instead of in a drawer over the hoop. -->
     <div class="draw-dock" id="draw-dock" hidden></div>
-    <p class="note" id="note" role="status" hidden></p>
+    <div class="note" id="note" role="status" hidden></div>
     <div class="canvas-viewport" id="canvas-viewport">
 
     <div class="hoop-wrap">

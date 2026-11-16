@@ -1,5 +1,11 @@
 export interface ProjectData {
-  v: 1 | 2 | 3 | 4 | 5 | 6;
+  v: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  simplification?: {
+    removeCovered: boolean;
+    overlapMm: number;
+    minAreaMm2: number;
+    maxColors: number;
+  };
   activeLayerId?: string;
   layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
@@ -247,7 +253,8 @@ export function validateProject(value: unknown): ProjectData {
       s.v !== 3 &&
       s.v !== 4 &&
       s.v !== 5 &&
-      s.v !== 6) ||
+      s.v !== 6 &&
+      s.v !== 7) ||
     !["draw", "image", "text", "stitches"].includes(String(s.mode))
   )
     return fail();
@@ -372,7 +379,14 @@ export function validateProject(value: unknown): ProjectData {
         : {}),
     },
   };
-  if (s.v === 2 || s.v === 3 || s.v === 4 || s.v === 5 || s.v === 6) {
+  if (
+    s.v === 2 ||
+    s.v === 3 ||
+    s.v === 4 ||
+    s.v === 5 ||
+    s.v === 6 ||
+    s.v === 7
+  ) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
       const l = object(value),
@@ -418,6 +432,16 @@ export function validateProject(value: unknown): ProjectData {
     result.text = legacyDefaults.text;
     result.activeLayerId = string(s.activeLayerId, 100);
     if (!ids.has(result.activeLayerId)) return fail();
+  }
+  if (s.simplification !== undefined) {
+    if (s.v !== 7) return fail();
+    const o = object(s.simplification);
+    result.simplification = {
+      removeCovered: bool(o.removeCovered),
+      overlapMm: number(o.overlapMm, 0.4, 2),
+      minAreaMm2: number(o.minAreaMm2, 0, 10),
+      maxColors: number(o.maxColors, 0, 63, true),
+    };
   }
   if (s.placement !== undefined) {
     const p = object(s.placement);
@@ -478,7 +502,8 @@ export function importProject(text: string): ProjectData {
       file.version !== 3 &&
       file.version !== 4 &&
       file.version !== 5 &&
-      file.version !== 6) ||
+      file.version !== 6 &&
+      file.version !== 7) ||
     object(file.data).v !== file.version
   )
     return fail();

@@ -317,3 +317,45 @@ it("round-trips version 5: an embroidery-file layer and a cropped picture with h
     }),
   ).toThrow();
 });
+
+it("preserves v7 simplification and rejects unsafe or fractional settings", () => {
+  const base = emptyProject();
+  const project = {
+    ...base,
+    v: 7 as const,
+    activeLayerId: "a",
+    layers: [
+      {
+        id: "a",
+        name: "Drawing",
+        kind: "draw" as const,
+        visible: true,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        source: base.draw,
+      },
+    ],
+    simplification: {
+      removeCovered: true,
+      overlapMm: 0.6,
+      minAreaMm2: 1,
+      maxColors: 3,
+    },
+  };
+  expect(importProject(exportProject(project)).simplification).toEqual(
+    project.simplification,
+  );
+  for (const patch of [
+    { overlapMm: 0 },
+    { minAreaMm2: -1 },
+    { maxColors: 2.5 },
+    { removeCovered: "yes" },
+  ]) {
+    expect(() =>
+      validateProject({
+        ...project,
+        simplification: { ...project.simplification, ...patch },
+      }),
+    ).toThrow();
+  }
+  expect(() => validateProject({ ...project, v: 6 })).toThrow();
+});
