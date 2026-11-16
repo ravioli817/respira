@@ -13,10 +13,10 @@ import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
 import { guessPxPerMM } from './realSize.js';
 import { assignThreads } from './threadMatch.js';
-import { applyChoices, choose, forgetThreads, skipsFromSaved } from './pictureChoices.js';
+import { applyChoices, choose, forgetThreads, choicesFromSaved } from './pictureChoices.js';
 import { foldThin, thinRadius } from './thinDetails.js';
 import { FULL_CROP, isFullCrop, dragCrop, cropPixels } from './crop.js';
-import { parsePes } from './pesImport.js';
+import { parsePes, stitchFileDesign } from './pesImport.js';
 
 export function mountStudio(root, opts) {
   opts = opts || {};
@@ -773,7 +773,7 @@ export function mountStudio(root, opts) {
     }).filter(function (cl) { return cl.area > 0; });
     clusters.sort(function (a, b) { return b.area - a.area || a.id - b.id; });
     im.choices = im.choices || [];
-    im.clusters = applyChoices(clusters, im.choices);
+    im.clusters = applyChoices(clusters, im.choices, PEC);
     im.proc = { gw: gw, gh: gh, lab: lab, wmm: wmm, hmm: hmm, scale: scale };
   }
   function imageDesign(im) {
@@ -835,6 +835,7 @@ export function mountStudio(root, opts) {
   // ---------- design + digitise pipeline ----------
   function updateDesign() {
     invalidateDesign();
+    syncMergeButton();
     if (S.layers.some(function (l) { return l.source.loading; })) return;
     var token = textToken, parts = new Array(S.layers.length), pending = 0, collecting = true;
     S.note = '';
@@ -870,7 +871,7 @@ export function mountStudio(root, opts) {
           if (source.source && source.proc && source.proc.scale !== layer.transform.scale && !(active && active.resize)) { processImage(source); if (S.image === source) renderClusters(); }
           design = imageDesign(source);
         }
-        else if (layer.kind === 'stitches') design = { paths: source.paths.map(function (path) { return { color: source.slots[path.slot] || 20, pts: path.pts }; }) };
+        else if (layer.kind === 'stitches') design = stitchFileDesign(source);
         else if (isEmbroideryFont(source.font)) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
         else {
           textDesign(source, function (d, thin) { if (token !== textToken) return; parts[index] = { layer: layer, design: d }; if (thin > 0.08) S.note = 'Some decorative letters are thin. Try Small Satin for embroidery lettering.'; pending--; ready(); }, token);
@@ -1055,8 +1056,7 @@ export function mountStudio(root, opts) {
     // The row of actions on the mat under the hoop belongs to Move: it acts on the selected layer.
     $('#part-actions').hidden=!selected||(S.mode==='draw'&&!moveDrawing);
     $('#part-remove').disabled=S.layers.length===1;
-    var partner=mergePartner(selected), merge=$('#layer-merge');
-    merge.hidden=!partner; if(partner)merge.textContent='Merge with “'+partner.name+'”';
+    syncMergeButton();
     if(!selected) return;
     if(root.activeElement!==$('#layer-name') && document.activeElement!==$('#layer-name')) $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
     $('#layer-x').value=+selected.transform.x.toFixed(2); $('#layer-y').value=+selected.transform.y.toFixed(2);
@@ -1215,7 +1215,7 @@ export function mountStudio(root, opts) {
     function chosen(cl, change) {
       pushUndo(); S.placement=undefined;
       S.image.choices = choose(S.image.choices || [], S.image.clusters, cl, change);
-      applyChoices(S.image.clusters, S.image.choices);
+      applyChoices(S.image.clusters, S.image.choices, PEC);
       renderClusters(); updateDesign(); scheduleSave();
     }
     S.image.clusters.forEach(function (cl) {
@@ -1241,7 +1241,7 @@ export function mountStudio(root, opts) {
   $('#img-rematch').addEventListener('click', function () {
     pushUndo(); S.placement=undefined;
     S.image.choices = forgetThreads(S.image.choices || []);
-    applyChoices(S.image.clusters, S.image.choices);
+    applyChoices(S.image.clusters, S.image.choices, PEC);
     renderClusters(); updateDesign(); scheduleSave();
   });
 
@@ -1440,26 +1440,26 @@ export function mountStudio(root, opts) {
   function serializeSource(kind, source) {
     if(kind==='draw') return {tool:source.tool,color:source.color,sizes:source.sizes,pressure:source.pressure,order:source.order,example:source.example,labels:rle(source.labels),strokes:source.strokes.map(function(st){return {k:st.kind,c:st.color,p:st.pts.map(function(p){return p.slice();})};})};
     if(kind==='text') return Object.assign({},source);
-    if(kind==='stitches') return {fileName:source.fileName,slots:source.slots.slice(),paths:source.paths.map(function(path){var flat=[];path.pts.forEach(function(q){flat.push(q[0],q[1]);});return {s:path.slot,p:flat};})};
+    if(kind==='stitches') return {fileName:source.fileName,slots:source.slots.slice(),legacyCommands:source.legacyCommands||undefined,paths:source.paths.map(function(path){var flat=[];path.pts.forEach(function(q){flat.push(q[0],q[1]);});return {s:path.slot,p:flat,j:!!path.jump,t:!!path.trimBefore};})};
     return {sizeMM:source.sizeMM,k:source.k,removeBg:source.removeBg,clean:source.clean,crop:source.crop?Object.assign({},source.crop):undefined,sourceDataURL:source.sourceDataURL || (source.source && source.source.toDataURL ? source.source.toDataURL('image/png'):undefined),fileName:source.fileName,clusters:source.clusters.map(function(c){return {rgb:c.rgb,thread:c.thread,on:c.on};}),
-      choices:source.choices&&source.choices.length?source.choices.map(function(c){var out={rgb:c.rgb.slice()};if(c.thread!==undefined)out.thread=c.thread;if(c.on===false)out.on=false;return out;}):undefined};
+      choices:(source.choices||[]).map(function(c){var out={rgb:c.rgb.slice()};if(c.thread!==undefined)out.thread=c.thread;if(c.on===false)out.on=false;return out;})};
   }
   // A picture read from a saved design. Its colours are worked out again once it has decoded; what
   // comes from the file is what was chosen by hand. (`saved` is the file's own copy of the source.)
   function savedPicture(im, saved) {
     im.clusters=im.clusters||[];
-    im.choices=Array.isArray(saved.choices)?saved.choices.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});}):skipsFromSaved(im.clusters);
+    im.choices=Array.isArray(saved.choices)?saved.choices.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});}):choicesFromSaved(im.clusters);
     return im;
   }
   function deserializeSource(kind, source) {
     if(kind==='draw') return Object.assign(freshSource(kind),source,{labels:unrle(source.labels,GRID*GRID),strokes:source.strokes.map(function(st){return {kind:st.k,color:st.c,pts:st.p.map(function(p){return p.slice();})};})});
-    if(kind==='stitches') return {fileName:source.fileName||'',slots:source.slots.slice(),paths:source.paths.map(function(path){var pts=[];for(var i=0;i+1<path.p.length;i+=2)pts.push([path.p[i],path.p[i+1]]);return {slot:path.s,pts:pts};})};
+    if(kind==='stitches') return {fileName:source.fileName||'',slots:source.slots.slice(),legacyCommands:source.legacyCommands||source.paths.some(function(p){return p.j===undefined;}),paths:source.paths.map(function(path,index){var pts=[];for(var i=0;i+1<path.p.length;i+=2)pts.push([path.p[i],path.p[i+1]]);return {slot:path.s,pts:pts,jump:path.j===undefined?index>0:path.j,trimBefore:!!path.t};})};
     if(kind==='image') return savedPicture(Object.assign(freshSource(kind),source),source);
     return Object.assign(freshSource(kind),source);
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:5,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:6,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
       activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
@@ -1477,7 +1477,7 @@ export function mountStudio(root, opts) {
     try {
       var s = opts.project;
       if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
-      if (!s || !(s.v >= 1 && s.v <= 5)) return false;
+      if (!s || !(s.v >= 1 && s.v <= 6)) return false;
       loadedProject = s;
       S.placement = s.placement;
       if (s.view) S.view = Object.assign(S.view, s.view);
@@ -1555,7 +1555,7 @@ export function mountStudio(root, opts) {
   function renderSlots() {
     var source=S.stitches, box=$('#slots'); box.innerHTML='';
     var points=source.paths.reduce(function(n,path){return n+path.pts.length;},0);
-    $('#stitch-file-name').textContent=(source.fileName||'Embroidery file')+' · '+fmt(points)+' stitches';
+    $('#stitch-file-name').textContent=(source.fileName||'Embroidery file')+' · '+fmt(points)+' points'+(source.legacyCommands?' · Imported by an older version: re-import the original PES to recover cuts and stops.':'');
     source.slots.forEach(function(thread,index){
       if(!source.paths.some(function(path){return path.slot===index;}))return;
       var row=document.createElement('div'); row.className='cluster';
@@ -1584,14 +1584,19 @@ export function mountStudio(root, opts) {
   $('#part-turn-right').addEventListener('click',function(){turnLayer(15);});
   $('#part-duplicate').addEventListener('click',function(){$('#layer-duplicate').click();});
   $('#part-remove').addEventListener('click',function(){$('#layer-remove').click();});
-  // Two drawings can be made one: the selected drawing and the nearest other drawing in the list
-  // (the next one down, else the next one up). Each is first redrawn where it sits (its move, size
-  // and turn become part of the marks), so nothing shifts on the hoop.
+  // Never cross another layer, revive excluded marks, or discard differing stitch settings.
+  // The user can explicitly reorder/include drawings before merging them.
+  function syncMergeButton(){
+    var partner=mergePartner(currentLayer()), merge=$('#layer-merge');
+    merge.hidden=!partner;if(partner)merge.textContent='Merge with “'+partner.name+'”';
+  }
   function mergePartner(layer){
-    if(!layer||layer.kind!=='draw')return null;
-    var i=S.layers.indexOf(layer), j;
-    for(j=i+1;j<S.layers.length;j++)if(S.layers[j].kind==='draw')return S.layers[j];
-    for(j=i-1;j>=0;j--)if(S.layers[j].kind==='draw')return S.layers[j];
+    if(!layer||layer.kind!=='draw'||!layer.visible)return null;
+    var i=S.layers.indexOf(layer);
+    for(var j of [i+1,i-1]) {
+      var other=S.layers[j];
+      if(other && other.kind==='draw' && other.visible && JSON.stringify(engineSettings(other,S.settings))===JSON.stringify(engineSettings(layer,S.settings)))return other;
+    }
     return null;
   }
   function settled(layer){
@@ -1603,12 +1608,16 @@ export function mountStudio(root, opts) {
     var selected=currentLayer(), partner=mergePartner(selected); if(!partner)return;
     var first=S.layers.indexOf(selected)<S.layers.indexOf(partner)?selected:partner, second=first===selected?partner:selected, a, b;
     try{a=settled(first);b=settled(second);}catch(error){toast('Move both drawings inside the hoop, then merge.');return;}
-    pushUndo(); S.placement=undefined;
     var labels=a.labels.slice(); for(var i=0;i<labels.length;i++)if(b.labels[i])labels[i]=b.labels[i];
     var order=a.order.slice(); b.order.forEach(function(c){if(order.indexOf(c)<0)order.push(c);});
     var strokes=a.lines.concat(b.lines).map(function(line){return {kind:line.kind,color:line.color,pts:line.pts.map(function(p){return [p[0],p[1],p[2]||0];})};});
+    var settings=engineSettings(first,S.settings);
+    var before=composePlans([E.plan(a,settings),E.plan(b,settings)]).blocks.map(function(block){return block.color;});
+    var after=E.plan({labels:labels,order:order,lines:strokes},settings).blocks.map(function(block){return block.color;});
+    if(JSON.stringify(before)!==JSON.stringify(after)){toast('Keep these drawings separate to preserve their thread order.');return;}
+    pushUndo(); S.placement=undefined;
     first.source=Object.assign(freshSource('draw'),{tool:selected.source.tool,color:selected.source.color,sizes:Object.assign({},selected.source.sizes),pressure:selected.source.pressure,labels:labels,order:order,strokes:strokes});
-    first.transform=identityTransform(); first.visible=first.visible||second.visible;
+    first.transform=identityTransform(); first.visible=true;
     S.layers=S.layers.filter(function(l){return l!==second;});
     selectLayer(first.id);
     toast('Merged into one drawing. Undo brings both back.');
@@ -1716,7 +1725,7 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { pushUndo(); S.placement=undefined; S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
-  if(loadedProject && (loadedProject.v>=2 && loadedProject.v<=5) && loadedProject.layers) {
+  if(loadedProject && (loadedProject.v>=2 && loadedProject.v<=6) && loadedProject.layers) {
     S.layers=loadedProject.layers.map(function(l){return Object.assign({},l,{transform:Object.assign({},l.transform),source:deserializeSource(l.kind,l.source)});});
     S.activeId=loadedProject.activeLayerId;
   } else {

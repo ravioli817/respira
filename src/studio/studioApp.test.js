@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(5);
+  expect(saved.v).toBe(6);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -787,7 +787,7 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
   button("#undo").click();
   const saved = studio.snapshot();
-  expect(saved.v).toBe(5);
+  expect(saved.v).toBe(6);
   studio.destroy();
   studio = mountStudio(root, { project: saved, onSend });
   await vi.advanceTimersByTimeAsync(70);
@@ -958,6 +958,8 @@ it("keeps turn, copy and delete beside the hoop in Move, and gives every layer a
 it("merges two drawings into one where they sit, and undo brings both back", async () => {
   const first = studio.snapshot().layers[0];
   button("#new-drawing-object").click();
+  button("#layer-earlier").click(); // Adjacent to the first drawing, before the excluded legacy text.
+
   vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
     left: 0,
     top: 0,
@@ -972,7 +974,8 @@ it("merges two drawings into one where they sit, and undo brings both back", asy
   event("pointermove", 20, 10);
   event("pointerup", 20, 10);
   await vi.advanceTimersByTimeAsync(70);
-  const second = studio.snapshot().layers.at(-1);
+  const snap = studio.snapshot();
+  const second = snap.layers.find((l) => l.id === snap.activeLayerId);
   expect(second.source.strokes).toHaveLength(1);
   // Move the new drawing 10 mm across, so merging has a placement to keep.
   input("#layer-x", "10");
@@ -1036,10 +1039,18 @@ it("crops a picture as one undoable step, and shows one swatch for each thread",
   });
   const corner = root.querySelector(".crop-handle.se");
   corner.dispatchEvent(
-    new MouseEvent("pointerdown", { clientX: 400, clientY: 200, bubbles: true }),
+    new MouseEvent("pointerdown", {
+      clientX: 400,
+      clientY: 200,
+      bubbles: true,
+    }),
   );
   button("#crop-box").dispatchEvent(
-    new MouseEvent("pointermove", { clientX: 300, clientY: 100, bubbles: true }),
+    new MouseEvent("pointermove", {
+      clientX: 300,
+      clientY: 100,
+      bubbles: true,
+    }),
   );
   button("#crop-box").dispatchEvent(
     new MouseEvent("pointerup", { clientX: 300, clientY: 100, bubbles: true }),
@@ -1107,7 +1118,7 @@ it("adds an embroidery file as a layer, keeps it through saving, and sends its s
   );
   const saved = studio.snapshot(),
     layer = saved.layers.at(-1);
-  expect(saved.v).toBe(5);
+  expect(saved.v).toBe(6);
   expect(layer.kind).toBe("stitches");
   expect(layer.name).toBe("bought-rose");
   expect(layer.source.slots).toEqual([5, 20]);
@@ -1148,7 +1159,8 @@ function portrait(w, h) {
       if (u > 0.28 && u < 0.72 && v > 0.16 && v < 0.3) c = [74, 58, 50];
       if (u > 0.3 && u < 0.7 && v > 0.7 && v < 0.86) c = [124, 47, 58];
       // On request, a green stripe down the face: 1 mm wide at the size the picture is added at.
-      if (stripe && u > 0.49 && u < 0.51 && v > 0.3 && v < 0.7) c = [30, 110, 60];
+      if (stripe && u > 0.49 && u < 0.51 && v > 0.3 && v < 0.7)
+        c = [30, 110, 60];
       data.set([c[0], c[1], c[2], 255], (y * w + x) * 4);
     }
   return { data };
@@ -1309,7 +1321,9 @@ describe("the colours of a picture", () => {
     await clean(1);
     expect(rows()).toHaveLength(5);
     expect(button("#note").textContent).toMatch(thin);
-    expect(button("#note").textContent).toMatch(/Set Clean up specks to Medium/);
+    expect(button("#note").textContent).toMatch(
+      /Set Clean up specks to Medium/,
+    );
 
     await clean(3);
     expect(rows()).toHaveLength(4);
@@ -1356,23 +1370,168 @@ describe("the colours of a picture", () => {
     await background();
     expect(rows()).toEqual(mine);
 
-    // An earlier version saved a thread and stitch-or-skip for each colour and nothing else, with no
-    // way to tell a thread picked by hand from one left over from another setting. Its threads are
-    // matched again (or every colour would count as picked, and the settings would change nothing);
-    // a colour can only have been skipped by hand, so that is kept.
+    // Old files cannot distinguish manual and automatic picks, so preserve all saved threads.
     const old = structuredClone(saved);
     const source = old.layers.at(-1).source;
     delete source.choices;
     source.clusters[0].thread = 5;
     source.clusters[1].on = false;
     await reopen(old);
-    const matched = [four[0], four[1] + " (skipped)", four[2], four[3]];
+    const matched = ["Red", four[1] + " (skipped)", four[2], "Dark Brown"];
     expect(rows()).toEqual(matched);
-    expect(button("#img-rematch").hidden).toBe(true);
-    expect(root.querySelector("#clusters").textContent).not.toMatch(/your pick/);
-    expect(studio.snapshot().layers.at(-1).source.choices).toHaveLength(1);
+    expect(button("#img-rematch").hidden).toBe(false);
+    expect(root.querySelector("#clusters").textContent).toMatch(/your pick/);
+    expect(studio.snapshot().layers.at(-1).source.choices).toHaveLength(4);
     await colors(2);
     await colors(4);
     expect(rows()).toEqual(matched);
   });
+});
+
+import {
+  emptyProject,
+  exportProject,
+  importProject,
+} from "../projects/projectFile";
+const identity = { x: 0, y: 0, scale: 1, rotation: 0 };
+function reviewDrawing(id, color, visible = true) {
+  return {
+    id,
+    name: id,
+    kind: "draw",
+    visible,
+    transform: { ...identity },
+    source: {
+      ...emptyProject().draw,
+      strokes: [
+        {
+          k: "run",
+          c: color,
+          p: [
+            [20, 20, 0],
+            [30, 20, 0],
+          ],
+        },
+      ],
+    },
+  };
+}
+function reviewLayers(layers) {
+  studio.destroy();
+  studio = mountStudio(root, {
+    project: { ...emptyProject(), v: 6, layers, activeLayerId: layers[0].id },
+    onSend,
+  });
+  vi.advanceTimersByTime(70);
+}
+it("does not merge across an intervening layer or revive excluded drawings", () => {
+  const text = {
+    id: "text",
+    name: "text",
+    kind: "text",
+    visible: true,
+    transform: { ...identity },
+    source: { ...emptyProject().text, value: "A", color: 2 },
+  };
+  for (const layers of [
+    [reviewDrawing("first", 5), text, reviewDrawing("last", 37)],
+    [reviewDrawing("visible", 5), reviewDrawing("hidden", 37, false)],
+    [reviewDrawing("hidden", 5, false), reviewDrawing("visible", 37)],
+  ]) {
+    reviewLayers(layers);
+    studio.send();
+    const before = onSend.mock.calls.at(-1)[0];
+    expect(button("#layer-merge").hidden).toBe(true);
+    button("#layer-merge").click();
+    vi.advanceTimersByTime(70);
+    studio.send();
+    expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(before.stitches);
+    expect(studio.snapshot().layers).toHaveLength(layers.length);
+  }
+});
+it("refuses merges that would combine different settings or reorder thread passes", () => {
+  reviewLayers([reviewDrawing("first", 5), reviewDrawing("second", 37)]);
+  button("#stitch-custom").checked = true;
+  button("#stitch-custom").dispatchEvent(new Event("change"));
+  expect(button("#layer-merge").hidden).toBe(true);
+  const first = reviewDrawing("first", 5);
+  first.source.strokes.push({
+    k: "run",
+    c: 2,
+    p: [
+      [25, 30, 0],
+      [35, 30, 0],
+    ],
+  });
+  reviewLayers([first, reviewDrawing("second", 5)]);
+  studio.send();
+  const before = onSend.mock.calls.at(-1)[0].stitches;
+  button("#layer-merge").click();
+  vi.advanceTimersByTime(70);
+  studio.send();
+  expect(studio.snapshot().layers).toHaveLength(2);
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(before);
+  expect(button("#toast").textContent).toMatch(/thread order/);
+});
+it("preserves PES cut flags and repeated-color stops through v6 files, undo and transforms", async () => {
+  const source = {
+    fileName: "cut.pes",
+    slots: [5, 5],
+    paths: [
+      { s: 0, p: [30, 30, 31, 30], j: false, t: false },
+      { s: 0, p: [31.5, 30, 32.5, 30], j: true, t: true },
+      { s: 1, p: [32.5, 30, 33.5, 30], j: false, t: false },
+    ],
+  };
+  reviewLayers([
+    {
+      id: "pes",
+      name: "PES",
+      kind: "stitches",
+      visible: true,
+      transform: { ...identity },
+      source,
+    },
+  ]);
+  studio.send();
+  const before = onSend.mock.calls.at(-1)[0];
+  expect(before.threads.map((t) => t.index)).toEqual([5, 5]);
+  expect(before.stitches.filter((s) => s[2] === 0x30)).toHaveLength(1);
+  const project = importProject(exportProject(studio.snapshot()));
+  expect(project.v).toBe(6);
+  expect(project.layers[0].source.paths).toEqual(source.paths);
+  studio.destroy();
+  studio = mountStudio(root, { project, onSend });
+  await vi.advanceTimersByTimeAsync(70);
+  studio.send();
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(before.stitches);
+  input("#layer-rotation", "90");
+  await vi.advanceTimersByTimeAsync(70);
+  studio.send();
+  expect(onSend.mock.calls.at(-1)[0].threads.map((t) => t.index)).toEqual([
+    5, 5,
+  ]);
+  expect(
+    onSend.mock.calls.at(-1)[0].stitches.filter((s) => s[2] === 0x30),
+  ).toHaveLength(1);
+  button("#undo").click();
+  await vi.advanceTimersByTimeAsync(70);
+  studio.send();
+  expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(before.stitches);
+  const legacy = structuredClone(project);
+  legacy.v = 5;
+  legacy.layers[0].source.paths.forEach((p) => {
+    delete p.j;
+    delete p.t;
+  });
+  studio.destroy();
+  studio = mountStudio(root, { project: legacy, onSend });
+  await vi.advanceTimersByTimeAsync(70);
+  expect(button("#stitch-file-name").textContent).toMatch(
+    /re-import the original PES/,
+  );
+  expect(
+    importProject(exportProject(studio.snapshot())).layers[0].source
+      .legacyCommands,
+  ).toBe(true);
 });

@@ -4,8 +4,8 @@
 // gray: a photo's colours are muted to begin with and get more so when an area is averaged. So the
 // match is made the way an eye would judge it. Lightness is compared on the CIE L* scale (where
 // near-black is black, not dark brown), hue counts for more than how strong the colour is (a pale
-// blue goes to a blue thread before a lilac or a gray one), and two areas of a picture are not
-// given the same thread while another thread suits one of them nearly as well.
+// blue goes to a blue thread before a lilac or a gray one). Automatic regions get distinct
+// threads, and manually assigned threads are reserved for their regions.
 
 function linear(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
 
@@ -73,26 +73,16 @@ export function rankThreads(palette, rgb) {
   return ranked;
 }
 
-/**
- * One thread for each picture colour, largest area first. A colour takes its nearest thread unless a
- * larger area already has it and another thread is nearly as close; then it takes that one, so two
- * areas of a picture stay two colours in the stitching.
- */
-export function assignThreads(palette, colors) {
+/** One distinct automatic thread per picture region, largest first.
+ * Manually selected threads can be reserved so automatic rows do not reuse them. */
+export function assignThreads(palette, colors, reserved = []) {
   var order = colors.map(function (c, i) { return i; }).sort(function (x, y) { return (colors[y].area || 0) - (colors[x].area || 0); });
-  var taken = {}, result = new Array(colors.length);
+  var taken = new Set(reserved), result = new Array(colors.length);
   order.forEach(function (index) {
-    var ranked = rankThreads(palette, colors[index].rgb), best = ranked[0];
-    var pick = best;
-    if (taken[best[0]]) {
-      // "Nearly as close": within half as far again, or a small step, of the nearest thread.
-      var limit = Math.max(best[1] * 1.5, best[1] + 0.035);
-      for (var k = 1; k < ranked.length && ranked[k][1] <= limit; k++) {
-        if (!taken[ranked[k][0]]) { pick = ranked[k]; break; }
-      }
-    }
-    taken[pick[0]] = true;
-    result[index] = pick[0];
+    var ranked = rankThreads(palette, colors[index].rgb);
+    var pick = ranked.find(function(candidate){ return !taken.has(candidate[0]); });
+    if(!pick) throw new Error('There are more picture colors than available threads.');
+    taken.add(pick[0]); result[index] = pick[0];
   });
   return result;
 }
