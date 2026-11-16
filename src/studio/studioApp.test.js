@@ -118,11 +118,11 @@ describe("Create output readiness", () => {
     fontRequests.shift()([]);
     await vi.advanceTimersByTimeAsync(60);
     // Hide the existing drawing: empty text alone must not suppress other layers.
-    const drawing = root.querySelector("#layers button");
+    const drawing = root.querySelector("#layers .layer-pick");
     drawing.click();
     button("#layer-visible").checked = false;
     button("#layer-visible").dispatchEvent(new Event("change"));
-    [...root.querySelectorAll("#layers button")].at(-1).click();
+    [...root.querySelectorAll("#layers .layer-pick")].at(-1).click();
     input("#txt", "");
     await vi.advanceTimersByTimeAsync(240);
     expectBlocked();
@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(4);
+  expect(saved.v).toBe(5);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -787,7 +787,7 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
   button("#undo").click();
   const saved = studio.snapshot();
-  expect(saved.v).toBe(4);
+  expect(saved.v).toBe(5);
   studio.destroy();
   studio = mountStudio(root, { project: saved, onSend });
   await vi.advanceTimersByTimeAsync(70);
@@ -914,4 +914,226 @@ it("distinguishes genuinely empty artwork from a blocked generation", async () =
   await vi.advanceTimersByTimeAsync(70);
   expect(studio.send()).toBe("empty");
   expect(onSend).not.toHaveBeenCalled();
+});
+
+import { StitchEngine as E } from "./engine.js";
+
+it("keeps turn, copy and delete beside the hoop in Move, and gives every layer a picture and an eye", () => {
+  // While drawing, the layer actions stay out of the way.
+  expect(button("#part-actions").hidden).toBe(true);
+  button("#move-layer").click();
+  expect(button("#part-actions").hidden).toBe(false);
+  const id = studio.snapshot().activeLayerId;
+  const rotation = () =>
+    studio.snapshot().layers.find((l) => l.id === id).transform.rotation;
+  button("#part-turn-right").click();
+  button("#part-turn-right").click();
+  expect(rotation()).toBe(30);
+  // A run of taps is one step back.
+  button("#undo").click();
+  expect(rotation()).toBe(0);
+  button("#part-turn-left").click();
+  expect(rotation()).toBe(-15);
+
+  const count = studio.snapshot().layers.length;
+  button("#part-duplicate").click();
+  expect(studio.snapshot().layers).toHaveLength(count + 1);
+  button("#part-remove").click();
+  expect(studio.snapshot().layers).toHaveLength(count);
+
+  const rows = [...root.querySelectorAll("#layers .layer-row")];
+  expect(rows).toHaveLength(count);
+  expect(rows.every((row) => row.querySelector("canvas"))).toBe(true);
+  const eye = rows[0].querySelector(".layer-eye");
+  expect(eye.getAttribute("aria-pressed")).toBe("true");
+  eye.click();
+  expect(studio.snapshot().layers[0].visible).toBe(false);
+  expect(
+    root.querySelector("#layers .layer-row").classList.contains("off"),
+  ).toBe(true);
+  button("#undo").click();
+  expect(studio.snapshot().layers[0].visible).toBe(true);
+});
+
+it("merges two drawings into one where they sit, and undo brings both back", async () => {
+  const first = studio.snapshot().layers[0];
+  button("#new-drawing-object").click();
+  vi.spyOn(button("#overlay"), "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+  });
+  const event = (type, x, y) =>
+    button("#overlay").dispatchEvent(
+      new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }),
+    );
+  event("pointerdown", 10, 10);
+  event("pointermove", 20, 10);
+  event("pointerup", 20, 10);
+  await vi.advanceTimersByTimeAsync(70);
+  const second = studio.snapshot().layers.at(-1);
+  expect(second.source.strokes).toHaveLength(1);
+  // Move the new drawing 10 mm across, so merging has a placement to keep.
+  input("#layer-x", "10");
+  await vi.advanceTimersByTimeAsync(70);
+
+  expect(button("#layer-merge").hidden).toBe(false);
+  expect(button("#layer-merge").textContent).toContain(first.name);
+  button("#layer-merge").click();
+  await vi.advanceTimersByTimeAsync(70);
+  const drawings = studio.snapshot().layers.filter((l) => l.kind === "draw");
+  expect(drawings).toHaveLength(1);
+  expect(drawings[0].id).toBe(first.id);
+  expect(drawings[0].transform).toEqual({ x: 0, y: 0, scale: 1, rotation: 0 });
+  expect(drawings[0].source.strokes).toHaveLength(
+    first.source.strokes.length + 1,
+  );
+  // The moved mark stays where it was on the hoop: 10 mm further across than it was drawn.
+  expect(drawings[0].source.strokes.at(-1).p[0][0]).toBeCloseTo(
+    second.source.strokes[0].p[0][0] + 10,
+    5,
+  );
+  expect(button("#send").disabled).toBe(false);
+
+  button("#undo").click();
+  expect(
+    studio.snapshot().layers.filter((l) => l.kind === "draw"),
+  ).toHaveLength(2);
+  // A picture or text has nothing to merge with.
+  button("#add-text-layer").click();
+  expect(button("#layer-merge").hidden).toBe(true);
+});
+
+it("crops a picture and switches its thread matching, each as one undoable step", async () => {
+  let decode;
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(() => new Promise((resolve) => (decode = resolve))),
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+    "data:image/png;base64,cGljdHVyZQ==",
+  );
+  expect(button("#img-crop").disabled).toBe(true);
+  Object.defineProperty(button("#add-picture-file"), "files", {
+    configurable: true,
+    value: [new File(["x"], "photo.png")],
+  });
+  button("#add-picture-file").dispatchEvent(new Event("change"));
+  decode({ width: 200, height: 100, close: vi.fn() });
+  await vi.advanceTimersByTimeAsync(70);
+  const source = () => studio.snapshot().layers.at(-1).source;
+  expect(source().crop).toBeUndefined();
+  expect(button("#img-crop").disabled).toBe(false);
+
+  button("#img-crop").click();
+  expect(button("#cropper").hidden).toBe(false);
+  vi.spyOn(button("#crop-stage"), "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 400,
+    height: 200,
+  });
+  const corner = root.querySelector(".crop-handle.se");
+  corner.dispatchEvent(
+    new MouseEvent("pointerdown", { clientX: 400, clientY: 200, bubbles: true }),
+  );
+  button("#crop-box").dispatchEvent(
+    new MouseEvent("pointermove", { clientX: 300, clientY: 100, bubbles: true }),
+  );
+  button("#crop-box").dispatchEvent(
+    new MouseEvent("pointerup", { clientX: 300, clientY: 100, bubbles: true }),
+  );
+  // The layer itself must not have been resized by dragging a crop corner.
+  expect(studio.snapshot().layers.at(-1).transform.scale).toBe(1);
+  button("#crop-apply").click();
+  await vi.advanceTimersByTimeAsync(150);
+  expect(button("#cropper").hidden).toBe(true);
+  expect(source().crop).toEqual({ x: 0, y: 0, w: 0.75, h: 0.5 });
+  button("#undo").click();
+  await vi.advanceTimersByTimeAsync(150);
+  expect(source().crop).toBeUndefined();
+
+  expect(source().vivid).toBeUndefined();
+  root.querySelector('#img-vivid [data-vivid="1"]').click();
+  await vi.advanceTimersByTimeAsync(150);
+  expect(source().vivid).toBe(true);
+  expect(
+    root.querySelector('#img-vivid [data-vivid="1"]').getAttribute("aria-pressed"),
+  ).toBe("true");
+  // One swatch per thread, with its name in full.
+  expect(root.querySelectorAll("#clusters .cluster .swatch").length).toBe(
+    root.querySelectorAll("#clusters .cluster").length,
+  );
+  expect(root.querySelector("#clusters .orig")).toBeNull();
+});
+
+it("adds an embroidery file as a layer, keeps it through saving, and sends its stitches", async () => {
+  const plan = E.plan(
+    {
+      labels: new Uint8Array(E.GRID * E.GRID),
+      order: [],
+      lines: [
+        {
+          kind: "run",
+          color: 5,
+          pts: [
+            [30, 30, 0],
+            [50, 30, 0],
+            [50, 45, 0],
+          ],
+        },
+        {
+          kind: "run",
+          color: 20,
+          pts: [
+            [40, 60, 0],
+            [60, 60, 0],
+          ],
+        },
+      ],
+    },
+    {},
+  );
+  const out = E.toStream(plan);
+  const bytes = new Uint8Array(E.writePES(out.stream, out.colors, "bought"));
+  const choose = (file) => {
+    Object.defineProperty(button("#add-stitch-file"), "files", {
+      configurable: true,
+      value: [file],
+    });
+    button("#add-stitch-file").dispatchEvent(new Event("change"));
+  };
+  const before = studio.snapshot().layers.length;
+  vi.useRealTimers();
+  choose(new File([bytes], "bought-rose.pes"));
+  await vi.waitFor(() =>
+    expect(studio.snapshot().layers).toHaveLength(before + 1),
+  );
+  const saved = studio.snapshot(),
+    layer = saved.layers.at(-1);
+  expect(saved.v).toBe(5);
+  expect(layer.kind).toBe("stitches");
+  expect(layer.name).toBe("bought-rose");
+  expect(layer.source.slots).toEqual([5, 20]);
+  expect(button("#panel-stitches").hidden).toBe(false);
+  expect(root.querySelectorAll("#slots .cluster")).toHaveLength(2);
+  // Underlay and pull are for stitches this app generates; a file brings its own.
+  expect(button("#object-stitches").hidden).toBe(true);
+
+  await vi.waitFor(() => expect(button("#send").disabled).toBe(false));
+  button("#send").click();
+  const design = onSend.mock.calls.at(-1)[0];
+  expect(design.threads.slice(-2).map((t) => t.index)).toEqual([5, 20]);
+
+  studio.destroy();
+  studio = mountStudio(root, { project: saved, onSend });
+  expect(studio.snapshot().layers.at(-1).source).toEqual(layer.source);
+
+  // Something that is not an embroidery file is refused with a reason, and adds nothing.
+  choose(new File(["just some text, not stitches at all"], "notes.pes"));
+  await vi.waitFor(() =>
+    expect(button("#toast").textContent).toMatch(/not a Brother \.pes file/),
+  );
+  expect(studio.snapshot().layers).toHaveLength(before + 1);
 });

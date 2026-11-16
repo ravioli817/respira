@@ -32,23 +32,28 @@ export const STUDIO_MARKUP = `
       <button class="rail-btn" id="shape-tool">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/></svg><span>Shape</span>
       </button>
+      <button class="rail-btn" id="add-stitch-layer" title="Add an embroidery file (.pes) to the design as a layer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6zM14 3v4h4"/><path d="M9 13h1.5M12 13h1.5M15 13h.5M9 16.5h1.5M12 16.5h1.5" stroke-width="1.9"/></svg><span>PES file</span>
+      </button>
+      <input type="file" id="add-stitch-file" accept=".pes,.pec" hidden aria-label="Add an embroidery file to the canvas">
     </div>
     <span class="rail-rule" aria-hidden="true"></span>
-    <button class="rail-btn" id="move-layer" aria-pressed="true" title="Move: tap a part to move, resize or change it">
+    <button class="rail-btn" id="move-layer" aria-pressed="true" title="Move: tap a layer to move, resize or change it">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3.5l12 9.2-5.4.8 3 6-2.3 1.1-3-6L6 18z"/></svg><span>Move</span>
     </button>
     <span class="rail-rule" aria-hidden="true"></span>
-    <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Parts: everything in the design, in stitching order">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Parts</span>
+    <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Layers: everything in the design, in stitching order">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Layers</span>
     </button>
   </nav>
-  <aside class="objects-panel" id="objects-panel" aria-label="Parts of the design, in stitching order">
-    <div class="panel-heading"><h2>Parts <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the parts list">×</button></div>
-    <p class="hint">Stitched in this order, top first.</p>
-    <div id="layers" class="layer-list" role="group" aria-label="Select an existing object"></div>
+  <aside class="objects-panel" id="objects-panel" aria-label="Layers of the design, in stitching order">
+    <div class="panel-heading"><h2>Layers <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the layers list">×</button></div>
+    <p class="hint">Stitched from the top down. The eye leaves a layer out.</p>
+    <div id="layers" class="layer-list" role="group" aria-label="Layers: tap one to select it"></div>
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
+    <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Where parts overlap, both are stitched.</p>
+    <p class="hint">Where layers overlap, both are stitched.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
@@ -98,7 +103,7 @@ export const STUDIO_MARKUP = `
     <div class="hoop">
       <div class="field" id="stage">
         <canvas id="base" aria-hidden="true"></canvas>
-        <canvas id="overlay" role="img" aria-label="Embroidery canvas. Pick a drawing tool to add marks, or Move to move and resize a part."></canvas>
+        <canvas id="overlay" role="img" aria-label="Embroidery canvas. Pick a drawing tool to add marks, or Move to move and resize a layer."></canvas>
         <div id="selection-box" class="selection-box" hidden>
           <button class="resize-handle nw" data-corner="nw" aria-label="Resize object from top left" tabindex="-1"></button>
           <button class="resize-handle ne" data-corner="ne" aria-label="Resize object from top right" tabindex="-1"></button>
@@ -109,7 +114,23 @@ export const STUDIO_MARKUP = `
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
       </div>
     </div>
-    <div class="readout" id="readout">Nothing to stitch yet</div>
+    <div class="hoop-foot">
+      <div class="part-actions" id="part-actions" role="group" aria-label="The selected layer" hidden>
+        <button class="icon-btn" id="part-turn-left" aria-label="Turn left" title="Turn left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v5h5"/><path d="M4.6 10A8 8 0 1 1 6.3 17.7"/></svg>
+        </button>
+        <button class="icon-btn" id="part-turn-right" aria-label="Turn right" title="Turn right">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v5h-5"/><path d="M19.4 10A8 8 0 1 0 17.7 17.7"/></svg>
+        </button>
+        <button class="icon-btn" id="part-duplicate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span>
+        </button>
+        <button class="icon-btn" id="part-remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span>Delete</span>
+        </button>
+      </div>
+      <div class="readout" id="readout">Nothing to stitch yet</div>
+    </div>
     </div>
 
     </div>
@@ -154,6 +175,7 @@ export const STUDIO_MARKUP = `
       <div class="file-row">
         <label class="btn" for="file">Choose a picture</label>
         <input type="file" id="file" accept="image/*" class="visually-hidden">
+        <button class="btn" id="img-crop">Crop</button>
         <span id="file-name" class="muted">Example picture</span>
       </div>
       <label class="range"><span>Size</span><input type="range" id="img-size" min="20" max="100" step="1" value="80"><output id="img-size-out" for="img-size">80 mm</output></label>
@@ -166,8 +188,21 @@ export const STUDIO_MARKUP = `
           <button data-clean="3" aria-pressed="false">Strong</button>
         </div>
       </div>
+      <div class="field-row"><span>Threads</span>
+        <div class="seg small" role="group" aria-label="How the picture's colors are matched to threads" id="img-vivid">
+          <button data-vivid="0" aria-pressed="true">True</button>
+          <button data-vivid="1" aria-pressed="false">Vivid</button>
+        </div>
+      </div>
       <div class="clusters" id="clusters"></div>
-      <p class="hint">Tap a thread to change it. Skip a color to leave the fabric showing there.</p>
+      <p class="hint">Tap a thread to change it. Skip one to leave the fabric showing there. Vivid picks stronger threads when a photo comes out mostly gray.</p>
+    </section>
+
+    <section class="panel first" id="panel-stitches" hidden>
+      <h2>Embroidery file</h2>
+      <p id="stitch-file-name" class="muted"></p>
+      <div class="clusters" id="slots"></div>
+      <p class="hint">Tap a thread to change it. The stitches are kept as the file has them, so moving and turning are safe. Resizing by more than about a fifth makes them too tight or too loose.</p>
     </section>
 
     <section class="panel first" id="panel-text" hidden>
@@ -191,7 +226,7 @@ export const STUDIO_MARKUP = `
     </section>
 
     <section class="panel object-properties">
-      <h2>This part</h2>
+      <h2>This layer</h2>
   <div class="layer-controls">
     <label class="stack">Width (mm)<input id="object-width" type="number" min="0.1" max="400" step="0.5"></label>
     <label class="stack">Height (mm)<input id="object-height" type="number" min="0.1" max="400" step="0.5"></label>
@@ -201,7 +236,7 @@ export const STUDIO_MARKUP = `
     <label class="stack">Size (%)<input id="layer-size" type="number" min="10" max="400" step="5" value="100"></label>
     <label class="stack">Turn (°)<input id="layer-rotation" type="number" min="-180" max="180" step="5" value="0"></label>
   </div>
-  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Stitch this part</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
+  <div class="layer-actions"><label><input id="layer-visible" type="checkbox" checked> Stitch this layer</label><button class="btn" id="layer-duplicate">Duplicate</button><button class="btn" id="layer-remove">Remove</button></div>
     <p class="hint">Resize keeps proportions. Dimensions include rotation.</p>
     </section>
 
@@ -221,7 +256,7 @@ export const STUDIO_MARKUP = `
     <details class="panel" id="object-stitches">
       <summary>Advanced: underlay and pull</summary>
       <p class="hint" id="stitch-object-name"></p>
-      <label class="check"><input type="checkbox" id="stitch-custom"> Use different stitch settings for this part</label>
+      <label class="check"><input type="checkbox" id="stitch-custom"> Use different stitch settings for this layer</label>
       <fieldset id="stitch-fields" disabled>
         <div id="fill-stitch-fields">
           <label class="stack">Fill underlay<select id="stitch-fillUnderlay"><option value="none">None</option><option value="tatami">Sparse tatami</option><option value="edge">Inset edge walk</option><option value="edge-tatami">Edge walk + sparse tatami</option></select></label>
@@ -284,6 +319,23 @@ export const STUDIO_MARKUP = `
     <h3 id="sheet-title">Pick a thread</h3>
     <div class="palette" id="sheet-palette"></div>
     <button class="btn" id="sheet-close">Done</button>
+  </div>
+</div>
+
+<div class="sheet" id="cropper" hidden>
+  <div class="sheet-card crop-card" role="dialog" aria-modal="true" aria-labelledby="crop-title">
+    <h3 id="crop-title">Crop the picture</h3>
+    <p class="hint">Drag the corners so the box holds only what you want stitched. Drag inside the box to move it.</p>
+    <div class="crop-stage" id="crop-stage">
+      <canvas id="crop-canvas"></canvas>
+      <div class="crop-box" id="crop-box">
+        <button class="crop-handle nw" data-corner="nw" aria-label="Crop from the top left"></button>
+        <button class="crop-handle ne" data-corner="ne" aria-label="Crop from the top right"></button>
+        <button class="crop-handle sw" data-corner="sw" aria-label="Crop from the bottom left"></button>
+        <button class="crop-handle se" data-corner="se" aria-label="Crop from the bottom right"></button>
+      </div>
+    </div>
+    <div class="ruler-actions"><button class="btn" id="crop-reset">Use the whole picture</button><span class="crop-buttons"><button class="btn" id="crop-cancel">Cancel</button><button class="btn btn-go" id="crop-apply">Crop</button></span></div>
   </div>
 </div>
 

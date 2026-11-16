@@ -215,3 +215,81 @@ it("round-trips v4 lettering fonts and trim rules, while still importing older p
   }
   expect(importProject(exportProject(emptyProject())).v).toBe(1);
 });
+
+it("round-trips version 5: an embroidery-file layer and a cropped, vivid picture", () => {
+  const data = emptyProject();
+  const stitches = {
+    fileName: "bought-rose.pes",
+    slots: [5, 20],
+    paths: [
+      { s: 0, p: [30, 30, 40, 30, 50, 30] },
+      { s: 1, p: [40, 60, 60, 60] },
+    ],
+  };
+  const picture = {
+    ...data.image,
+    vivid: true,
+    crop: { x: 0.1, y: 0.2, w: 0.5, h: 0.6 },
+    fileName: "",
+    clusters: [],
+  };
+  const project = {
+    ...data,
+    v: 5 as const,
+    mode: "stitches" as const,
+    activeLayerId: "file",
+    layers: [
+      {
+        id: "file",
+        name: "bought-rose",
+        kind: "stitches" as const,
+        visible: true,
+        transform: { x: 4, y: -6, scale: 1, rotation: 30 },
+        source: stitches,
+      },
+      {
+        id: "photo",
+        name: "Picture",
+        kind: "image" as const,
+        visible: true,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        source: picture,
+      },
+    ],
+  };
+  const roundtrip = importProject(exportProject(project));
+  expect(roundtrip.v).toBe(5);
+  expect(roundtrip.layers?.[0].source).toEqual(stitches);
+  expect(roundtrip.layers?.[1].source).toMatchObject({
+    vivid: true,
+    crop: { x: 0.1, y: 0.2, w: 0.5, h: 0.6 },
+  });
+  const withSource = (source: unknown) => ({
+    ...project,
+    layers: [{ ...project.layers[0], source }, project.layers[1]],
+  });
+  // A run must name a thread the file has, hold whole points, and not be empty.
+  for (const paths of [
+    [{ s: 2, p: [0, 0, 1, 1] }],
+    [{ s: 0, p: [0, 0, 1] }],
+    [{ s: 0, p: [0, 0] }],
+    [],
+  ])
+    expect(() => validateProject(withSource({ ...stitches, paths }))).toThrow();
+  expect(() =>
+    validateProject(withSource({ ...stitches, slots: [64] })),
+  ).toThrow();
+  // A crop box has to lie inside the picture.
+  expect(() =>
+    validateProject({
+      ...project,
+      layers: [
+        project.layers[0],
+        {
+          ...project.layers[1],
+          source: { ...picture, crop: { x: 0.6, y: 0, w: 0.5, h: 1 } },
+        },
+      ],
+    }),
+  ).toThrow();
+});

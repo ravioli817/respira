@@ -1,9 +1,9 @@
 export interface ProjectData {
-  v: 1 | 2 | 3 | 4;
+  v: 1 | 2 | 3 | 4 | 5;
   activeLayerId?: string;
   layers?: DesignLayer[];
   placement?: { x: number; y: number; rotation: number };
-  mode: "draw" | "image" | "text";
+  mode: "draw" | "image" | "text" | "stitches";
   name: string;
   view?: Record<string, string>;
   fabric?: string;
@@ -24,6 +24,10 @@ export interface ProjectData {
     k: number;
     removeBg: boolean;
     clean: number;
+    /** Match the picture's colours to stronger threads (for photos that come out gray). */
+    vivid?: boolean;
+    /** The part of the picture to stitch, in fractions of its width and height. */
+    crop?: { x: number; y: number; w: number; h: number };
     sourceDataURL?: string;
     fileName?: string;
     clusters?: Array<{ rgb: number[]; thread: number; on: boolean }>;
@@ -68,7 +72,18 @@ export type DesignLayer = {
   | { kind: "draw"; source: ProjectData["draw"] }
   | { kind: "image"; source: ProjectData["image"] }
   | { kind: "text"; source: ProjectData["text"] }
+  | { kind: "stitches"; source: StitchFileSource }
 );
+/**
+ * An embroidery file placed in the design as a layer (from version 5). `slots` is the thread for
+ * each colour stop; each path is one run of stitches, `s` its colour stop and `p` its points as
+ * x, y, x, y… in hoop millimetres.
+ */
+export interface StitchFileSource {
+  fileName: string;
+  slots: number[];
+  paths: Array<{ s: number; p: number[] }>;
+}
 export interface SavedProject {
   id: string;
   updatedAt: number;
@@ -164,6 +179,37 @@ export function validateStitchSettings(value: unknown): ObjectStitchSettings {
   };
 }
 
+function validateStitchFile(value: unknown): StitchFileSource {
+  const src = object(value),
+    slots = array(src.slots, 256).map(color);
+  if (!slots.length) return fail();
+  let points = 0;
+  const paths = array(src.paths, 20000).map((value) => {
+    const path = object(value),
+      p = array(path.p, 400000).map((v) => number(v, -100, 200));
+    points += p.length;
+    if (p.length < 4 || p.length % 2 || points > 600000) return fail();
+    return { s: number(path.s, 0, slots.length - 1, true), p };
+  });
+  if (!paths.length) return fail();
+  return {
+    fileName: src.fileName === undefined ? "" : string(src.fileName, 500),
+    slots,
+    paths,
+  };
+}
+
+/** A crop box that lies inside the picture. */
+function validateCrop(value: unknown) {
+  const c = object(value),
+    x = number(c.x, 0, 1),
+    y = number(c.y, 0, 1),
+    w = number(c.w, 0.01, 1),
+    h = number(c.h, 0.01, 1);
+  if (x + w > 1.0001 || y + h > 1.0001) return fail();
+  return { x, y, w, h };
+}
+
 /** Reconstruct only known fields. Imported files never supply live engine state or HTML. */
 export function validateProject(value: unknown): ProjectData {
   const s = object(value),
@@ -172,8 +218,8 @@ export function validateProject(value: unknown): ProjectData {
     t = object(s.text),
     settings = object(s.settings);
   if (
-    (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4) ||
-    !["draw", "image", "text"].includes(String(s.mode))
+    (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5) ||
+    !["draw", "image", "text", "stitches"].includes(String(s.mode))
   )
     return fail();
   const labels = array(d.labels, 500000).map((v, i) =>
@@ -240,6 +286,8 @@ export function validateProject(value: unknown): ProjectData {
       k: number(im.k, 1, 8, true),
       removeBg: bool(im.removeBg),
       clean: number(im.clean, 1, 3, true),
+      ...(im.vivid === undefined ? {} : { vivid: bool(im.vivid) }),
+      ...(im.crop === undefined ? {} : { crop: validateCrop(im.crop) }),
       sourceDataURL,
       fileName: im.fileName === undefined ? "" : string(im.fileName, 500),
       clusters:
@@ -280,7 +328,7 @@ export function validateProject(value: unknown): ProjectData {
         : {}),
     },
   };
-  if (s.v === 2 || s.v === 3 || s.v === 4) {
+  if (s.v === 2 || s.v === 3 || s.v === 4 || s.v === 5) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
       const l = object(value),
@@ -289,16 +337,19 @@ export function validateProject(value: unknown): ProjectData {
       if (
         !id ||
         ids.has(id) ||
-        !["draw", "image", "text"].includes(String(l.kind))
+        !["draw", "image", "text", "stitches"].includes(String(l.kind))
       )
         return fail();
       ids.add(id);
-      const kind = l.kind as "draw" | "image" | "text";
-      const source = validateProject({
-        ...emptyProject(),
-        v: 1,
-        [kind]: l.source,
-      })[kind];
+      const kind = l.kind as DesignLayer["kind"];
+      const source =
+        kind === "stitches"
+          ? validateStitchFile(l.source)
+          : validateProject({
+              ...emptyProject(),
+              v: 1,
+              [kind]: l.source,
+            })[kind];
       return {
         id,
         name: string(l.name, 60),
@@ -381,7 +432,8 @@ export function importProject(text: string): ProjectData {
     (file.version !== 1 &&
       file.version !== 2 &&
       file.version !== 3 &&
-      file.version !== 4) ||
+      file.version !== 4 &&
+      file.version !== 5) ||
     object(file.data).v !== file.version
   )
     return fail();

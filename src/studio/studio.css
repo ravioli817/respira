@@ -66,7 +66,7 @@ button { cursor: pointer; }
 .rail { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; min-height: 0; }
 .rail .tools, .rail .canvas-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .tool, .rail-btn {
-  width: 80px; height: 62px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 80px; height: 56px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   border: 2px solid transparent; border-radius: 12px; background: transparent; color: var(--ink); font-size: 15px; line-height: 1.2;
 }
 .tool svg, .rail-btn svg { width: 26px; height: 26px; }
@@ -74,7 +74,7 @@ button { cursor: pointer; }
 .rail-rule { width: 56px; height: 1px; flex-shrink: 0; background: var(--line); margin: 4px 0; }
 
 /* ---------- parts list ---------- */
-.objects-panel { padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+.objects-panel { padding: 14px 10px 14px 12px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; min-height: 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .panel-heading h2 { font-size: 20px; margin: 0; }
 .panel-heading .icon-btn { border: 0; background: transparent; padding: 0; min-width: 44px; font-size: 26px; }
@@ -120,10 +120,14 @@ button { cursor: pointer; }
 .draw-dock .size { flex-direction: row; align-items: center; gap: 12px; }
 .draw-dock .size input { flex: 1; width: auto; min-width: 120px; height: 44px; }
 .canvas-viewport { flex: 1; min-height: 0; min-width: 0; overflow: auto; display: grid; align-items: safe center; justify-items: safe center; padding: 4px; overscroll-behavior: contain; }
-/* The ruler and caption add 56 px to the hoop's height; applyHoopSize allows for exactly that. */
 .hoop-wrap { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 .ruler { display: flex; justify-content: space-between; height: 20px; padding: 0 11px; font-size: 15px; line-height: 20px; color: var(--mat-text); }
-.readout { width: 0; min-width: 100%; height: 24px; line-height: 24px; text-align: center; color: #FFFFFF; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The ruler (20) and this row (44) with their gaps add 76 px to the hoop's height; applyHoopSize allows for exactly that. */
+.hoop-foot { display: flex; align-items: center; gap: 8px; width: 0; min-width: 100%; height: 44px; }
+.part-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.part-actions .icon-btn { height: 44px; }
+.readout { flex: 1; min-width: 0; text-align: center; color: #FFFFFF; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-actions:not([hidden]) + .readout { text-align: right; }
 .readout strong { font-weight: 400; }
 .canvas-viewport .hoop { max-width: none; flex-shrink: 0; }
 .hoop {
@@ -148,6 +152,7 @@ button { cursor: pointer; }
 .resize-handle.nw { left: 0; top: 0; cursor: nwse-resize; }.resize-handle.ne { left: 100%; top: 0; cursor: nesw-resize; }
 .resize-handle.sw { left: 0; top: 100%; cursor: nesw-resize; }.resize-handle.se { left: 100%; top: 100%; cursor: nwse-resize; }
 .stage-col .note { margin: 0; max-height: 100px; overflow: auto; flex-shrink: 0; }
+.bench .note { margin: 14px 20px 0; }
 .editor-status { flex-shrink: 0; margin: 0; padding: 6px 16px; background: var(--surface); border-top: 1px solid var(--line); }
 .editor-status:empty { display: none; }
 
@@ -224,11 +229,11 @@ input[type="range"] { accent-color: var(--ink); }
 .file-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .file-row .muted { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
 .clusters { display: flex; flex-direction: column; gap: 6px; }
-.cluster { display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 10px; font-size: 16px; }
-.cluster .orig { width: 14px; height: 14px; border-radius: 3px; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2); }
-.cluster .swatch { width: 40px; height: 40px; }
-.cluster .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cluster .pct { font-variant-numeric: tabular-nums; font-size: 15px; color: var(--muted); }
+.cluster { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.cluster .nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.cluster .swatch { width: 44px; height: 44px; border-radius: 50%; }
+.cluster .nm strong { overflow-wrap: anywhere; }
+.cluster .nm small { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cluster.off .nm, .cluster.off .swatch { opacity: .4; }
 .pill { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 3px 12px; font-size: 15px; min-height: 40px; }
 .pill[aria-pressed="false"] { color: var(--muted); background: var(--surface-2); }
@@ -262,6 +267,22 @@ details.panel[open] { gap: 14px; padding-bottom: 20px; }
 .save p { margin: 0; }
 .save-files { display: flex; gap: 18px; flex-wrap: wrap; }
 .sheet-card.ruler-card { width: min(100%, 720px); }
+.sheet-card.crop-card { width: min(100%, 700px); }
+.crop-stage { position: relative; align-self: center; max-width: 100%; overflow: hidden; border-radius: 6px; background: var(--surface-2); touch-action: none; }
+.crop-stage canvas { display: block; width: 100%; height: 100%; }
+.crop-box { position: absolute; border: 2px dashed #17212B; outline: 1px solid rgba(255, 255, 255, .85); box-shadow: 0 0 0 4000px rgba(12, 18, 21, .5); cursor: move; touch-action: none; }
+.crop-handle { position: absolute; width: 48px; height: 48px; padding: 0; border: 0; background: transparent; touch-action: none; }
+.crop-handle::after { content: ''; position: absolute; width: 20px; height: 20px; background: #fff; border: 2px solid #17212B; border-radius: 5px; }
+.crop-handle.nw { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle.ne { right: 0; top: 0; cursor: nesw-resize; }
+.crop-handle.sw { left: 0; bottom: 0; cursor: nesw-resize; }
+.crop-handle.se { right: 0; bottom: 0; cursor: nwse-resize; }
+.crop-handle.nw::after { left: -2px; top: -2px; }
+.crop-handle.ne::after { right: -2px; top: -2px; }
+.crop-handle.sw::after { left: -2px; bottom: -2px; }
+.crop-handle.se::after { right: -2px; bottom: -2px; }
+.crop-buttons { display: flex; gap: 10px; }
+.btn.btn-go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
 .card-outline { border: 2px solid var(--ink); border-radius: 12px; background: var(--surface-2); max-width: 100%; }
 .ruler-row { display: flex; align-items: center; gap: 12px; }
 .ruler-row input { flex: 1; }
@@ -291,8 +312,17 @@ details.panel[open] { gap: 14px; padding-bottom: 20px; }
 
 .layer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
 .layer-list { display: flex; flex-direction: column; gap: 6px; }
-.layer-list button { border: 1px solid var(--line-strong); background: var(--surface); padding: 10px; min-height: 48px; border-radius: 10px; text-align: left; overflow-wrap: anywhere; }
-.layer-list button[aria-pressed="true"] { border: 2px solid var(--ink); background: var(--surface-2); font-weight: 700; }
+.layer-row { display: flex; align-items: stretch; gap: 4px; }
+.layer-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; min-height: 52px; border: 2px solid transparent; border-radius: 12px; background: transparent; text-align: left; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.layer-pick canvas { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line-strong); }
+.layer-words { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.layer-words strong { font-weight: 400; font-size: 16px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.layer-words small { font-size: 15px; color: var(--muted); }
+.layer-eye { width: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink); }
+.layer-eye svg { width: 24px; height: 24px; }
+.layer-row.off .layer-pick canvas, .layer-row.off .layer-words strong { opacity: .45; }
+.layer-pick[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-2); box-shadow: none; }
+.layer-pick[aria-pressed="true"] .layer-words strong { font-weight: 700; }
 .layer-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .layer-controls input, #lettering-controls input { width: 100%; min-width: 0; padding: 8px; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); }
 .layer-controls label:has(#layer-name) { grid-column: 1 / -1; grid-row: 1; }
@@ -310,7 +340,15 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 
 #stitch-fields:disabled { opacity: 0.6; }
 .drawing-recolor button { width: 100%; }
 
-/* iPad portrait and narrower windows: the parts list and the thread panel are drawers, one at a time. */
+/* A wide window has more mat around the hoop than it needs: give the room to the panels instead,
+   so layer names are not cut short and the settings need less scrolling. */
+@media (min-width: 1400px) {
+  .editor-workspace { grid-template-columns: 96px 270px minmax(0, 1fr) 380px; }
+  .editor-workspace.without-objects { grid-template-columns: 96px minmax(0, 1fr) 380px; }
+  .editor-workspace.without-properties { grid-template-columns: 96px 270px minmax(0, 1fr); }
+  .palette { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+/* iPad portrait and narrower windows: the layers list and the thread panel are drawers, one at a time. */
 @media (max-width: 1023px) {
   .editor-workspace, .editor-workspace.without-objects, .editor-workspace.without-properties, .editor-workspace.without-objects.without-properties { grid-template-columns: 96px minmax(0, 1fr); }
   .objects-panel, .bench { position: absolute; top: 0; bottom: 0; z-index: 5; width: min(320px, 85%); box-shadow: var(--shadow); }
@@ -339,7 +377,7 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 
 @media (max-height: 800px) and (min-width: 701px) {
   .rail { gap: 4px; padding: 8px 0; }
   .rail .tools, .rail .canvas-actions { gap: 4px; }
-  .tool, .rail-btn { height: 56px; }
+  .tool, .rail-btn { height: 52px; }
   .rail-rule { margin: 2px 0; }
   .stage-col { gap: 4px; padding-block: 6px 4px; }
   .heading-controls .btn, .stage-col .icon-btn { min-height: 40px; height: 40px; }

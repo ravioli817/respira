@@ -12,6 +12,9 @@ import { EMBROIDERY_FONTS, isEmbroideryFont } from './embroideryFonts.js';
 import { shapePoints } from './shapes.js';
 import { STUDIO_MARKUP } from './markup.js';
 import { guessPxPerMM } from './realSize.js';
+import { assignThreads } from './threadMatch.js';
+import { FULL_CROP, isFullCrop, dragCrop, cropPixels } from './crop.js';
+import { parsePes } from './pesImport.js';
 
 export function mountStudio(root, opts) {
   opts = opts || {};
@@ -55,7 +58,7 @@ export function mountStudio(root, opts) {
   // ---------- state ----------
   var S = {
     mode: 'draw',
-    view: { draw: 'design', image: 'stitches', text: 'stitches' },
+    view: { draw: 'design', image: 'stitches', text: 'stitches', stitches: 'stitches' },
     fabric: '#FFFFFF',
     hoop: { real: true, pxmm: null },      // pxmm: CSS px per mm once the size was checked against a card
     settings: { spacing: 0.4, angle: 45, underlay: true },
@@ -143,8 +146,8 @@ export function mountStudio(root, opts) {
     var need = Math.round(HOOP * pxPerMM()) + 22;       // the hoop's rim is 11 px each side
     var viewport = $('#canvas-viewport');
     // Space inside the viewport's 4 px padding; zero until the screen is laid out (and in tests).
-    // The ruler above the hoop and the caption under it take 56 px of the height.
-    var roomW = viewport.clientWidth - 8, roomH = viewport.clientHeight - 8 - 56, room = Math.min(roomW, roomH);
+    // The ruler above the hoop and the row under it (layer actions and the size) take 76 px of the height.
+    var roomW = viewport.clientWidth - 8, roomH = viewport.clientHeight - 8 - 76, room = Math.min(roomW, roomH);
     var fit = Math.max(100, room > 0 ? room - 16 : 400);
     // Real size means real size. A screen that is too small scrolls (Pan) instead of quietly shrinking the hoop:
     // drawing at a true 100 mm is the point of this view. "Fit screen" is one tap away in the View menu.
@@ -214,6 +217,7 @@ export function mountStudio(root, opts) {
     else drawStitches(ctx);
     drawCenter(ctx);
     renderSelection();
+    paintLayerThumbs();
   }
   function drawGrid(ctx, W) {
     var dark = lum(S.fabric) < 0.45;
@@ -265,17 +269,36 @@ export function mountStudio(root, opts) {
       }
     }
   }
+  // Draws one layer. `k` is canvas pixels per millimetre and `size` the hoop's width in those pixels.
+  function drawPart(ctx, part, k, size, minLine) {
+    var d = part.design;
+    if (!part.preview) {
+      paintLabels(d.labels);
+      part.preview = document.createElement('canvas'); part.preview.width = part.preview.height = GRID;
+      part.preview.getContext('2d').drawImage(labelCanvas, 0, 0);
+    }
+    ctx.drawImage(part.preview, 0, 0, size, size);
+    (d.lines || []).forEach(function (st) { ctx.strokeStyle = rgb(st.color); ctx.fillStyle = rgb(st.color); strokeShape(ctx, st, k, 0); });
+    (d.paths || []).forEach(function (path) { if (!path.pts.length) return; ctx.strokeStyle = rgb(path.color); ctx.lineWidth = Math.max(minLine,0.3*k); ctx.beginPath(); ctx.moveTo(path.pts[0][0]*k,path.pts[0][1]*k); path.pts.slice(1).forEach(function (p) { ctx.lineTo(p[0]*k,p[1]*k); }); ctx.stroke(); });
+  }
   function drawDesign(ctx) {
-    S.parts.forEach(function (part) {
-      var d = part.design;
-      if (!part.preview) {
-        paintLabels(d.labels);
-        part.preview = document.createElement('canvas'); part.preview.width = part.preview.height = GRID;
-        part.preview.getContext('2d').drawImage(labelCanvas, 0, 0);
-      }
-      ctx.drawImage(part.preview, 0, 0, base.width, base.height);
-      (d.lines || []).forEach(function (st) { ctx.strokeStyle = rgb(st.color); ctx.fillStyle = rgb(st.color); strokeShape(ctx, st, px, 0); });
-      (d.paths || []).forEach(function (path) { if (!path.pts.length) return; ctx.strokeStyle = rgb(path.color); ctx.lineWidth = Math.max(1,0.3*px); ctx.beginPath(); ctx.moveTo(path.pts[0][0]*px,path.pts[0][1]*px); path.pts.slice(1).forEach(function (p) { ctx.lineTo(p[0]*px,p[1]*px); }); ctx.stroke(); });
+    S.parts.forEach(function (part) { drawPart(ctx, part, px, base.width, 1); });
+  }
+  // The small pictures in the Layers list: each layer by itself, filling its thumbnail.
+  var THUMB = 96;
+  function paintLayerThumbs() {
+    $$('#layers canvas').forEach(function (c) {
+      // A thumbnail is a nicety: failing to draw one must never stop the design being worked on.
+      try {
+        var ctx = c.getContext('2d'); if (!ctx) return;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = S.fabric; ctx.fillRect(0, 0, THUMB, THUMB);
+        var part = S.parts.find(function (q) { return q.layer.id === c.dataset.layer; }), b = objectBounds.get(c.dataset.layer);
+        if (!part || !b) return;
+        var span = Math.max(b[2] - b[0], b[3] - b[1], 4), k = (THUMB - 12) / span;
+        ctx.setTransform(k, 0, 0, k, (THUMB - (b[2] - b[0]) * k) / 2 - b[0] * k, (THUMB - (b[3] - b[1]) * k) / 2 - b[1] * k);
+        drawPart(ctx, part, 1, 100, 1.5 / k);
+      } catch (error) { /* leave this thumbnail blank */ }
     });
   }
   function drawStitches(ctx) {
@@ -466,7 +489,8 @@ export function mountStudio(root, opts) {
   function cloneLayer(layer) {
     var source=layer.source;
     if(layer.kind==='draw') source=Object.assign({},source,{sizes:Object.assign({},source.sizes),order:source.order.slice(),labels:source.labels.slice(),strokes:source.strokes.map(function(s){return Object.assign({},s,{pts:s.pts.map(function(p){return p.slice();})});})});
-    else if(layer.kind==='image') source=Object.assign({},source,{clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
+    else if(layer.kind==='image') source=Object.assign({},source,{crop:source.crop?Object.assign({},source.crop):undefined,clusters:source.clusters.map(function(c){return Object.assign({},c,{rgb:c.rgb.slice()});})});
+    else if(layer.kind==='stitches') source=Object.assign({},source,{slots:source.slots.slice()});   // the runs of stitches never change, so they are shared
     else source=Object.assign({},source);
     // Undo snapshots of a decoding image must receive the same decoded asset, even if
     // they become the active object before the decode completes.
@@ -592,7 +616,12 @@ export function mountStudio(root, opts) {
     }
     return centers;
   }
-  function downscaleTo(src, w, h) {
+  function downscaleTo(src, w, h, cut) {
+    if (cut && (cut.sw !== src.width || cut.sh !== src.height)) {
+      var part = document.createElement('canvas'); part.width = cut.sw; part.height = cut.sh;
+      part.getContext('2d').drawImage(src, cut.sx, cut.sy, cut.sw, cut.sh, 0, 0, cut.sw, cut.sh);
+      src = part;
+    }
     var cur = src, cw = src.width, ch = src.height;
     while (cw / 2 >= w * 1.5 && ch / 2 >= h * 1.5) {
       var t = document.createElement('canvas'); t.width = Math.round(cw / 2); t.height = Math.round(ch / 2);
@@ -607,10 +636,11 @@ export function mountStudio(root, opts) {
   function processImage(im) {
     im = im || S.image; var src = im.source;
     if (!src) { im.proc = null; return; }
-    var iw = src.width, ih = src.height, longMM = clamp(im.sizeMM, 10, HOOP);
+    var cut = cropPixels(im.crop, src.width, src.height);
+    var iw = cut.sw, ih = cut.sh, longMM = clamp(im.sizeMM, 10, HOOP);
     var wmm = iw >= ih ? longMM : longMM * iw / ih, hmm = ih > iw ? longMM : longMM * ih / iw;
     var gw = Math.max(2, Math.round(wmm / RES)), gh = Math.max(2, Math.round(hmm / RES)), n = gw * gh;
-    var pix = downscaleTo(src, gw, gh);
+    var pix = downscaleTo(src, gw, gh, cut);
     var fg = new Uint8Array(n), i;
     for (i = 0; i < n; i++) fg[i] = pix[i * 4 + 3] >= 128 ? 1 : 0;
     if (im.removeBg) {
@@ -721,9 +751,12 @@ export function mountStudio(root, opts) {
     var areas = new Array(centers.length + 1).fill(0);
     for (i = 0; i < n; i++) areas[lab[i]]++;
     var old = im.clusters;
+    // Each colour of the picture gets its own thread, matched by eye rather than by RGB (threadMatch.js).
+    var found = centers.map(function (c, ci) { return { rgb: [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])], area: areas[ci + 1] }; });
+    var matched = assignThreads(PEC, found, !!im.vivid);
     var clusters = centers.map(function (c, ci) {
-      var rgbv = [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])];
-      var cl = { id: ci + 1, rgb: rgbv, thread: E.nearestThread(rgbv[0], rgbv[1], rgbv[2]), on: true, area: areas[ci + 1] };
+      var rgbv = found[ci].rgb;
+      var cl = { id: ci + 1, rgb: rgbv, thread: matched[ci], on: true, area: areas[ci + 1] };
       if (old && old.length === centers.length) {
         var bestOld = null, bd = Infinity;
         old.forEach(function (o2) { var d2 = Math.pow(o2.rgb[0] - rgbv[0], 2) + Math.pow(o2.rgb[1] - rgbv[1], 2) + Math.pow(o2.rgb[2] - rgbv[2], 2); if (d2 < bd) { bd = d2; bestOld = o2; } });
@@ -824,6 +857,7 @@ export function mountStudio(root, opts) {
         var source = layer.source, design;
         if (layer.kind === 'draw') design = { labels: source.labels, order: source.order, lines: source.strokes };
         else if (layer.kind === 'image') design = imageDesign(source);
+        else if (layer.kind === 'stitches') design = { paths: source.paths.map(function (path) { return { color: source.slots[path.slot] || 20, pts: path.pts }; }) };
         else if (isEmbroideryFont(source.font)) design = letteringDesign(source, layer.transform.scale, S.settings.underlay, layer.stitchSettings || {});
         else {
           textDesign(source, function (d, thin) { if (token !== textToken) return; parts[index] = { layer: layer, design: d }; if (thin > 0.08) S.note = 'Some decorative letters are thin. Try Small Satin for embroidery lettering.'; pending--; ready(); }, token);
@@ -918,11 +952,14 @@ export function mountStudio(root, opts) {
   function freshSource(kind) {
     if (kind === 'draw') return { tool:'satin',color:37,sizes:{satin:3,brush:6,eraser:6},pressure:true,order:[],example:false,labels:new Uint8Array(GRID*GRID),strokes:[] };
     if (kind === 'image') return { source:null, fileName:'', sizeMM:50,k:4,removeBg:true,clean:2,proc:null,clusters:[] };
+    // An embroidery file: `slots` is the thread for each colour stop, `paths` its runs of stitches
+    // in hoop millimetres. The stitches are kept as they are; only threads and placement change.
+    if (kind === 'stitches') return { fileName:'', slots:[], paths:[] };
     return { value:'Bharti',font:EMBROIDERY_FONT,widthMM:60,color:5,heightMM:8,letterSpacing:0.5,lineGap:2,align:'center' };
   }
   // "Drawing", then "Drawing 2", "Drawing 3": two objects of one kind must be told apart in the list.
   function layerName(kind) {
-    var base = kind === 'draw' ? 'Drawing' : kind === 'image' ? 'Picture' : 'Text';
+    var base = kind === 'draw' ? 'Drawing' : kind === 'image' ? 'Picture' : kind === 'stitches' ? 'Embroidery' : 'Text';
     var taken = S.layers.map(function (l) { return l.name; });
     if (taken.indexOf(base) < 0) return base;
     var n = 2; while (taken.indexOf(base + ' ' + n) >= 0) n++;
@@ -939,8 +976,10 @@ export function mountStudio(root, opts) {
     var layer = currentLayer(); if (!layer) return;
     lastOfKind[layer.kind] = id;
     S.mode = layer.kind; S[S.mode] = layer.source;
+    if (!S.view[S.mode]) S.view[S.mode] = 'stitches';
     if (S.mode === 'image' && S.image.source) processImage(S.image);
-    ['draw','image','text'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
+    ['draw','image','text','stitches'].forEach(function (m) { $('#panel-'+m).hidden = m !== S.mode; });
+    if (S.mode === 'stitches') renderSlots();
     $('#toolbar').hidden = S.mode !== 'draw'; $('#clear').hidden = S.mode !== 'draw';
     $('.drawing-recolor').hidden = S.mode !== 'draw'; $('.drawing-help').hidden = S.mode !== 'draw';
     stage.classList.toggle('drawing', S.mode === 'draw' && !moveDrawing);
@@ -950,6 +989,7 @@ export function mountStudio(root, opts) {
     $('#img-size').value=S.image.sizeMM; $('#img-size-out').textContent=S.image.sizeMM+' mm';
     $('#img-k').value=S.image.k; $('#img-k-out').textContent=S.image.k; $('#img-bg').checked=S.image.removeBg;
     $$('#img-clean button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.clean === S.image.clean)); });
+    syncVivid();
     $('#file-name').textContent=S.image.fileName || 'No picture selected'; renderClusters();
     $('#txt').value=S.text.value; fontSel.value=S.text.font; $('#txt-w').value=S.text.widthMM; $('#txt-w-out').textContent=S.text.widthMM+' mm';
     $('#txt-height').value=S.text.heightMM ?? 8; $('#txt-spacing').value=S.text.letterSpacing ?? 0.5; $('#txt-linegap').value=S.text.lineGap ?? 2; $('#txt-align').value=S.text.align || 'center';
@@ -961,7 +1001,7 @@ export function mountStudio(root, opts) {
     var current=currentLayer(), layer=current&&current.kind===m&&current.visible?current:null;
     if(!layer) layer=S.layers.find(function (l) { return l.id===lastOfKind[m] && l.kind===m && l.visible; });
     if(!layer) layer=S.layers.find(function (l) { return l.kind===m && l.visible; });
-    if(!layer) { if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
+    if(!layer) { if(S.layers.length>=20){toast('A design can have up to 20 layers.');return;} pushUndo(); S.placement=undefined; layer=makeLayer(m); S.layers.push(layer); }
     if(!layer.visible) { pushUndo(); S.placement=undefined; layer.visible=true; }
     selectLayer(layer.id);
   }
@@ -976,7 +1016,35 @@ export function mountStudio(root, opts) {
     $('#example-tag').hidden = !(S.mode === 'draw' && S.draw.example && !moveDrawing);
     $('#object-count').textContent='('+S.layers.length+')';
     var list=$('#layers'); list.innerHTML='';
-    S.layers.forEach(function (layer,i) { var button=document.createElement('button'); button.textContent=(i+1)+'. '+layer.name+(layer.visible?'':' (left out)'); button.setAttribute('aria-pressed',String(layer.id===S.activeId)); button.addEventListener('click',function(){moveDrawing=true;selectLayer(layer.id);}); list.appendChild(button); });
+    S.layers.forEach(function (layer,i) {
+      var row=document.createElement('div'); row.className='layer-row'+(layer.visible?'':' off');
+      var pick=document.createElement('button'); pick.type='button'; pick.className='layer-pick';
+      pick.setAttribute('aria-pressed',String(layer.id===S.activeId));
+      var thumb=document.createElement('canvas'); thumb.width=thumb.height=THUMB; thumb.dataset.layer=layer.id; thumb.setAttribute('aria-hidden','true');
+      var words=document.createElement('span'); words.className='layer-words';
+      // The picture and the position in the list say what kind it is and when it stitches; the
+      // words only need the name, and a note when the layer is left out.
+      var title=document.createElement('strong'); title.textContent=layer.name;
+      words.appendChild(title);
+      if(!layer.visible){var note=document.createElement('small'); note.textContent='left out'; words.appendChild(note);}
+      pick.setAttribute('aria-label',(i+1)+'. '+layer.name+(layer.visible?'':' (left out)'));
+      pick.appendChild(thumb); pick.appendChild(words);
+      pick.addEventListener('click',function(){moveDrawing=true;selectLayer(layer.id);});
+      var eye=document.createElement('button'); eye.type='button'; eye.className='layer-eye';
+      eye.setAttribute('aria-pressed',String(layer.visible));
+      eye.setAttribute('aria-label',(layer.visible?'Stitched. Leave out ':'Left out. Stitch ')+layer.name); eye.title=layer.visible?'Leave this layer out':'Stitch this layer';
+      eye.innerHTML=layer.visible
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" opacity=".45"/><path d="M4 4l16 16"/></svg>';
+      eye.addEventListener('click',function(){setLayerVisible(layer,!layer.visible);});
+      row.appendChild(pick); row.appendChild(eye); list.appendChild(row);
+    });
+    paintLayerThumbs();
+    // The row of actions on the mat under the hoop belongs to Move: it acts on the selected layer.
+    $('#part-actions').hidden=!selected||(S.mode==='draw'&&!moveDrawing);
+    $('#part-remove').disabled=S.layers.length===1;
+    var partner=mergePartner(selected), merge=$('#layer-merge');
+    merge.hidden=!partner; if(partner)merge.textContent='Merge with “'+partner.name+'”';
     if(!selected) return;
     if(root.activeElement!==$('#layer-name') && document.activeElement!==$('#layer-name')) $('#layer-name').value=selected.name; $('#layer-visible').checked=selected.visible;
     $('#layer-x').value=+selected.transform.x.toFixed(2); $('#layer-y').value=+selected.transform.y.toFixed(2);
@@ -1069,7 +1137,7 @@ export function mountStudio(root, opts) {
   function handlePictureFile(e, asNew) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
-    if(asNew && S.layers.length>=20){toast('A design can have up to 20 parts.');e.target.value='';return;}
+    if(asNew && S.layers.length>=20){toast('A design can have up to 20 layers.');e.target.value='';return;}
     pushUndo();
     if(asNew){var layer=makeLayer('image');S.layers.push(layer);moveDrawing=true;showPanel('properties');selectLayer(layer.id);}
     invalidateDesign();
@@ -1088,7 +1156,7 @@ export function mountStudio(root, opts) {
         if(im.loadTicket!==ticket)return; // A newer replacement owns this object now.
         // Commit only after processing succeeds, so a bad replacement cannot leave
         // a new image paired with the previous image's processed pixels.
-        var decoded=Object.assign({},im,{sourceDataURL:dataURL,source:picture,fileName:f.name,clusters:[],loading:false});
+        var decoded=Object.assign({},im,{sourceDataURL:dataURL,source:picture,fileName:f.name,clusters:[],crop:undefined,loading:false});
         processImage(decoded);Object.assign(im,decoded);delete im.loadTicket;delete im.error;
         if(S.image===im){$('#file-name').textContent=f.name;renderClusters();}
       });
@@ -1119,6 +1187,14 @@ export function mountStudio(root, opts) {
   $('#img-size').addEventListener('input', function (e) { pushUndo('img-size'); S.image.sizeMM = +e.target.value; $('#img-size-out').textContent = e.target.value + ' mm'; reprocessSoon(); });
   $('#img-k').addEventListener('input', function (e) { pushUndo('img-k'); S.image.k = +e.target.value; $('#img-k-out').textContent = e.target.value; S.image.clusters = []; reprocessSoon(); });
   $('#img-bg').addEventListener('change', function (e) { pushUndo(); S.image.removeBg = e.target.checked; reprocessSoon(); });
+  // "Vivid" rematches every colour of the picture, so thread choices made by hand start again.
+  function syncVivid() { $$('#img-vivid button').forEach(function (b) { b.setAttribute('aria-pressed', String((b.dataset.vivid === '1') === !!S.image.vivid)); }); }
+  $$('#img-vivid button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var vivid = b.dataset.vivid === '1'; if (vivid === !!S.image.vivid) return;
+      pushUndo(); S.image.vivid = vivid; S.image.clusters = []; syncVivid(); reprocessSoon();
+    });
+  });
   $$('#img-clean button').forEach(function (b) {
     b.addEventListener('click', function () {
       pushUndo();S.image.clean = +b.dataset.clean;
@@ -1128,21 +1204,69 @@ export function mountStudio(root, opts) {
   });
   function renderClusters() {
     var box = $('#clusters'); box.innerHTML = '';
+    $('#img-crop').disabled = !S.image.source;
     var total = S.image.clusters.reduce(function (s, c) { return s + c.area; }, 0) || 1;
     S.image.clusters.forEach(function (cl) {
+      // One swatch per row: the thread that will be stitched. (A second, smaller swatch used to show
+      // the picture's own colour beside it, which read as the same colour shown twice and not matching.)
       var row = document.createElement('div'); row.className = 'cluster' + (cl.on ? '' : ' off');
-      var orig = document.createElement('span'); orig.className = 'orig'; orig.style.setProperty('--c', 'rgb(' + cl.rgb.join(',') + ')'); orig.title = 'Color in the picture';
       var sw = document.createElement('button'); sw.type = 'button'; sw.className = 'swatch'; sw.style.setProperty('--c', rgb(cl.thread));
-      sw.setAttribute('aria-label', 'Change thread, now ' + threadName(cl.thread));
+      sw.setAttribute('aria-label', 'Change thread, now ' + threadTitle(cl.thread));
+      sw.title = 'Change this thread';
       sw.addEventListener('click', function () { openSheet(cl.thread, function (t) { pushUndo(); S.placement=undefined; cl.thread = t; renderClusters(); updateDesign(); scheduleSave(); }); });
-      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = threadName(cl.thread) + ' #' + cl.thread;
-      var pct = document.createElement('span'); pct.className = 'pct'; pct.textContent = Math.max(1, Math.round(cl.area / total * 100)) + '%';
+      var share = Math.max(1, Math.round(cl.area / total * 100)) + '% of the picture', code = threadCode(cl.thread);
+      var nm = document.createElement('span'); nm.className = 'nm';
+      var title = document.createElement('strong'); title.textContent = threadName(cl.thread);
+      var detail = document.createElement('small'); detail.textContent = (code ? code + ' · ' : '') + share;
+      nm.appendChild(title); nm.appendChild(detail);
       var tg = document.createElement('button'); tg.type = 'button'; tg.className = 'pill'; tg.setAttribute('aria-pressed', String(cl.on)); tg.textContent = cl.on ? 'Stitch' : 'Skip';
       tg.addEventListener('click', function () { pushUndo(); S.placement=undefined; cl.on = !cl.on; renderClusters(); updateDesign(); scheduleSave(); });
-      row.appendChild(orig); row.appendChild(sw); row.appendChild(nm); row.appendChild(pct); row.appendChild(tg);
+      row.appendChild(sw); row.appendChild(nm); row.appendChild(tg);
       box.appendChild(row);
     });
   }
+
+  // crop sheet: the picture with a box over it; only what is inside the box gets stitched
+  var cropDraft = null, cropDrag = null;
+  function showCropBox() {
+    var box = $('#crop-box'), c = cropDraft;
+    box.style.left = c.x * 100 + '%'; box.style.top = c.y * 100 + '%'; box.style.width = c.w * 100 + '%'; box.style.height = c.h * 100 + '%';
+  }
+  function openCrop() {
+    var src = S.image.source; if (!src) return;
+    var cv = $('#crop-canvas'), shrink = Math.min(1, 1000 / Math.max(src.width, src.height));
+    cv.width = Math.max(1, Math.round(src.width * shrink)); cv.height = Math.max(1, Math.round(src.height * shrink));
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    var fit = Math.min(Math.min(640, window.innerWidth - 80) / src.width, window.innerHeight * 0.52 / src.height);
+    $('#crop-stage').style.width = Math.round(src.width * fit) + 'px'; $('#crop-stage').style.height = Math.round(src.height * fit) + 'px';
+    cropDraft = Object.assign({}, S.image.crop || FULL_CROP); showCropBox();
+    $('#cropper').hidden = false; $('#crop-apply').focus();
+  }
+  function closeCrop() { $('#cropper').hidden = true; cropDraft = null; cropDrag = null; }
+  $('#img-crop').addEventListener('click', openCrop);
+  $('#crop-cancel').addEventListener('click', closeCrop);
+  $('#crop-reset').addEventListener('click', function () { cropDraft = Object.assign({}, FULL_CROP); showCropBox(); });
+  $('#crop-apply').addEventListener('click', function () {
+    var next = isFullCrop(cropDraft) ? undefined : cropDraft, im = S.image;
+    closeCrop();
+    if (JSON.stringify(next) === JSON.stringify(im.crop)) return;
+    // A different part of the picture has different colours, so thread choices start again.
+    pushUndo(); im.crop = next; im.clusters = []; reprocessSoon();
+  });
+  $('#crop-box').addEventListener('pointerdown', function (e) {
+    if (!cropDraft || (e.button && e.button !== 0)) return;
+    e.preventDefault();
+    cropDrag = { id: e.pointerId, handle: (e.target.dataset && e.target.dataset.corner) || 'move', x: e.clientX, y: e.clientY, start: Object.assign({}, cropDraft) };
+    try { $('#crop-box').setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+  });
+  $('#crop-box').addEventListener('pointermove', function (e) {
+    if (!cropDrag || e.pointerId !== cropDrag.id) return;
+    var r = $('#crop-stage').getBoundingClientRect(); if (!r.width || !r.height) return;
+    cropDraft = dragCrop(cropDrag.start, cropDrag.handle, (e.clientX - cropDrag.x) / r.width, (e.clientY - cropDrag.y) / r.height);
+    showCropBox();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (type) { $('#crop-box').addEventListener(type, function (e) { if (cropDrag && e.pointerId === cropDrag.id) cropDrag = null; }); });
+  $('#cropper').addEventListener('click', function (e) { if (e.target === $('#cropper')) closeCrop(); });
 
   // thread picker sheet
   var sheetPick = null, sheetSel = 0, sheetPalette = null;
@@ -1158,6 +1282,7 @@ export function mountStudio(root, opts) {
   $('#sheet').addEventListener('click', function (e) { if (e.target === $('#sheet')) closeSheet(); });
   listen(document, 'keydown', function (e) {
     if (e.key !== 'Escape' || !shown()) return;
+    if (!$('#cropper').hidden) closeCrop();
     if (!$('#sheet').hidden) closeSheet();
     else if (!$('#ruler').hidden) closeRuler();
   });
@@ -1203,6 +1328,7 @@ export function mountStudio(root, opts) {
 
   function syncStitchSettings() {
     var layer=currentLayer(); if(!layer)return;
+    $('#object-stitches').hidden=layer.kind==='stitches';
     var values=layer.stitchSettings || stitchDefaults(layer,S.settings);
     $('#stitch-custom').checked=!!layer.stitchSettings; $('#stitch-fields').disabled=!layer.stitchSettings;
     $('#stitch-object-name').textContent='Stitches for: '+layer.name+(layer.stitchSettings?' (its own settings)':' (the design\'s settings)');
@@ -1227,6 +1353,7 @@ export function mountStudio(root, opts) {
     var n = '';
     if (S.mode === 'draw') n = 'my-drawing';
     else if (S.mode === 'image') n = slug((S.image.fileName || 'cactus').replace(/\.[^.]+$/, '')) || 'picture';
+    else if (S.mode === 'stitches') n = slug((S.stitches.fileName || '').replace(/\.[^.]+$/, '')) || 'embroidery';
     else n = slug(S.text.value.split('\n')[0]).toLowerCase() || 'text';
     S.name = n;
     $('#fname').value = n;
@@ -1295,15 +1422,17 @@ export function mountStudio(root, opts) {
   function serializeSource(kind, source) {
     if(kind==='draw') return {tool:source.tool,color:source.color,sizes:source.sizes,pressure:source.pressure,order:source.order,example:source.example,labels:rle(source.labels),strokes:source.strokes.map(function(st){return {k:st.kind,c:st.color,p:st.pts.map(function(p){return p.slice();})};})};
     if(kind==='text') return Object.assign({},source);
-    return {sizeMM:source.sizeMM,k:source.k,removeBg:source.removeBg,clean:source.clean,sourceDataURL:source.sourceDataURL || (source.source && source.source.toDataURL ? source.source.toDataURL('image/png'):undefined),fileName:source.fileName,clusters:source.clusters.map(function(c){return {rgb:c.rgb,thread:c.thread,on:c.on};})};
+    if(kind==='stitches') return {fileName:source.fileName,slots:source.slots.slice(),paths:source.paths.map(function(path){var flat=[];path.pts.forEach(function(q){flat.push(q[0],q[1]);});return {s:path.slot,p:flat};})};
+    return {sizeMM:source.sizeMM,k:source.k,removeBg:source.removeBg,clean:source.clean,vivid:source.vivid?true:undefined,crop:source.crop?Object.assign({},source.crop):undefined,sourceDataURL:source.sourceDataURL || (source.source && source.source.toDataURL ? source.source.toDataURL('image/png'):undefined),fileName:source.fileName,clusters:source.clusters.map(function(c){return {rgb:c.rgb,thread:c.thread,on:c.on};})};
   }
   function deserializeSource(kind, source) {
     if(kind==='draw') return Object.assign(freshSource(kind),source,{labels:unrle(source.labels,GRID*GRID),strokes:source.strokes.map(function(st){return {kind:st.k,color:st.c,pts:st.p.map(function(p){return p.slice();})};})});
+    if(kind==='stitches') return {fileName:source.fileName||'',slots:source.slots.slice(),paths:source.paths.map(function(path){var pts=[];for(var i=0;i+1<path.p.length;i+=2)pts.push([path.p[i],path.p[i+1]]);return {slot:path.s,pts:pts};})};
     return Object.assign(freshSource(kind),source);
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:4,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:5,mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
       activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
@@ -1321,7 +1450,7 @@ export function mountStudio(root, opts) {
     try {
       var s = opts.project;
       if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
-      if (!s || (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4)) return false;
+      if (!s || !(s.v >= 1 && s.v <= 5)) return false;
       loadedProject = s;
       S.placement = s.placement;
       if (s.view) S.view = Object.assign(S.view, s.view);
@@ -1353,7 +1482,7 @@ export function mountStudio(root, opts) {
       var style = $('#shape-style').value, w = +$('#shape-line-width').value;
       var points = shapePoints($('#shape-kind').value, +$('#shape-width').value, +$('#shape-height').value, +$('#shape-x').value, +$('#shape-y').value, style === 'satin' ? w / 2 + 0.3 : 0.3);
       if (!Number.isFinite(w) || w < 1.5 || w > 6) throw new Error('Choose an outline width between 1.5 and 6 mm.');
-      if(shapeAsObject && S.layers.length>=20){toast('A design can have up to 20 parts.');return;}
+      if(shapeAsObject && S.layers.length>=20){toast('A design can have up to 20 layers.');return;}
       pushUndo();
       if(shapeAsObject){var shape=makeLayer('draw');shape.source.color=S.draw.color;var name=$('#shape-kind').selectedOptions[0].textContent, number=2;shape.name=name;while(S.layers.some(l=>l.name===shape.name))shape.name=name+' '+number++;S.layers.push(shape);moveDrawing=true;selectLayer(shape.id);shapeAsObject=false;}
       if (style === 'fill') {
@@ -1367,18 +1496,98 @@ export function mountStudio(root, opts) {
   });
 
   function addObject(kind) {
-    if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;}
+    if(S.layers.length>=20){toast('A design can have up to 20 layers.');return;}
     pushUndo(); S.placement=undefined; var layer=makeLayer(kind); S.layers.push(layer); selectLayer(layer.id);
     if(kind==='text') { $('#txt').focus(); $('#txt').select(); }
   }
   $('#new-drawing-object').addEventListener('click',function(){moveDrawing=false;addObject('draw');showDrawTools();});
   $('#add-image-layer').addEventListener('click',function(){$('#add-picture-file').click();});
+  // ---------- embroidery files as layers ----------
+  $('#add-stitch-layer').addEventListener('click',function(){$('#add-stitch-file').click();});
+  function addStitchFile(name, bytes) {
+    if(S.layers.length>=20){toast('A design can have up to 20 layers.');return false;}
+    var design;
+    try{design=parsePes(bytes);}catch(error){toast(error.message);return false;}
+    if(design.width>HOOP||design.height>HOOP){toast('That design is '+Math.ceil(design.width)+' × '+Math.ceil(design.height)+' mm. The hoop is 100 × 100 mm, so it will not fit.');return false;}
+    pushUndo(); S.placement=undefined;
+    var layer=makeLayer('stitches',{fileName:name,slots:design.slots,paths:design.paths});
+    var title=String(name||'').replace(/\.[^.]+$/,'').slice(0,60); if(title&&!S.layers.some(function(l){return l.name===title;}))layer.name=title;
+    S.layers.push(layer); moveDrawing=true; showPanel('properties'); selectLayer(layer.id); autoName(); nameChanged();
+    return true;
+  }
+  $('#add-stitch-file').addEventListener('change',function(e){
+    var f=e.target.files&&e.target.files[0]; e.target.value='';
+    if(!f)return;
+    if(f.size>8000000){toast('That file is too large to be an embroidery design.');return;}
+    var reader=new FileReader();
+    reader.onload=function(){if(!destroyed)addStitchFile(f.name,new Uint8Array(reader.result));};
+    reader.onerror=function(){if(!destroyed)toast("That file couldn't be read.");};
+    reader.readAsArrayBuffer(f);
+  });
+  // The file's threads, one row per colour stop; tapping a swatch swaps that thread for another.
+  function renderSlots() {
+    var source=S.stitches, box=$('#slots'); box.innerHTML='';
+    var points=source.paths.reduce(function(n,path){return n+path.pts.length;},0);
+    $('#stitch-file-name').textContent=(source.fileName||'Embroidery file')+' · '+fmt(points)+' stitches';
+    source.slots.forEach(function(thread,index){
+      if(!source.paths.some(function(path){return path.slot===index;}))return;
+      var row=document.createElement('div'); row.className='cluster';
+      var sw=document.createElement('button'); sw.type='button'; sw.className='swatch'; sw.style.setProperty('--c',rgb(thread));
+      sw.setAttribute('aria-label','Change thread, now '+threadTitle(thread)); sw.title='Change this thread';
+      sw.addEventListener('click',function(){openSheet(source.slots[index],function(t){pushUndo();S.placement=undefined;S.stitches.slots[index]=t;renderSlots();updateDesign();scheduleSave();});});
+      var nm=document.createElement('span'); nm.className='nm';
+      var title=document.createElement('strong'); title.textContent=threadName(thread);
+      var detail=document.createElement('small'), code=threadCode(thread); detail.textContent=(code?code+' · ':'')+'thread '+(index+1);
+      nm.appendChild(title); nm.appendChild(detail); row.appendChild(sw); row.appendChild(nm); box.appendChild(row);
+    });
+  }
   $('#add-text-layer').addEventListener('click',function(){moveDrawing=true;showPanel('properties');addObject('text');});
   $('#move-layer').addEventListener('click',function(){setPan(false);moveDrawing=true;syncLayers();render();});
   $('#layer-name').addEventListener('input',function(e){pushUndo('layer-name');currentLayer().name=e.target.value.trim().slice(0,60)||'Layer';syncLayers();syncStitchSettings();scheduleSave();});
-  $('#layer-visible').addEventListener('change',function(e){pushUndo();S.placement=undefined;currentLayer().visible=e.target.checked;syncLayers();updateDesign();scheduleSave();});
+  function setLayerVisible(layer,visible){pushUndo();S.placement=undefined;layer.visible=visible;syncLayers();updateDesign();scheduleSave();}
+  $('#layer-visible').addEventListener('change',function(e){setLayerVisible(currentLayer(),e.target.checked);});
+  // The same actions as in "This layer", within reach of the hoop while Move is on.
+  function turnLayer(degrees){
+    var layer=currentLayer(); if(!layer)return;
+    pushUndo('turn'); S.placement=undefined;
+    var r=Math.round(layer.transform.rotation+degrees); while(r>180)r-=360; while(r<-180)r+=360;
+    layer.transform.rotation=r; syncLayers(); updateDesign(); scheduleSave();
+  }
+  $('#part-turn-left').addEventListener('click',function(){turnLayer(-15);});
+  $('#part-turn-right').addEventListener('click',function(){turnLayer(15);});
+  $('#part-duplicate').addEventListener('click',function(){$('#layer-duplicate').click();});
+  $('#part-remove').addEventListener('click',function(){$('#layer-remove').click();});
+  // Two drawings can be made one: the selected drawing and the nearest other drawing in the list
+  // (the next one down, else the next one up). Each is first redrawn where it sits (its move, size
+  // and turn become part of the marks), so nothing shifts on the hoop.
+  function mergePartner(layer){
+    if(!layer||layer.kind!=='draw')return null;
+    var i=S.layers.indexOf(layer), j;
+    for(j=i+1;j<S.layers.length;j++)if(S.layers[j].kind==='draw')return S.layers[j];
+    for(j=i-1;j>=0;j--)if(S.layers[j].kind==='draw')return S.layers[j];
+    return null;
+  }
+  function settled(layer){
+    var d=transformDesign({labels:layer.source.labels,order:layer.source.order,lines:layer.source.strokes},layer.transform);
+    d.lines.forEach(function(line){line.pts.forEach(function(p){if(p[0]<0||p[1]<0||p[0]>100||p[1]>100)throw new Error('A layer extends outside the hoop. Move it inward or reduce its size.');});});
+    return d;
+  }
+  $('#layer-merge').addEventListener('click',function(){
+    var selected=currentLayer(), partner=mergePartner(selected); if(!partner)return;
+    var first=S.layers.indexOf(selected)<S.layers.indexOf(partner)?selected:partner, second=first===selected?partner:selected, a, b;
+    try{a=settled(first);b=settled(second);}catch(error){toast('Move both drawings inside the hoop, then merge.');return;}
+    pushUndo(); S.placement=undefined;
+    var labels=a.labels.slice(); for(var i=0;i<labels.length;i++)if(b.labels[i])labels[i]=b.labels[i];
+    var order=a.order.slice(); b.order.forEach(function(c){if(order.indexOf(c)<0)order.push(c);});
+    var strokes=a.lines.concat(b.lines).map(function(line){return {kind:line.kind,color:line.color,pts:line.pts.map(function(p){return [p[0],p[1],p[2]||0];})};});
+    first.source=Object.assign(freshSource('draw'),{tool:selected.source.tool,color:selected.source.color,sizes:Object.assign({},selected.source.sizes),pressure:selected.source.pressure,labels:labels,order:order,strokes:strokes});
+    first.transform=identityTransform(); first.visible=first.visible||second.visible;
+    S.layers=S.layers.filter(function(l){return l!==second;});
+    selectLayer(first.id);
+    toast('Merged into one drawing. Undo brings both back.');
+  });
   ['x','y','size','rotation'].forEach(function(key){$('#layer-'+key).addEventListener('input',function(e){var value=+e.target.value;if(!Number.isFinite(value)||value < +e.target.min||value > +e.target.max){failDesign('Enter a layer value within the displayed range.');return;}pushUndo('layer-'+key);S.placement=undefined;currentLayer().transform[key==='size'?'scale':key]=key==='size'?value/100:value;syncLayers();updateDesign();scheduleSave();});});
-  $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can have up to 20 parts.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
+  $('#layer-duplicate').addEventListener('click',function(){if(S.layers.length>=20){toast('A design can have up to 20 layers.');return;}pushUndo();S.placement=undefined;var layer=cloneLayer(currentLayer());layer.id=crypto.randomUUID();layer.name=(layer.name+' copy').slice(0,60);S.layers.splice(S.layers.indexOf(currentLayer())+1,0,layer);selectLayer(layer.id);});
   $('#layer-remove').addEventListener('click',function(){if(S.layers.length<2)return;pushUndo();S.placement=undefined;S.layers=S.layers.filter(function(l){return l.id!==S.activeId;});selectLayer(S.layers[0].id);});
   [-1,1].forEach(function(direction){$(direction===-1?'#layer-earlier':'#layer-later').addEventListener('click',function(){var i=S.layers.indexOf(currentLayer()),j=i+direction;if(j<0||j>=S.layers.length)return;pushUndo();S.placement=undefined;var layer=S.layers.splice(i,1)[0];S.layers.splice(j,0,layer);syncLayers();updateDesign();scheduleSave();});});
 
@@ -1407,7 +1616,15 @@ export function mountStudio(root, opts) {
       $('.editor-workspace').classList.toggle('without-'+name,!panels[name]);
     });
     syncEditingLabel();
+    placeNote();
     applyHoopSize();
+  }
+  // A warning about the design takes two or three lines. Above the hoop that is enough to push a
+  // real-size hoop off the screen, so where the thread panel is docked the warning goes at its top.
+  function placeNote(){
+    var note=$('#note'), docked=!compact&&panels.properties, home=docked?$('.bench-scroll'):$('.stage-col');
+    if(note.parentNode===home)return;
+    if(docked)home.insertBefore(note,home.firstChild); else home.insertBefore(note,$('#canvas-viewport'));
   }
   function showPanel(name){if(compact)panels={objects:false,properties:false};panels[name]=true;syncPanels();}
   // "Editing: Drawing 2" says which object is selected; the docked Objects list already shows that.
@@ -1472,7 +1689,7 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { pushUndo(); S.placement=undefined; S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
-  if(loadedProject && (loadedProject.v===2 || loadedProject.v===3 || loadedProject.v===4) && loadedProject.layers) {
+  if(loadedProject && (loadedProject.v>=2 && loadedProject.v<=5) && loadedProject.layers) {
     S.layers=loadedProject.layers.map(function(l){return Object.assign({},l,{transform:Object.assign({},l.transform),source:deserializeSource(l.kind,l.source)});});
     S.activeId=loadedProject.activeLayerId;
   } else {
