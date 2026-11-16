@@ -60,8 +60,10 @@ export function parsePes(bytes) {
   while (pos < blockEnd) {
     if (bytes[pos] === 0xff) { ended=true; break; }                                    // end of the design
     if (bytes[pos] === 0xfe && bytes[pos + 1] === 0xb0) {               // thread change
-      if(pos+2 >= blockEnd || slot+1 >= slots.length) fail("That .pes file has an invalid thread stop.");
+      if(pos+2 >= blockEnd) fail("That .pes file has incomplete stitch data.");
       pos += 3; slot++; run = null;
+      // A stop beyond the file's own colour list still stops the machine: it carries on with the last thread listed.
+      if (slot >= slots.length) slots.push(slots[slots.length - 1]);
       continue;
     }
     var dx = coordinate(); if (pos >= blockEnd) break;
@@ -82,6 +84,12 @@ export function parsePes(bytes) {
   // Keep single needle points and consecutive jumps as well as complete runs.
   if (!stitches) fail('That .pes file has no stitches in it.');
 
+  // A stop after the last stitch asks for nothing: the machine stops at the end anyway. Drop it, and
+  // any travel after it, rather than refusing the whole file.
+  var stitched = function (p) { return p.pts.length > (p.jump ? 1 : 0); };
+  var lastUsed = paths.reduce(function (m, p) { return stitched(p) ? Math.max(m, p.slot) : m; }, 0);
+  paths = paths.filter(function (p) { return p.slot <= lastUsed; });
+  slot = lastUsed;
   // An empty color stop has no needle position for the machine's stop/lock sequence.
   // Refuse it rather than silently discarding a material-placement stop.
   for (var used=0;used<=slot;used++) if(!paths.some(function(p){return p.slot===used && p.pts.length>(p.jump?1:0);})) fail('That .pes file contains an empty thread section. Remove empty stops in the source design first.');

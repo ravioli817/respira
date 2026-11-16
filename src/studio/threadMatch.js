@@ -4,8 +4,9 @@
 // gray: a photo's colours are muted to begin with and get more so when an area is averaged. So the
 // match is made the way an eye would judge it. Lightness is compared on the CIE L* scale (where
 // near-black is black, not dark brown), hue counts for more than how strong the colour is (a pale
-// blue goes to a blue thread before a lilac or a gray one). Automatic regions get distinct
-// threads, and manually assigned threads are reserved for their regions.
+// blue goes to a blue thread before a lilac or a gray one). Every colour gets a thread of its own,
+// the threads are chosen as a set so similar shades spread along their own family, an area that has
+// a colour is strengthened a little, and threads picked by hand are reserved for their colours.
 
 function linear(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
 
@@ -35,17 +36,24 @@ var WRONG_HUE = 0.08;
 var HUE_SAME = Math.cos(40 * Math.PI / 180), HUE_OTHER = Math.cos(80 * Math.PI / 180);
 /**
  * An averaged picture colour is a little duller than the picture looks, so it is strengthened by this
- * much before matching. (A stronger "Vivid" setting was tried as a switch and taken out: it turned
- * skin into Tangerine and khaki into Pumpkin, and one way of matching is easier to trust than two.)
+ * much before matching. (A stronger "Vivid" setting for everything was tried as a switch and taken
+ * out: it turned skin into Tangerine and khaki into Pumpkin. See VIVID for what replaced it.)
  */
 var BOOST = 1.15;
+/**
+ * An area that plainly has a colour is strengthened more, up to this much: a whole picture is being
+ * told in a handful of threads, and matched faithfully a photo comes out muted. The extra grows with
+ * how much colour the area has (none at VIVID_FROM, all of it at VIVID_FULL), so grays, off-whites
+ * and weak tints stay what they are.
+ */
+var VIVID = 1.3, VIVID_FROM = 0.03, VIVID_FULL = 0.08;
 
 /** How far a thread is from a picture colour; smaller is closer. */
 export function threadDistance(rgb, thread) {
   var p = perceptual(rgb[0], rgb[1], rgb[2]), t = perceptual(thread[0], thread[1], thread[2]);
   var pc = Math.hypot(p[1], p[2]), tc = Math.hypot(t[1], t[2]);
   // A colour with no tint at all is left alone: boosting it would only amplify noise.
-  var boost = pc < 0.006 ? 1 : BOOST;
+  var boost = pc < 0.006 ? 1 : BOOST + (VIVID - BOOST) * Math.min(1, Math.max(0, (pc - VIVID_FROM) / (VIVID_FULL - VIVID_FROM)));
   var a = p[1] * boost, b = p[2] * boost; pc *= boost;
   var dl = p[0] - t[0], dc = pc - tc;
   var dh2 = Math.max(0, (a - t[1]) * (a - t[1]) + (b - t[2]) * (b - t[2]) - dc * dc);
@@ -73,16 +81,44 @@ export function rankThreads(palette, rgb) {
   return ranked;
 }
 
-/** One distinct automatic thread per picture region, largest first.
- * Manually selected threads can be reserved so automatic rows do not reuse them. */
+/** How many of a colour's nearest free threads are weighed when the set is chosen together. */
+var CANDIDATES = 9;
+
+/**
+ * One distinct thread per picture colour, chosen as a set. Taking the colours one at a time, largest
+ * first, left the last of several similar shades with whatever was free (a light gray got Flesh
+ * Pink, a mid blue got Silver). Here the whole set is weighed at once: the squares of the distances
+ * are added up, so one thread that is plainly wrong costs more than several that are each a shade
+ * lighter or darker, and similar shades spread out along their own family of threads. Larger areas
+ * count for more. Threads picked by hand can be reserved so no automatic colour takes them.
+ */
 export function assignThreads(palette, colors, reserved = []) {
-  var order = colors.map(function (c, i) { return i; }).sort(function (x, y) { return (colors[y].area || 0) - (colors[x].area || 0); });
-  var taken = new Set(reserved), result = new Array(colors.length);
-  order.forEach(function (index) {
-    var ranked = rankThreads(palette, colors[index].rgb);
-    var pick = ranked.find(function(candidate){ return !taken.has(candidate[0]); });
-    if(!pick) throw new Error('There are more picture colors than available threads.');
-    taken.add(pick[0]); result[index] = pick[0];
+  var taken = new Set(reserved), n = colors.length;
+  if (n > palette.length - 2 - taken.size) throw new Error('There are more picture colors than available threads.');
+  var total = colors.reduce(function (sum, c) { return sum + (c.area || 0); }, 0);
+  var order = colors.map(function (c, i) { return i; }).sort(function (x, y) { return (colors[y].area || 0) - (colors[x].area || 0) || x - y; });
+  // Every colour keeps enough candidates that one is always free, whatever the others take.
+  var options = order.map(function (index) {
+    var weight = 1 + (total > 0 ? (colors[index].area || 0) / total : 0);
+    return rankThreads(palette, colors[index].rgb).filter(function (c) { return !taken.has(c[0]); })
+      .slice(0, Math.max(CANDIDATES, n)).map(function (c) { return [c[0], weight * c[1] * c[1]]; });
   });
+  var best = null, bestCost = Infinity, current = new Array(n), used = new Set();
+  // The least each remaining colour can still cost, for cutting a search short.
+  var least = new Array(n + 1); least[n] = 0;
+  for (var k = n - 1; k >= 0; k--) least[k] = least[k + 1] + options[k][0][1];
+  (function search(depth, cost) {
+    if (cost + least[depth] >= bestCost) return;
+    if (depth === n) { best = current.slice(); bestCost = cost; return; }
+    for (var j = 0; j < options[depth].length; j++) {
+      var option = options[depth][j];
+      if (used.has(option[0])) continue;
+      used.add(option[0]); current[depth] = option[0];
+      search(depth + 1, cost + option[1]);
+      used.delete(option[0]);
+    }
+  })(0, 0);
+  var result = new Array(n);
+  order.forEach(function (index, at) { result[index] = best[at]; });
   return result;
 }

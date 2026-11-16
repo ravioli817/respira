@@ -29,7 +29,8 @@ describe("matching a picture's colours to threads", () => {
     expect(nearest([90, 70, 58])).toBe("Pewter");
     // A dark purple went to Dark Brown, a pale cyan to Lavender, a dark navy to Olive Green.
     expect(nearest([45, 0, 45])).toBe("Royal Purple");
-    expect(nearest([75, 180, 195])).toBe("Light Blue");
+    // (It is strengthened on the way, so it lands on the stronger of the two light blues.)
+    expect(nearest([75, 180, 195])).toBe("Sky Blue");
     expect(nearest([0, 30, 45])).toBe("Prussian Blue");
   });
 
@@ -54,8 +55,8 @@ describe("matching a picture's colours to threads", () => {
     expect(threads.map(name)).toEqual([
       "Pewter",
       "Warm Gray",
+      "White",
       "Beige",
-      "Flesh Pink",
       "Silver",
       "Lavender",
     ]);
@@ -87,4 +88,66 @@ it("does not repeat Beige when more similar image regions are added", () => {
     );
   const names = assignThreads(PEC, regions).map(name);
   expect(names.filter((n) => n === "Beige")).toHaveLength(1);
+});
+
+describe("choosing the threads of a picture as a set", () => {
+  const set = (list) =>
+    assignThreads(
+      PEC,
+      list.map((rgb, i) => ({ rgb, area: 100 - i })),
+    ).map(name);
+  it("keeps the last of several similar shades in its own family of threads", () => {
+    // One at a time, the light gray got Flesh Pink, the mid tan Tangerine and the mid blue Silver.
+    const grays = set([20, 60, 100, 140, 190, 235].map((v) => [v, v, v]));
+    expect(grays).toEqual([
+      "Black",
+      "Dark Gray",
+      "Pewter",
+      "Gray",
+      "Warm Gray",
+      "White",
+    ]);
+    const skin = set([
+      [250, 225, 205],
+      [240, 205, 180],
+      [225, 185, 160],
+      [205, 160, 135],
+      [180, 135, 110],
+      [150, 105, 85],
+      [110, 75, 60],
+      [70, 45, 38],
+    ]);
+    expect(new Set(skin).size).toBe(8);
+    expect(skin).not.toContain("Tangerine");
+    const sky = set([
+      [200, 225, 245],
+      [170, 205, 240],
+      [140, 185, 230],
+      [110, 160, 215],
+      [80, 135, 195],
+      [55, 105, 170],
+    ]);
+    expect(new Set(sky).size).toBe(6);
+    expect(sky).not.toContain("Silver");
+    expect(sky.slice(3)).toEqual([
+      "Sky Blue",
+      "Cornflower Blue",
+      "Electric Blue",
+    ]);
+  });
+  it("gives eight colors eight threads, quickly, and leaves reserved threads alone", () => {
+    const grays = [20, 50, 80, 110, 140, 170, 200, 235].map((v, i) => ({
+      rgb: [v, v, v],
+      area: 100 - i,
+    }));
+    const threads = assignThreads(PEC, grays, [20, 29]);
+    expect(new Set(threads).size).toBe(8);
+    expect(threads).not.toContain(20);
+    expect(threads).not.toContain(29);
+  });
+  it("strengthens an area that has a color, and leaves a weak tint as it is", () => {
+    expect(nearest([124, 47, 58])).toBe("Dark Fuchsia");
+    expect(nearest([210, 190, 150])).toBe("Khaki");
+    expect(nearest([208, 162, 132])).toBe("Khaki");
+  });
 });

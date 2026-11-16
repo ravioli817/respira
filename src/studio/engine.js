@@ -572,8 +572,17 @@ const holder = {};
       if (!out.length && s[2] !== CMD.STITCH) continue;
       // Explicit lettering trims ride on the following jump. Never send a bare cut.
       if(s[2]===CMD.TRIM && s[3]===1){requestedCut=true;continue;}
-      if(s[2]===CMD.JUMP && requestedCut){out.push([s[0],s[1],0x10|0x20,color]);requestedCut=false;continue;}
+      if(s[2]===CMD.JUMP && requestedCut){
+        var before=out[out.length-1]; requestedCut=false;
+        if(before && (before[2]&0x10) && before[3]===color){before[0]=s[0];before[1]=s[1];before[2]|=0x20;}
+        else out.push([s[0],s[1],0x10|0x20,color]);
+        continue;
+      }
       var last = out[out.length - 1];
+      // Several hops in a row are one move to where the last one lands. The encoder ties off and
+      // on at each end of a long jump, so a hop left in would put a knot on bare fabric. A cut
+      // asked for on any of them is kept.
+      if (s[2] === CMD.JUMP && last && (last[2] & 0x10) && last[3] === color) { last[0] = s[0]; last[1] = s[1]; continue; }
       if (!(s[3]&2) && last && last[0] === s[0] && last[1] === s[1]) continue;
       out.push([s[0], s[1], s[2] === CMD.JUMP ? 0x10 : s[2] === CMD.TRIM ? 0x20 : 0x00, color]);
     }

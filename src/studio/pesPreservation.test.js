@@ -158,6 +158,53 @@ describe("PES layer command preservation", () => {
       expect(data.stitches.filter((s) => s.isDataEnd)).toHaveLength(1);
     }
   });
+  it("accepts a stop after the last stitch and a stop beyond the listed colors", () => {
+    const trailing = parsePes(
+      pecFixture(
+        [
+          [0, 0],
+          [10, 0],
+          [0, 0, "stop"],
+          [50, 0, "jump"],
+        ],
+        [5, 5],
+      ),
+    );
+    expect(trailing.stitches).toBe(2);
+    expect(trailing.paths.every((p) => p.slot === 0)).toBe(true);
+    const extra = build(
+      pecFixture(
+        [
+          [0, 0],
+          [10, 0],
+          [0, 0, "stop"],
+          [10, 0],
+          [10, 0],
+        ],
+        [5],
+      ),
+    );
+    expect(extra.source.slots).toEqual([5, 5]);
+    expect(decoded(extra.rows).colorBlocks).toHaveLength(2);
+  });
+  it("joins hops in a row into one move, so no lock stitches land on bare fabric", () => {
+    const { rows } = build(
+      pecFixture([
+        [0, 0],
+        [10, 0],
+        [10, 0],
+        [0, 0, "trim"],
+        [100, 0, "jump"],
+        [100, 0, "jump"],
+        [10, 0],
+        [10, 0],
+      ]),
+    );
+    expect(rows.filter((p) => p[2] & 0x10)).toEqual([[100, 0, 0x30, 0]]);
+    const pen = decoded(rows).stitches;
+    expect(pen.filter((p) => p.isCut)).toHaveLength(1);
+    expect(pen.filter((p) => Math.abs(p.x) < 50)).toHaveLength(0);
+  });
   it("refuses truncated input and empty thread sections instead of silently deleting controls", () => {
     const good = pecFixture([
       [0, 0],
