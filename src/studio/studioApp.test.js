@@ -1584,7 +1584,7 @@ describe('simplification preview',()=>{
     button('#simplify-open').click();
     expect(button('#simplify-dialog').open).toBe(true);
     input('#simplify-colors','1');
-    expect(button('#simplify-summary').textContent).toContain('Needle points');
+    expect(button('#simplify-summary').textContent).toContain('Stitches');
     expect(studio.snapshot()).toEqual(original);
     expect(studio.send()).toBe('blocked');expect(onSend).not.toHaveBeenCalled();
     button('#simplify-cancel').click();button('#send').click();

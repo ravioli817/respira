@@ -3,22 +3,22 @@ export const STUDIO_MARKUP = `
 <main class="studio">
   <dialog id="simplify-dialog" aria-labelledby="simplify-title">
     <h2 id="simplify-title">Simplify design</h2>
-    <p>Preview changes before applying. Original artwork stays editable; these settings follow later edits.</p>
+    <p>Try these and look at the result before you keep it. Your artwork itself is not changed, and you can turn any of this off again later.</p>
     <div class="simplify-layout">
       <div class="simplify-art"><canvas id="simplify-canvas" width="500" height="500" role="img" aria-label="Stitch comparison in the hoop"></canvas><button class="btn" id="simplify-before" aria-pressed="false">Show before</button></div>
       <div class="simplify-controls">
-        <label class="check"><input type="checkbox" id="simplify-covered"> Remove covered fills</label>
-        <label class="stack">Overlap margin (mm)<input id="simplify-overlap" type="number" min="0.4" max="2" step="0.2" value="0.6"></label>
-        <p class="hint">Leaves a margin under later filled shapes. Satin outlines, embroidery lettering and PES files do not count as covering fills.</p>
-        <label class="stack">Remove fill islands smaller than (mm²)<input id="simplify-area" type="number" min="0" max="10" step="0.2" value="0"></label>
-        <p class="hint">0 keeps all details. Letter details are protected.</p>
-        <label class="stack">Maximum artwork colors<input id="simplify-colors" type="number" min="0" max="63" step="1" value="0"></label>
-        <p class="hint">0 keeps all colors. Combines similar colors into existing Brother threads. Imported PES layers stay unchanged and may add colors.</p>
+        <label class="check"><input type="checkbox" id="simplify-covered"> Skip what is hidden under another fill</label>
+        <label class="stack">How much to keep under the edge<select id="simplify-overlap"><option value="0.4">A little</option><option value="0.6" selected>Some</option><option value="1">More</option></select></label>
+        <p class="hint">A filled shape on top hides what is under it, so that part is left out. A strip is kept under the edge so no fabric shows through. Outlines, lettering and PES files do not hide anything.</p>
+        <label class="stack">Leave out tiny bits of fill<select id="simplify-area"><option value="0" selected>Keep everything</option><option value="1">Tiny (about 1 mm across)</option><option value="4">Small (about 2 mm across)</option><option value="9">Medium (about 3 mm across)</option></select></label>
+        <p class="hint">Separate bits of fill smaller than this are not stitched. Letters are never touched.</p>
+        <label class="stack">Use at most this many thread colors<input id="simplify-colors" type="number" min="0" max="63" step="1" value="0"></label>
+        <p class="hint">0 keeps every color. The colors most alike are combined into one thread the design already uses. PES files keep their own colors.</p>
         <div id="simplify-summary" aria-live="polite"></div>
-        <p class="hint">Counts include machine lock stitches. Time assumes 400 stitches/minute, excluding threading and stops. Check Place after positioning.</p>
+        <p class="hint">Stitches include the small knots the machine adds. The time is sewing only, at 400 stitches a minute, without threading or stops.</p>
       </div>
     </div>
-    <div class="simplify-actions"><button class="btn" id="simplify-reset">Restore original artwork</button><button class="btn" id="simplify-cancel">Cancel</button><button class="btn primary" id="simplify-apply">Apply</button></div>
+    <div class="simplify-actions"><button class="btn" id="simplify-reset">Turn everything off</button><button class="btn" id="simplify-cancel">Cancel</button><button class="btn primary" id="simplify-apply">Apply</button></div>
   </dialog>
   <div class="editor-workspace">
   <nav class="rail" aria-label="Tools">
@@ -72,7 +72,7 @@ export const STUDIO_MARKUP = `
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Overlapping fills can be reduced with Simplify design. Merge requires adjacent included drawings with matching stitch settings.</p>
+    <p class="hint">Where fills overlap, Simplify design can leave out the hidden part. To merge two drawings, put them next to each other in this list.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">

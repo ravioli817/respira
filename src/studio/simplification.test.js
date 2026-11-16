@@ -25,7 +25,7 @@ describe('reversible final-size simplification',()=>{
     const cover=rect('cover',2,40,40,160,160);
     const covered=simplifyParts([bottom,cover],{removeCovered:true});
     expect(sewingFigures(plan(covered.parts)).stitches).toBeLessThan(sewingFigures(plan([bottom,cover])).stitches);
-    expect(covered.issues[0].message).toContain('All of this layer');
+    expect(covered.issues[0].message).toContain('all of its fill is hidden');
   });
   it('respects holes, hidden layers, sewing order and transformed artwork',()=>{
     const base=rect('base',5,50,50,150,150), top=rect('top',2,75,75,125,125);
@@ -52,7 +52,7 @@ describe('reversible final-size simplification',()=>{
     const result=simplifyParts([base,tiny],{removeCovered:true,minAreaMm2:2});
     expect(E.countSet(result.parts[1].design.labels)).toBe(0);
     expect(result.parts[0].design.labels).toEqual(base.design.labels);
-    expect(result.issues[0].message).toContain('1 small fill island');
+    expect(result.issues[0].message).toContain('1 tiny bit of fill');
     expect(simplifyParts([text],{minAreaMm2:2}).parts[0].design.labels).toEqual(text.design.labels);
   });
   it('combines into existing threads, preserving cuts, authored paths and source colors',()=>{

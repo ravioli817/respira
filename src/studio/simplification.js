@@ -69,7 +69,7 @@ export function simplifyParts(input, options = {}) {
   for (const p of parts) {
     // Never delete letter details, even when decorative text has a raster fill.
     const n = !p.design.rawStitches && p.layer.kind !== 'text' && p.design.labels ? cleanIslands(p.design.labels, o.minAreaMm2) : 0;
-    if (n) issues.push({layerId:p.layer.id, message:`${p.layer.name}: ${n} small fill ${n===1?'island was':'islands were'} left out. Lower the small-detail setting to restore them.`, action:'simplify'});
+    if (n) issues.push({layerId:p.layer.id, message:`${p.layer.name}: ${n} tiny ${n===1?'bit of fill is':'bits of fill are'} left out. Open Simplify design to bring ${n===1?'it':'them'} back.`, action:'simplify'});
   }
   if (o.removeCovered) {
     // Use only retained, later fill masks. Lines, satin lettering and PES cannot prove opaque cover.
@@ -84,7 +84,7 @@ export function simplifyParts(input, options = {}) {
         if (d.labels[j] && inside[j]) { d.labels[j] = 0; removed++; }
         if (d.labels[j]) { cover[j] = 1; remaining++; }
       }
-      if (removed) issues.push({layerId:p.layer.id, message:`${p.layer.name}: ${(removed*E.RES*E.RES).toFixed(1)} mm² of covered fill left out.${remaining?'':' All of this layer’s fill is covered.'}`, action:'simplify'});
+      if (removed) issues.push({layerId:p.layer.id, message:`${p.layer.name}: ${remaining?'the part hidden under another fill is':'all of its fill is hidden under another fill and is'} not stitched. Open Simplify design to change this.`, action:'simplify'});
     }
   }
   const map = o.maxColors ? colorMap(parts, o.maxColors) : new Map();

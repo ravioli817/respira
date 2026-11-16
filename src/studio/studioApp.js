@@ -1491,11 +1491,11 @@ export function mountStudio(root, opts) {
     var table=document.createElement('table');
     var header=document.createElement('tr');
     ['','Before','Preview'].forEach(function(v){var th=document.createElement('th');th.textContent=v;header.appendChild(th);});table.appendChild(header);
-    [['Threads','threads'],['Thread changes / stops','changes'],['Needle points','stitches'],['Cuts','cuts'],['Sewing minutes (est.)','minutes']].forEach(function(row){
+    [['Threads','threads'],['Thread changes','changes'],['Stitches','stitches'],['Cuts','cuts'],['Minutes to sew (about)','minutes']].forEach(function(row){
       var tr=document.createElement('tr');
       [row[0],before[row[1]],after[row[1]]].forEach(function(v,i){var td=document.createElement(i?'td':'th');td.textContent=typeof v==='number'?(row[1]==='minutes'?v.toFixed(1):fmt(v)):v;tr.appendChild(td);});table.appendChild(tr);
     }); summary.appendChild(table);
-    if(after.stitches>before.stitches || after.cuts>before.cuts)summary.appendChild(document.createTextNode('This preview adds stitches or cuts: splitting fills can require extra travel and lock stitches. Compare before applying.'));
+    if(after.stitches>before.stitches || after.cuts>before.cuts)summary.appendChild(document.createTextNode('This adds stitches or cuts: a fill split into pieces needs extra moves and knots. Compare before you keep it.'));
     $('#simplify-apply').disabled=!after.stitches || !['overlap','area','colors'].every(function(key){return $('#simplify-'+key).checkValidity();});
     var canvas=$('#simplify-canvas'), ctx=canvas.getContext('2d');
     // Draw the actual proposed stitches at the same scale as the main canvas, then fit the dialog.
@@ -1506,8 +1506,14 @@ export function mountStudio(root, opts) {
   }
   function syncSimplifyControls() {
     var o=simplifyPreview.options;
-    $('#simplify-covered').checked=o.removeCovered; $('#simplify-overlap').value=o.overlapMm;
-    $('#simplify-area').value=o.minAreaMm2; $('#simplify-colors').value=o.maxColors;
+    // A design saved with a size that is not one of the choices keeps it, shown as its own choice.
+    function pick(select, value, unit) {
+      var option=[].find.call(select.options,function(op){return +op.value===value;});
+      if(!option){option=document.createElement('option');option.value=String(value);option.textContent='As saved ('+value+' '+unit+')';select.appendChild(option);}
+      select.value=option.value;
+    }
+    $('#simplify-covered').checked=o.removeCovered; pick($('#simplify-overlap'),o.overlapMm,'mm');
+    pick($('#simplify-area'),o.minAreaMm2,'mm²'); $('#simplify-colors').value=o.maxColors;
   }
   $('#simplify-open').addEventListener('click',function(){
     if(!S.design || !S.plan) {toast('Wait for a valid design before simplifying.');return;}
@@ -1535,7 +1541,7 @@ export function mountStudio(root, opts) {
       var o=simplifyPreview.options;
       var overlap=+$('#simplify-overlap').value, area=+$('#simplify-area').value, colors=+$('#simplify-colors').value;
       if(!Number.isFinite(overlap)||overlap<0.4||overlap>2||!Number.isFinite(area)||area<0||area>10||!Number.isInteger(colors)||colors<0||colors>63) {
-        $('#simplify-apply').disabled=true;$('#simplify-summary').textContent='Enter values within the displayed limits.';return;
+        $('#simplify-apply').disabled=true;$('#simplify-summary').textContent='Thread colors must be a whole number from 0 to 63.';return;
       }
       Object.assign(o,{removeCovered:$('#simplify-covered').checked,overlapMm:overlap,minAreaMm2:area,maxColors:colors});
       digitize();
