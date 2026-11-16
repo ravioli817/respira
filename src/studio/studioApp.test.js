@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(6);
+  expect(saved.v).toBe(7);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -450,6 +450,10 @@ it("shows a non-blocking named picture warning and clears it when the picture is
   studio = mountStudio(root, { project, onSend });
   await vi.advanceTimersByTimeAsync(100);
   expect(button("#note").textContent).toContain("Fine logo");
+  button("#note button").click();
+  await vi.advanceTimersByTimeAsync(60);
+  expect(studio.snapshot().activeLayerId).toBe("thin");
+  expect(button("#selection-box").hidden).toBe(false);
   expect(button("#send").disabled).toBe(false);
   input("#layer-size", "200");
   await vi.advanceTimersByTimeAsync(60);
@@ -787,7 +791,7 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
   button("#undo").click();
   const saved = studio.snapshot();
-  expect(saved.v).toBe(6);
+  expect(saved.v).toBe(7);
   studio.destroy();
   studio = mountStudio(root, { project: saved, onSend });
   await vi.advanceTimersByTimeAsync(70);
@@ -1118,7 +1122,7 @@ it("adds an embroidery file as a layer, keeps it through saving, and sends its s
   );
   const saved = studio.snapshot(),
     layer = saved.layers.at(-1);
-  expect(saved.v).toBe(6);
+  expect(saved.v).toBe(7);
   expect(layer.kind).toBe("stitches");
   expect(layer.name).toBe("bought-rose");
   expect(layer.source.slots).toEqual([5, 20]);
@@ -1498,7 +1502,7 @@ it("preserves PES cut flags and repeated-color stops through v6 files, undo and 
   expect(before.threads.map((t) => t.index)).toEqual([5, 5]);
   expect(before.stitches.filter((s) => s[2] === 0x30)).toHaveLength(1);
   const project = importProject(exportProject(studio.snapshot()));
-  expect(project.v).toBe(6);
+  expect(project.v).toBe(7);
   expect(project.layers[0].source.paths).toEqual(source.paths);
   studio.destroy();
   studio = mountStudio(root, { project, onSend });
@@ -1567,4 +1571,66 @@ it("takes a line anywhere in the hoop on a drawing that has been moved", () => {
   const off = draw(-30, -20);
   expect(off.transform).toEqual({ x: -30, y: -20, scale: 1, rotation: 0 });
   expect(off.source.strokes.at(-1).p[0].slice(0, 2)).toEqual([35, 25]);
+});
+
+describe('simplification preview',()=>{
+  beforeEach(()=>{
+    button('#simplify-dialog').showModal = function(){this.open=true;};
+    button('#simplify-dialog').close = function(){this.open=false;};
+  });
+  it('previews without saving or handing off, cancels exactly, and applies in one undo step',()=>{
+    const original=studio.snapshot();
+    button('#send').click();const before=onSend.mock.calls.at(-1)[0];onSend.mockClear();
+    button('#simplify-open').click();
+    expect(button('#simplify-dialog').open).toBe(true);
+    input('#simplify-colors','1');
+    expect(button('#simplify-summary').textContent).toContain('Needle points');
+    expect(studio.snapshot()).toEqual(original);
+    expect(studio.send()).toBe('blocked');expect(onSend).not.toHaveBeenCalled();
+    button('#simplify-cancel').click();button('#send').click();
+    expect(onSend.mock.calls.at(-1)[0]).toEqual(before);
+    button('#simplify-open').click();input('#simplify-colors','1');button('#simplify-apply').click();
+    expect(studio.snapshot().simplification.maxColors).toBe(1);
+    button('#send').click();expect(new Set(onSend.mock.calls.at(-1)[0].threads.map(t=>t.index)).size).toBe(1);
+    const applied=studio.snapshot();
+    button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().simplification.maxColors).toBe(0);
+    button('#redo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().simplification.maxColors).toBe(1);
+    const expected=onSend.mock.calls.at(-1)[0];
+    studio.destroy();root.replaceChildren();studio=mountStudio(root,{project:applied,onSend});vi.advanceTimersByTime(60);
+    button('#send').click();expect(onSend.mock.calls.at(-1)[0]).toEqual(expected);
+  });
+  it('cancels with Escape and prevents applying invalid settings',()=>{
+    const original=studio.snapshot();button('#simplify-open').click();input('#simplify-overlap','0');
+    expect(button('#simplify-apply').disabled).toBe(true);
+    button('#simplify-dialog').dispatchEvent(new Event('cancel',{cancelable:true}));
+    expect(button('#simplify-dialog').open).toBe(false);expect(studio.snapshot()).toEqual(original);
+  });
+  it('makes a lettering warning select the affected layer without changing artwork',async()=>{
+    // The solid canvas stub is not thin, so use a real invalid font-size issue.
+    button('#add-text-layer').click();vi.advanceTimersByTime(60);
+    const id=studio.snapshot().activeLayerId;
+    input('#layer-size','400');vi.advanceTimersByTime(60);
+    const warning=button('#note button');expect(warning).not.toBeNull();
+    expect(warning.textContent).toContain('letter height');
+    const snapshot=studio.snapshot();warning.click();vi.advanceTimersByTime(60);
+    expect(studio.snapshot().activeLayerId).toBe(id);expect(studio.snapshot().layers).toEqual(snapshot.layers);
+    expect(button('#properties-panel').hidden).toBe(false);
+  });
+});
+
+it('can restore details when later edits leave a simplified design empty', async()=>{
+  const {emptyProject}=await import('../projects/projectFile');
+  const base=emptyProject(), labels=new Uint8Array(250000);
+  for(let y=240;y<245;y++)for(let x=240;x<245;x++)labels[y*500+x]=5;
+  const runs=[];let color=labels[0], count=0;
+  for(const c of labels){if(c===color)count++;else{runs.push(color,count);color=c;count=1;}}runs.push(color,count);
+  const layer={id:'tiny',name:'Tiny fill',kind:'draw',visible:true,transform:{x:0,y:0,scale:1,rotation:0},source:{...base.draw,labels:runs,order:[5]}};
+  studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:{...base,v:7,layers:[layer],activeLayerId:'tiny',simplification:{removeCovered:false,overlapMm:0.6,minAreaMm2:2,maxColors:0}}});
+  vi.advanceTimersByTime(60);expect(button('#send').disabled).toBe(true);
+  button('#simplify-dialog').showModal=function(){this.open=true;};button('#simplify-dialog').close=function(){this.open=false;};
+  button('#simplify-open').click();expect(button('#simplify-dialog').open).toBe(true);
+  expect(button('#simplify-apply').disabled).toBe(true);
+  button('#simplify-reset').click();expect(button('#simplify-apply').disabled).toBe(false);
+  button('#simplify-apply').click();expect(button('#send').disabled).toBe(false);
+  expect(studio.snapshot().layers[0].source.labels).toEqual(runs);
 });
