@@ -1,30 +1,6 @@
 // The Create screen's markup. Mounted into a shadow root by mountStudio().
 export const STUDIO_MARKUP = `
 <main class="studio">
-  <dialog id="simplify-dialog" aria-labelledby="simplify-title">
-    <h2 id="simplify-title">Simplify design</h2>
-    <p>Try these and look at the result before you keep it. Your artwork itself is not changed, and you can turn any of this off again later.</p>
-    <div class="simplify-layout">
-      <div class="simplify-art"><canvas id="simplify-canvas" width="500" height="500" role="img" aria-label="Stitch comparison in the hoop"></canvas><button class="btn" id="simplify-before" aria-pressed="false">Show before</button></div>
-      <div class="simplify-controls">
-        <label class="check"><input type="checkbox" id="simplify-route"> Hide travel under later fills to save cuts</label>
-        <p class="hint">Uses short routes inside dense fills that have not been sewn yet. Keeps requested cuts and PES commands. Some gaps still need a cut.</p>
-        <label class="check"><input type="checkbox" id="simplify-order"> Group threads where layers do not overlap</label>
-        <p class="hint">Keeps overlapping layers in their original order. Imported PES layers stay in place. Applied only when machine cuts or thread changes improve.</p>
-        <label class="check"><input type="checkbox" id="routing-show" checked> Show hidden travel in blue</label><p class="hint">Blue dashed lines mark running stitches that later fills will cover.</p>
-        <label class="check"><input type="checkbox" id="simplify-covered"> Skip what is hidden under another fill</label>
-        <label class="stack">How much to keep under the edge<select id="simplify-overlap"><option value="0.4">A little</option><option value="0.6" selected>Some</option><option value="1">More</option></select></label>
-        <p class="hint">A filled shape on top hides what is under it, so that part is left out. A strip is kept under the edge so no fabric shows through. Outlines, lettering and PES files do not hide anything.</p>
-        <label class="stack">Leave out tiny bits of fill<select id="simplify-area"><option value="0" selected>Keep everything</option><option value="1">Tiny (about 1 mm across)</option><option value="4">Small (about 2 mm across)</option><option value="9">Medium (about 3 mm across)</option></select></label>
-        <p class="hint">Separate bits of fill smaller than this are not stitched. Letters are never touched.</p>
-        <label class="stack">Use at most this many thread colors<input id="simplify-colors" type="number" min="0" max="63" step="1" value="0"></label>
-        <p class="hint">0 keeps every color. The colors most alike are combined into one thread the design already uses. PES files keep their own colors.</p>
-        <div id="simplify-summary" aria-live="polite"></div>
-        <p class="hint">Stitches include the small knots the machine adds. The time is sewing only, at 400 stitches a minute, without threading or stops.</p>
-      </div>
-    </div>
-    <div class="simplify-actions"><button class="btn" id="simplify-reset">Turn everything off</button><button class="btn" id="simplify-cancel">Cancel</button><button class="btn primary" id="simplify-apply">Apply</button></div>
-  </dialog>
   <div class="editor-workspace">
   <nav class="rail" aria-label="Tools">
     <div class="tools" role="group" aria-label="Draw with">
@@ -79,7 +55,7 @@ export const STUDIO_MARKUP = `
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Where fills overlap, Simplify design can leave out the hidden part. To merge two drawings, put them next to each other in this list. Drawings with editable shapes stay separate.</p>
+    <p class="hint">Where fills overlap, the part hidden underneath is not stitched. To merge two drawings, put them next to each other in this list. Drawings with editable shapes stay separate.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
@@ -96,7 +72,6 @@ export const STUDIO_MARKUP = `
       </div>
       <p id="editing-object" class="hint" aria-live="polite"></p>
       <div class="heading-controls">
-        <button class="btn" id="simplify-open">Simplify design</button>
         <button class="btn" id="pan-canvas" aria-pressed="false" hidden>Pan</button>
         <div class="seg small" role="group" aria-label="Show">
           <button id="view-design" data-view="design" aria-pressed="true">Design</button>
@@ -184,15 +159,15 @@ export const STUDIO_MARKUP = `
     <section class="panel" id="point-tools" hidden aria-label="Point editing">
       <h2>Edit points</h2>
       <p class="hint" id="point-help"></p>
-      <button class="btn" id="trace-drawing">Make painted fills editable</button>
+      <button class="btn" id="trace-drawing">Turn painted fills into shapes</button>
       <label class="stack">Shape or line<select id="point-path"></select></label>
       <button class="btn" id="point-color">Change thread</button>
-      <label class="stack" id="point-ring-wrap">Edge<select id="point-ring"></select></label>
+      <label class="stack" id="point-ring-wrap">Which edge<select id="point-ring"></select></label>
       <div id="point-actions">
-        <label class="stack">Point<input id="point-index" type="number" min="1" step="1"><span id="point-total"></span></label>
-        <div class="point-coordinates"><label class="stack">Point X (mm)<input id="point-x" type="number" step="0.2"></label><label class="stack">Point Y (mm)<input id="point-y" type="number" step="0.2"></label></div>
-        <div class="point-buttons"><button class="btn" id="point-add">Add point after</button><button class="btn" id="point-remove">Remove point</button><button class="btn" id="point-less">Fewer points</button><button class="btn" id="point-delete-path">Delete this shape or line</button></div>
-        <p class="hint">Coordinates are measured from the hoop’s top-left. Arrow keys nudge a focused point; Shift moves it farther. On dense outlines, zoom in or choose a point by number. Fewer points changes the outline slightly; Undo restores it.</p>
+        <label class="stack">Point number<input id="point-index" type="number" min="1" step="1"><span id="point-total"></span></label>
+        <div class="point-coordinates"><label class="stack">Across (mm)<input id="point-x" type="number" step="0.2"></label><label class="stack">Down (mm)<input id="point-y" type="number" step="0.2"></label></div>
+        <div class="point-buttons"><button class="btn" id="point-add">Add a point</button><button class="btn" id="point-remove">Remove this point</button><button class="btn" id="point-less">Smooth (fewer points)</button><button class="btn" id="point-delete-path">Delete this shape or line</button></div>
+        <p class="hint">Across and down are measured from the top-left corner of the hoop. Arrow keys nudge the chosen point; hold Shift for bigger steps. Where the dots are crowded, zoom in or pick a point by its number. Smoothing changes the outline slightly; Undo brings it back.</p>
       </div>
       <button class="btn" id="point-done">Done editing points</button>
     </section>

@@ -4,6 +4,16 @@ import { encodeStitchesToPen } from '../formats/pen/encoder';
 import { decodePenData } from '../formats/pen/decoder';
 import { playbackStats } from '../prepare/playback';
 
+/**
+ * What every design gets, with no setting: fill hidden under a later fill is not stitched, the same
+ * thread is stitched together where layers do not overlap, and short moves run under fills still to
+ * come. These were choices in a "Simplify design" dialog; each only ever saves stitching, so they are
+ * simply done. (Leaving out small bits of fill and capping the number of colors were in that dialog
+ * too. They change the artwork itself, so they are not done here: a picture has Clean up specks and
+ * its Colors slider for that.)
+ */
+export const automaticSavings = () => ({ removeCovered: true, overlapMm: 0.6, minAreaMm2: 0, maxColors: 0, hiddenTravel: true, optimizeOrder: true });
+
 export const simplificationDefaults = () => ({ removeCovered: false, overlapMm: 0.6, minAreaMm2: 0, maxColors: 0, hiddenTravel: false, optimizeOrder: false });
 
 // Connected components are measured at final hoop size, before colors are combined.
@@ -84,7 +94,8 @@ export function simplifyParts(input, options = {}) {
         if (d.labels[j] && inside[j]) { d.labels[j] = 0; removed++; }
         if (d.labels[j]) { cover[j] = 1; remaining++; }
       }
-      if (removed) issues.push({layerId:p.layer.id, message:`${p.layer.name}: ${remaining?'the part hidden under another fill is':'all of its fill is hidden under another fill and is'} not stitched. Open Simplify design to change this.`, action:'simplify'});
+      // Leaving out what is hidden is the normal case and needs no notice. A layer with nothing left does.
+      if (removed && !remaining) issues.push({layerId:p.layer.id, message:`${p.layer.name}: all of its fill is hidden under another fill, so it is not stitched. Move it later in Layers to stitch it on top.`, action:'settings'});
     }
   }
   const map = o.maxColors ? colorMap(parts, o.maxColors) : new Map();

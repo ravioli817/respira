@@ -18,7 +18,8 @@ describe('reversible final-size simplification',()=>{
     expect(at(result.parts[0],77,100)).toBe(5);
     expect(at(result.parts[0],78,100)).toBe(0);
     expect(at(bottom,100,100)).toBe(5);
-    expect(result.issues[0].layerId).toBe('base');
+    // Leaving out what is hidden is the normal case: no notice unless nothing is left.
+    expect(result.issues).toEqual([]);
     expect(simplifyParts([bottom,top]).parts[0].design.labels).toEqual(bottom.design.labels);
     // A hole can add cuts/locks even as fill area shrinks: report the actual encoded result.
     expect(sewingFigures(plan(result.parts)).stitches).toBeGreaterThan(0);

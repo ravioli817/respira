@@ -19,7 +19,7 @@ import { FULL_CROP, isFullCrop, dragCrop, cropPixels } from './crop.js';
 import { parsePes, stitchFileDesign } from './pesImport.js';
 import { drawingDesign, traceLabels, cloneShapes, insideShape, segmentDistance, simplifyLine, simplifyRing, MAX_RING_POINTS, MAX_SHAPES, MAX_VECTOR_POINTS, shapePointCount } from './editablePaths.js';
 import { planWithRouting } from './routing.js';
-import { simplifyParts, simplificationDefaults, sewingFigures } from './simplification.js';
+import { simplifyParts, automaticSavings } from './simplification.js';
 
 export function mountStudio(root, opts) {
   opts = opts || {};
@@ -67,7 +67,7 @@ export function mountStudio(root, opts) {
     fabric: '#FFFFFF',
     hoop: { real: true, pxmm: null },      // pxmm: CSS px per mm once the size was checked against a card
     settings: { spacing: 0.4, angle: 45, underlay: true },
-    simplification: simplificationDefaults(),
+    simplification: automaticSavings(),
     draw: { tool: 'satin', color: 37, sizes: { satin: 3, brush: 6, eraser: 6 }, pressure: true, strokes: [], labels: new Uint8Array(GRID * GRID), order: [], example: false },
     image: { source: null, fileName: '', sizeMM: 80, k: 4, removeBg: true, clean: 2, proc: null, clusters: [], choices: [] },
     text: { value: 'Bharti', font: 'SmallSatin', widthMM: 80, color: 5, heightMM: 8, letterSpacing: 0.5, lineGap: 2, align: 'center' },
@@ -76,7 +76,7 @@ export function mountStudio(root, opts) {
   };
   var undoStack = [], redoStack = [];
   var editPoints=false, pointSelection=null;
-  var simplifyPreview = null, sourceParts = [], designIssues = [], routingReport={routes:[],order:[],reordered:false};
+  var sourceParts = [], designIssues = [], routingReport={routes:[],order:[],reordered:false};
   var objectBounds = new Map(), zoom = 1, showGrid = true, panCanvas = false, pictureNotes = [];
 
   // ---------- helpers ----------
@@ -222,7 +222,7 @@ export function mountStudio(root, opts) {
     ctx.fillStyle = S.fabric; ctx.fillRect(0, 0, W, W);
     if(showGrid) drawGrid(ctx, W);
     if (currentView() === 'design') drawDesign(ctx);
-    else drawStitches(ctx);
+    else { drawStitches(ctx); drawHiddenMoves(ctx, W); }
     drawCenter(ctx);
     renderSelection();
     paintLayerThumbs();
@@ -309,6 +309,16 @@ export function mountStudio(root, opts) {
         drawPart(ctx, part, 1, 100, 1.5 / k);
       } catch (error) { /* leave this thumbnail blank */ }
     });
+  }
+  // Short moves that run under a fill still to come, in place of a cut: dashed blue over the stitches.
+  function drawHiddenMoves(ctx, W) {
+    routingReport.routes.forEach(function (route) {
+      ctx.beginPath();
+      route.points.forEach(function (p, i) { if (i) ctx.lineTo(p[0] / 100 * W, p[1] / 100 * W); else ctx.moveTo(p[0] / 100 * W, p[1] / 100 * W); });
+      ctx.setLineDash([]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = W / 250; ctx.stroke();
+      ctx.setLineDash([W / 170, W / 250]); ctx.strokeStyle = '#0078d4'; ctx.lineWidth = W / 500; ctx.stroke();
+    });
+    ctx.setLineDash([]);
   }
   function drawStitches(ctx, plan) {
     var p = plan || S.plan;
@@ -545,8 +555,8 @@ export function mountStudio(root, opts) {
     if(layer.kind==='image' && source.loading && source.loadTicket)source.loadTicket.sources.add(source);
     return Object.assign({},layer,{transform:Object.assign({},layer.transform),source:source,stitchSettings:layer.stitchSettings?Object.assign({},layer.stitchSettings):undefined});
   }
-  function snap() { return { layers:S.layers.map(cloneLayer), activeId:S.activeId, simplification:{...S.simplification} }; }
-  function restore(saved) { S.simplification={...simplificationDefaults(),...saved.simplification}; S.layers=saved.layers.map(cloneLayer); hydrateImages(); selectLayer(saved.activeId); }
+  function snap() { return { layers:S.layers.map(cloneLayer), activeId:S.activeId }; }
+  function restore(saved) { S.layers=saved.layers.map(cloneLayer); hydrateImages(); selectLayer(saved.activeId); }
   // Typing in a box or dragging a slider is one edit, not one per keystroke or tick: pass the control's
   // name as `group` and only the step taken when the burst began is kept. A burst ends when a different
   // edit is made, the control reports its final value ("change"), undo or redo is used, or after a pause.
@@ -936,7 +946,6 @@ export function mountStudio(root, opts) {
     S.plan = null; S.stats = null; S.parts = []; S.design = null;
     renderStats();
     renderIssues([{layerId,message}]);
-    if(simplifyPreview) { $('#simplify-apply').disabled=true; $('#simplify-summary').textContent=message; }
     $('#readout').textContent = 'Design needs attention';
     render();
   }
@@ -961,15 +970,15 @@ export function mountStudio(root, opts) {
   }
   function digitize() {
     if (!S.design) return;
-    $('#simplify-open').setAttribute('aria-pressed', String(!!(S.simplification.removeCovered || S.simplification.minAreaMm2 || S.simplification.maxColors || S.simplification.hiddenTravel || S.simplification.optimizeOrder)));
-    var simplified = simplifyParts(sourceParts, simplifyPreview ? simplifyPreview.options : S.simplification);
+    var simplified = simplifyParts(sourceParts, S.simplification);
     S.parts = simplified.parts;
     renderIssues(designIssues.concat(simplified.issues));
-    routingReport=planWithRouting(S.parts,S.settings,simplifyPreview?simplifyPreview.options:S.simplification,sourceParts);
+    routingReport=planWithRouting(S.parts,S.settings,S.simplification,sourceParts);
     S.plan=routingReport.plan;
-    var routingOptions=simplifyPreview?simplifyPreview.options:S.simplification;
-    $('#sewing-order-box').hidden=!routingOptions.optimizeOrder;
-    $('#layer-order-hint').textContent=routingOptions.optimizeOrder?'Overlapping layers keep this order. The actual stitching sequence is listed below.':'Stitched from the top down. The eye leaves a layer out.';
+    // The list of layers is the order things lie in; where the same thread could be stitched together
+    // the stitching order differs, and is then listed under it.
+    $('#sewing-order-box').hidden=!routingReport.reordered;
+    $('#layer-order-hint').textContent=routingReport.reordered?'Layers lie in this order. The same thread is stitched together where layers do not overlap; the order they are stitched in is listed below.':'Stitched from the top down. The eye leaves a layer out.';
     $('#sewing-layer-order').textContent=routingReport.order.map(function(id,i){return (i+1)+'. '+S.layers.find(l=>l.id===id).name;}).join(' → ');
     S.stats = E.planStats(S.plan);
     var bounds = S.stats.bounds;
@@ -977,7 +986,6 @@ export function mountStudio(root, opts) {
     if (handoffBlocked && S.stats.stitches) { setStatus(''); handoffBlocked=false; }
     renderStats();
     render();
-    if(simplifyPreview) renderSimplifyPreview();
     scheduleSave();
   }
   function afterDrawChange() {
@@ -1168,7 +1176,7 @@ export function mountStudio(root, opts) {
     leavePoints();setPan(false); moveDrawing=false;
     var drawable = function () { var l = currentLayer(); return !!l && l.kind === 'draw' && l.visible; };
     if (!drawable()) setMode('draw');
-    if(drawable() && S.draw.shapes?.length){if(b.dataset.tool==='eraser'){enterPoints();toast('Use Points to delete a traced shape or reshape its edge.');return;}if(S.layers.length>=20){toast('Add drawing marks on a separate layer. This design has 20 layers.');return;}var previous=S.draw;addObject('draw');S.draw.color=previous.color;syncThreadName();drawPalettes.forEach(p=>p.draw());moveDrawing=false;toast('Drawing on a new layer keeps the editable shapes intact.');}
+    if(drawable() && S.draw.shapes?.length){if(b.dataset.tool==='eraser'){enterPoints();toast('Use Points to delete a traced shape or reshape its edge.');return;}if(S.layers.length>=20){toast('Add drawing marks on a separate layer. This design has 20 layers.');return;}var previous=S.draw;addObject('draw');S.draw.color=previous.color;syncThreadName();drawPalettes.forEach(p=>p.draw());moveDrawing=false;toast('New marks go on a new layer, so the shapes stay editable.');}
     if (!drawable()) { moveDrawing=true; syncLayers(); return; }   // no room for another part
     setTool(b.dataset.tool); showDrawTools(); syncLayers(); render();
   }); });
@@ -1469,7 +1477,6 @@ export function mountStudio(root, opts) {
   function hasDesign() { return !!(S.plan && S.stats && S.stats.stitches); }
   var handoffBlocked=false;
   function sendDesign() {
-    if(simplifyPreview) { setStatus('Apply or cancel the simplification preview before placing.','err'); return 'blocked'; }
     if (!hasDesign()) {
       handoffBlocked=true;
       var reason=$('#note').hidden?$('#readout').textContent:$('#note').textContent;
@@ -1508,81 +1515,11 @@ export function mountStudio(root, opts) {
           moveDrawing=true; selectLayer(issue.layerId); showPanel('properties');
           $('#canvas-viewport').scrollIntoView?.({block:'nearest'});
           $('#layer-name').focus({preventScroll:true});
-          if(issue.action==='simplify') $('#simplify-open').focus({preventScroll:true});
         });
       }
       note.appendChild(el);
     });
   }
-  function renderSimplifyPreview() {
-    var after=sewingFigures(S.plan), before=simplifyPreview.before, summary=$('#simplify-summary');
-    $('#routing-show').disabled=!routingReport.routes.length;
-    summary.replaceChildren();
-    var table=document.createElement('table');
-    var header=document.createElement('tr');
-    ['','Before','Preview'].forEach(function(v){var th=document.createElement('th');th.textContent=v;header.appendChild(th);});table.appendChild(header);
-    [['Threads','threads'],['Thread changes / stops','changes'],['Stitches','stitches'],['Cuts','cuts'],['Minutes to sew (about)','minutes']].forEach(function(row){
-      var tr=document.createElement('tr');
-      [row[0],before[row[1]],after[row[1]]].forEach(function(v,i){var td=document.createElement(i?'td':'th');td.textContent=typeof v==='number'?(row[1]==='minutes'?v.toFixed(1):fmt(v)):v;tr.appendChild(td);});table.appendChild(tr);
-    }); summary.appendChild(table);
-    var details=document.createElement('p');details.className='hint';details.textContent=routingReport.routes.length+' hidden travel '+(routingReport.routes.length===1?'connection. ':'connections. ')+(routingReport.reordered?'Sewing order adjusted without crossing overlapping layers.':'Layer order unchanged.');summary.appendChild(details);
-    var order=document.createElement('p');order.className='hint';order.textContent='Stitching order: '+routingReport.order.map(id=>S.layers.find(l=>l.id===id).name).join(' → ');summary.appendChild(order);
-    if(after.stitches>before.stitches || after.cuts>before.cuts)summary.appendChild(document.createTextNode('This adds stitches or cuts: split fills and longer travel can add sewing. Compare before you keep it.'));
-    $('#simplify-apply').disabled=!after.stitches || !['overlap','area','colors'].every(function(key){return $('#simplify-'+key).checkValidity();});
-    var canvas=$('#simplify-canvas'), ctx=canvas.getContext('2d');
-    // Draw the actual proposed stitches at the same scale as the main canvas, then fit the dialog.
-    var temp=document.createElement('canvas');temp.width=temp.height=base.width;
-    var tx=temp.getContext('2d');tx.fillStyle=S.fabric;tx.fillRect(0,0,temp.width,temp.height);drawStitches(tx, simplifyPreview.showBefore ? simplifyPreview.beforePlan : S.plan);
-    ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(temp,0,0,canvas.width,canvas.height);
-    if(!simplifyPreview.showBefore && $('#routing-show').checked){routingReport.routes.forEach(function(route){ctx.beginPath();route.points.forEach(function(p,i){if(i)ctx.lineTo(p[0]/100*canvas.width,p[1]/100*canvas.height);else ctx.moveTo(p[0]/100*canvas.width,p[1]/100*canvas.height);});ctx.setLineDash([]);ctx.strokeStyle='#ffffff';ctx.lineWidth=6;ctx.stroke();ctx.setLineDash([6,4]);ctx.strokeStyle='#0078d4';ctx.lineWidth=3;ctx.stroke();});ctx.setLineDash([]);}
-    if(!after.stitches)summary.appendChild(document.createTextNode('These settings leave nothing to stitch. Reduce simplification.'));
-  }
-  function syncSimplifyControls() {
-    var o=simplifyPreview.options;
-    // A design saved with a size that is not one of the choices keeps it, shown as its own choice.
-    function pick(select, value, unit) {
-      var option=[].find.call(select.options,function(op){return +op.value===value;});
-      if(!option){option=document.createElement('option');option.value=String(value);option.textContent='As saved ('+value+' '+unit+')';select.appendChild(option);}
-      select.value=option.value;
-    }
-    $('#simplify-route').checked=!!o.hiddenTravel;$('#simplify-order').checked=!!o.optimizeOrder;
-    $('#simplify-covered').checked=o.removeCovered; pick($('#simplify-overlap'),o.overlapMm,'mm');
-    pick($('#simplify-area'),o.minAreaMm2,'mm²'); $('#simplify-colors').value=o.maxColors;
-  }
-  $('#simplify-open').addEventListener('click',function(){
-    if(!S.design || !S.plan) {toast('Wait for a valid design before simplifying.');return;}
-    clearTimeout(saveTimer); saveLocal();
-    simplifyPreview={options:{...S.simplification},before:sewingFigures(S.plan),beforePlan:S.plan,showBefore:false};
-    $('#simplify-before').setAttribute('aria-pressed','false');$('#simplify-before').textContent='Show before';
-    syncSimplifyControls(); $('#simplify-dialog').showModal(); digitize();
-  });
-  $('#simplify-before').addEventListener('click',function(){simplifyPreview.showBefore=!simplifyPreview.showBefore;$('#simplify-before').setAttribute('aria-pressed',String(simplifyPreview.showBefore));$('#simplify-before').textContent=simplifyPreview.showBefore?'Show preview':'Show before';renderSimplifyPreview();});
-  function closeSimplify(apply) {
-    if(!simplifyPreview)return;
-    var options=simplifyPreview.options;
-    if(apply && !S.stats?.stitches)return;
-    if(apply && JSON.stringify(options)!==JSON.stringify(S.simplification)) {
-      pushUndo(); S.simplification={...options}; S.placement=undefined;
-    }
-    simplifyPreview=null; $('#simplify-dialog').close(); digitize(); $('#simplify-open').focus();
-  }
-  $('#simplify-cancel').addEventListener('click',function(){closeSimplify(false);});
-  $('#simplify-apply').addEventListener('click',function(){closeSimplify(true);});
-  $('#simplify-dialog').addEventListener('cancel',function(e){e.preventDefault();closeSimplify(false);});
-  $('#simplify-reset').addEventListener('click',function(){simplifyPreview.options=simplificationDefaults();syncSimplifyControls();digitize();});
-  ['covered','overlap','area','colors','route','order'].forEach(function(key){
-    $('#simplify-'+key).addEventListener('input',function(){
-      var o=simplifyPreview.options;
-      var overlap=+$('#simplify-overlap').value, area=+$('#simplify-area').value, colors=+$('#simplify-colors').value;
-      if(!Number.isFinite(overlap)||overlap<0.4||overlap>2||!Number.isFinite(area)||area<0||area>10||!Number.isInteger(colors)||colors<0||colors>63) {
-        $('#simplify-apply').disabled=true;$('#simplify-summary').textContent='Thread colors must be a whole number from 0 to 63.';return;
-      }
-      Object.assign(o,{removeCovered:$('#simplify-covered').checked,overlapMm:overlap,minAreaMm2:area,maxColors:colors,hiddenTravel:$('#simplify-route').checked,optimizeOrder:$('#simplify-order').checked});
-      digitize();
-    });
-  });
-
-  $('#routing-show').addEventListener('change',function(){if(simplifyPreview)renderSimplifyPreview();});
 
   // Editable source paths: tracing and edits never overwrite the original picture.
   function selectedPath() {
@@ -1617,7 +1554,7 @@ export function mountStudio(root, opts) {
     if(p && pointSelection.kind==='shape')p.item.rings.forEach(function(r,i){var o=document.createElement('option');o.value=i;o.textContent=i?'Hole '+i:'Outer edge';holes.appendChild(o);});
     holes.value=pointSelection?.ring||0;$('#point-ring-wrap').hidden=!p||pointSelection.kind!=='shape';
     $('#point-actions').hidden=!p;
-    $('#point-help').textContent=p?'Drag dots to reshape. Drag inside a shape to move it. The thread button recolors just this shape or line.':'Pick a line or make the painted fills editable.';
+    $('#point-help').textContent=p?'Drag dots to reshape. Drag inside a shape to move it. The thread button recolors just this shape or line.':'Pick a line, or turn the painted fills into shapes.';
     $('#point-color').disabled=!p;$('#point-color').textContent=p?'Thread: '+threadName(p.item.color):'Choose a shape first';
     if(!p)return;
     var point=p.pts[pointSelection.point], world=transformPoint(point,currentLayer().transform);
@@ -1668,14 +1605,14 @@ export function mountStudio(root, opts) {
   function movePoint(world, group) {
     var p=selectedPath();if(!p)return;
     var q=transformPoint(world,currentLayer().transform,true);
-    if(!q.every(Number.isFinite)||q.some(v=>v<0||v>100)){toast('Keep the point inside this layer’s 100 mm drawing area.');renderPoints();return;}
+    if(!q.every(Number.isFinite)||q.some(v=>v<0||v>100)){toast('Keep the point inside this drawing’s area.');renderPoints();return;}
     pushUndo(group);var old=p.pts[pointSelection.point];p.pts[pointSelection.point]=[q[0],q[1],...old.slice(2)];p.set(p.pts);pointChange();
   }
   ['x','y'].forEach(function(k){$('#point-'+k).addEventListener('change',function(){movePoint([+$('#point-x').value,+$('#point-y').value],'point-coordinates');});});
   $('#point-add').addEventListener('click',function(){var p=selectedPath();if(!p||$('#point-add').disabled)return;var i=pointSelection.point;if(!p.closed&&i===p.pts.length-1)i--;if(i<0)return;var a=p.pts[i],b=p.pts[(i+1)%p.pts.length];pushUndo();p.pts.splice(i+1,0,a.map((v,k)=>(v+b[k])/2));p.set(p.pts);pointSelection.point=i+1;pointChange();});
   $('#point-remove').addEventListener('click',function(){var p=selectedPath();if(!p||p.pts.length<=(p.closed?3:2))return;pushUndo();p.pts.splice(pointSelection.point,1);p.set(p.pts);pointSelection.point=Math.min(pointSelection.point,p.pts.length-1);pointChange();});
   $('#point-delete-path').addEventListener('click',function(){var p=selectedPath();if(!p)return;pushUndo();var list=pointSelection.kind==='shape'?S.draw.shapes:S.draw.strokes;list.splice(pointSelection.index,1);pointSelection=null;if(list.length)choosePath(p.closed&&S.draw.shapes===list?'shape':'stroke',0);pointChange();});
-  $('#point-less').addEventListener('click',function(){var p=selectedPath();if(!p)return;try {var points=p.closed?simplifyRing(p.pts,.3/currentLayer().transform.scale):simplifyLine(p.pts,.3/currentLayer().transform.scale);if(points.length===p.pts.length){toast('This outline already uses few points.');return;}pushUndo();p.set(points);pointSelection.point=0;pointChange();}catch(error){toast(error.message);}});
+  $('#point-less').addEventListener('click',function(){var p=selectedPath();if(!p)return;try {var points=p.closed?simplifyRing(p.pts,.3/currentLayer().transform.scale):simplifyLine(p.pts,.3/currentLayer().transform.scale);if(points.length===p.pts.length){toast('This outline is already as simple as it gets.');return;}pushUndo();p.set(points);pointSelection.point=0;pointChange();}catch(error){toast(error.message);}});
   function startPointDrag(e,index,whole=false) {
     var p=selectedPath();if(!p)return;e.preventDefault();e.stopPropagation();pointSelection.point=index;
     var r=over.getBoundingClientRect();
@@ -1722,7 +1659,7 @@ export function mountStudio(root, opts) {
   function rle(a) { var out = [], v = a[0], n = 0; for (var i = 0; i < a.length; i++) { if (a[i] === v) n++; else { out.push(v, n); v = a[i]; n = 1; } } out.push(v, n); return out; }
   function unrle(r, len) { var a = new Uint8Array(len), p = 0; for (var i = 0; i < r.length; i += 2) { a.fill(r[i], p, Math.min(len, p + r[i + 1])); p += r[i + 1]; } return a; }
   var saveTimer = null;
-  function scheduleSave() { if(simplifyPreview||active?.node)return; if (opts.onDirty) opts.onDirty(); clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 500); }
+  function scheduleSave() { if(active?.node)return; if (opts.onDirty) opts.onDirty(); clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 500); }
   function serializeSource(kind, source) {
     if(kind==='draw') return {...(source.shapes?.length?{shapes:cloneShapes(source.shapes)}:{}),tool:source.tool,color:source.color,sizes:source.sizes,pressure:source.pressure,order:source.order,example:source.example,labels:rle(source.labels),strokes:source.strokes.map(function(st){return {k:st.kind,c:st.color,p:st.pts.map(function(p){return p.slice();})};})};
     if(kind==='text') return Object.assign({},source);
@@ -1745,7 +1682,7 @@ export function mountStudio(root, opts) {
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:9,simplification:{...S.simplification},mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:9,simplification:automaticSavings(),mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
       activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
@@ -1755,7 +1692,7 @@ export function mountStudio(root, opts) {
     return c.toDataURL('image/png');
   }
   function saveLocal() {
-    if (simplifyPreview || destroyed || S.layers.some(function(l){return l.source.loading;})) return;
+    if (destroyed || S.layers.some(function(l){return l.source.loading;})) return;
     if (opts.onSave) opts.onSave(snapshot(), thumbnail());
     else { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* legacy standalone mode */ } }
   }
@@ -1766,7 +1703,7 @@ export function mountStudio(root, opts) {
       if (!s || !(s.v >= 1 && s.v <= 9)) return false;
       loadedProject = s;
       S.placement = s.placement;
-      S.simplification = {...simplificationDefaults(), ...s.simplification};
+      // Settings from the old Simplify design dialog are not read: every design gets the same savings.
       if (s.view) S.view = Object.assign(S.view, s.view);
       if (s.fabric) S.fabric = s.fabric;
       if (s.hoop) S.hoop = { real: s.hoop.real !== false, pxmm: +s.hoop.pxmm > 2 && +s.hoop.pxmm < 9 ? +s.hoop.pxmm : null };
@@ -1902,7 +1839,7 @@ export function mountStudio(root, opts) {
     var settings=engineSettings(first,S.settings);
     var before=composePlans([E.plan(a,settings),E.plan(b,settings)]).blocks.map(function(block){return block.color;});
     var after=E.plan({labels:labels,order:order,lines:strokes},settings).blocks.map(function(block){return block.color;});
-    if(JSON.stringify(before)!==JSON.stringify(after)){toast('Keep these drawings separate to preserve their thread order.');return;}
+    if(JSON.stringify(before)!==JSON.stringify(after)){toast('Merging these would change their thread order, so they stay separate.');return;}
     pushUndo(); S.placement=undefined;
     first.source=Object.assign(freshSource('draw'),{tool:selected.source.tool,color:selected.source.color,sizes:Object.assign({},selected.source.sizes),pressure:selected.source.pressure,labels:labels,order:order,strokes:strokes});
     first.transform=identityTransform(); first.visible=true;

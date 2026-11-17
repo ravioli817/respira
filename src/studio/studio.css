@@ -386,27 +386,8 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 
 }
 
 /* A contained, touch-sized preview; no artwork edits occur until Apply. */
-#simplify-dialog { color:var(--ink, #19232b); background:var(--surface); border:1px solid #aab5b0; border-radius:16px; padding:24px; width:min(960px, calc(100vw - 32px)); max-height:90dvh; overflow:auto; box-sizing:border-box; }
-#simplify-dialog::backdrop { background:#17252a88; }
-.simplify-layout { display:grid; grid-template-columns:minmax(0, 1fr) minmax(280px, 1fr); gap:24px; }
-#simplify-canvas { width:100%; height:auto; border:2px solid #607169; align-self:start; }
-.simplify-controls { display:grid; gap:10px; }
-.simplify-actions { display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end; margin-top:20px; }
-#simplify-summary table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-#simplify-summary th, #simplify-summary td { padding:5px; text-align:right; }
-#simplify-summary th:first-child { text-align:left; }
 .issue-link { display:block; width:100%; text-align:left; color:inherit; background:transparent; border:0; padding:10px 0; min-height:44px; font:inherit; text-decoration:underline; cursor:pointer; }
-@media(max-width:700px) { .simplify-layout { grid-template-columns:1fr; } #simplify-canvas { max-width:360px; justify-self:center; } #simplify-dialog { padding:16px; } }
 
-#simplify-dialog h2 { margin:0 0 12px; }
-#simplify-dialog p { margin:8px 0; }
-#simplify-dialog input[type=number], #simplify-dialog select { min-height:44px; width:100%; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface); padding:8px; }
-#simplify-dialog .check { min-height:44px; }
-.simplify-art { align-self:start; position:sticky; top:0; }
-.simplify-art .btn { margin-top:8px; }
-.simplify-actions { position:sticky; bottom:-24px; background:var(--surface); border-top:1px solid var(--line); padding:12px 0; }
-#simplify-open[aria-pressed=true] { border-color:var(--accent); background:var(--accent-soft); }
-@media(max-width:700px) { .simplify-art { position:static; } .simplify-actions { bottom:-16px; } }
 
 #point-handles { position:absolute; inset:0; pointer-events:none; z-index:4; }
 .point-handle { position:absolute; width:44px; height:44px; margin:-22px 0 0 -22px; padding:0; border:0; background:transparent; pointer-events:auto; touch-action:none; }

@@ -1573,38 +1573,7 @@ it("takes a line anywhere in the hoop on a drawing that has been moved", () => {
   expect(off.source.strokes.at(-1).p[0].slice(0, 2)).toEqual([35, 25]);
 });
 
-describe('simplification preview',()=>{
-  beforeEach(()=>{
-    button('#simplify-dialog').showModal = function(){this.open=true;};
-    button('#simplify-dialog').close = function(){this.open=false;};
-  });
-  it('previews without saving or handing off, cancels exactly, and applies in one undo step',()=>{
-    const original=studio.snapshot();
-    button('#send').click();const before=onSend.mock.calls.at(-1)[0];onSend.mockClear();
-    button('#simplify-open').click();
-    expect(button('#simplify-dialog').open).toBe(true);
-    input('#simplify-colors','1');
-    expect(button('#simplify-summary').textContent).toContain('Stitches');
-    expect(studio.snapshot()).toEqual(original);
-    expect(studio.send()).toBe('blocked');expect(onSend).not.toHaveBeenCalled();
-    button('#simplify-cancel').click();button('#send').click();
-    expect(onSend.mock.calls.at(-1)[0]).toEqual(before);
-    button('#simplify-open').click();input('#simplify-colors','1');button('#simplify-apply').click();
-    expect(studio.snapshot().simplification.maxColors).toBe(1);
-    button('#send').click();expect(new Set(onSend.mock.calls.at(-1)[0].threads.map(t=>t.index)).size).toBe(1);
-    const applied=studio.snapshot();
-    button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().simplification.maxColors).toBe(0);
-    button('#redo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().simplification.maxColors).toBe(1);
-    const expected=onSend.mock.calls.at(-1)[0];
-    studio.destroy();root.replaceChildren();studio=mountStudio(root,{project:applied,onSend});vi.advanceTimersByTime(60);
-    button('#send').click();expect(onSend.mock.calls.at(-1)[0]).toEqual(expected);
-  });
-  it('cancels with Escape and prevents applying invalid settings',()=>{
-    const original=studio.snapshot();button('#simplify-open').click();input('#simplify-overlap','0');
-    expect(button('#simplify-apply').disabled).toBe(true);
-    button('#simplify-dialog').dispatchEvent(new Event('cancel',{cancelable:true}));
-    expect(button('#simplify-dialog').open).toBe(false);expect(studio.snapshot()).toEqual(original);
-  });
+describe('notices above the hoop',()=>{
   it('makes a lettering warning select the affected layer without changing artwork',async()=>{
     // The solid canvas stub is not thin, so use a real invalid font-size issue.
     button('#add-text-layer').click();vi.advanceTimersByTime(60);
@@ -1616,23 +1585,6 @@ describe('simplification preview',()=>{
     expect(studio.snapshot().activeLayerId).toBe(id);expect(studio.snapshot().layers).toEqual(snapshot.layers);
     expect(button('#properties-panel').hidden).toBe(false);
   });
-});
-
-it('can restore details when later edits leave a simplified design empty', async()=>{
-  const {emptyProject}=await import('../projects/projectFile');
-  const base=emptyProject(), labels=new Uint8Array(250000);
-  for(let y=240;y<245;y++)for(let x=240;x<245;x++)labels[y*500+x]=5;
-  const runs=[];let color=labels[0], count=0;
-  for(const c of labels){if(c===color)count++;else{runs.push(color,count);color=c;count=1;}}runs.push(color,count);
-  const layer={id:'tiny',name:'Tiny fill',kind:'draw',visible:true,transform:{x:0,y:0,scale:1,rotation:0},source:{...base.draw,labels:runs,order:[5]}};
-  studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:{...base,v:7,layers:[layer],activeLayerId:'tiny',simplification:{removeCovered:false,overlapMm:0.6,minAreaMm2:2,maxColors:0}}});
-  vi.advanceTimersByTime(60);expect(button('#send').disabled).toBe(true);
-  button('#simplify-dialog').showModal=function(){this.open=true;};button('#simplify-dialog').close=function(){this.open=false;};
-  button('#simplify-open').click();expect(button('#simplify-dialog').open).toBe(true);
-  expect(button('#simplify-apply').disabled).toBe(true);
-  button('#simplify-reset').click();expect(button('#simplify-apply').disabled).toBe(false);
-  button('#simplify-apply').click();expect(button('#send').disabled).toBe(false);
-  expect(studio.snapshot().layers[0].source.labels).toEqual(runs);
 });
 
 async function editableFixture() {
@@ -1722,26 +1674,30 @@ it('cancels a drag when leaving Points without leaving a partial edit',async()=>
   expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);expect(button('#point-handles').hidden).toBe(true);
 });
 
-describe('routing and sewing order preview',()=>{
-  function fixture(){const a=reviewDrawing('red first',5),b=reviewDrawing('blue middle',2),c=reviewDrawing('red last',5);b.transform.y=40;c.transform.x=20;reviewLayers([a,b,c]);button('#simplify-dialog').showModal=function(){this.open=true;};button('#simplify-dialog').close=function(){this.open=false;};}
-  function toggle(id){button(id).checked=true;button(id).dispatchEvent(new Event('input',{bubbles:true}));}
-  it('previews a safe order without changing the layer stack, and cancels without saving it',()=>{
-    fixture();const source=studio.snapshot();studio.send();const before=onSend.mock.calls.at(-1)[0];
-    button('#simplify-open').click();toggle('#simplify-order');
-    expect(button('#simplify-summary').textContent).toContain('Sewing order adjusted');
-    expect(studio.snapshot()).toEqual(source);expect(studio.send()).toBe('blocked');
+describe('savings every design gets, with no setting',()=>{
+  function fixture(){const a=reviewDrawing('red first',5),b=reviewDrawing('blue middle',2),c=reviewDrawing('red last',5);b.transform.y=40;c.transform.x=20;return [a,b,c];}
+  it('stitches the same thread together where layers do not overlap, and leaves the layers as they are',()=>{
+    reviewLayers(fixture());const source=studio.snapshot();studio.send();const sent=onSend.mock.calls.at(-1)[0];
+    // Red, blue, red would be three threads to load; the two reds do not overlap the blue.
+    expect(sent.threads.length).toBe(2);
+    expect(studio.snapshot().layers.map(l=>l.name)).toEqual(['red first','blue middle','red last']);
+    expect(studio.snapshot()).toEqual(source);
+    expect(button('#sewing-order-box').hidden).toBe(false);
     expect(button('#sewing-layer-order').textContent).not.toBe('1. red first → 2. blue middle → 3. red last');
-    button('#simplify-cancel').click();studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(before);
-    expect(button('#sewing-order-box').hidden).toBe(true);
+    expect(button('#layer-order-hint').textContent).toContain('same thread is stitched together');
+    expect(root.querySelector('#simplify-open')).toBeNull();expect(root.querySelector('#simplify-dialog')).toBeNull();
   });
-  it('applies both options in one undo step and preserves their output through export/import',()=>{
-    fixture();const before=studio.snapshot();studio.send();const original=onSend.mock.calls.at(-1)[0];
-    button('#simplify-open').click();toggle('#simplify-order');toggle('#simplify-route');button('#simplify-apply').click();
-    const saved=importProject(exportProject(studio.snapshot()));expect(saved.v).toBe(9);expect(saved.simplification.optimizeOrder).toBe(true);expect(saved.simplification.hiddenTravel).toBe(true);expect(saved.layers).toEqual(before.layers);
-    studio.send();const optimized=onSend.mock.calls.at(-1)[0];expect(optimized.threads.length).toBeLessThan(original.threads.length);
-    button('#undo').click();vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(original);
-    button('#redo').click();vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(optimized);
-    studio.destroy();root.replaceChildren();studio=mountStudio(root,{project:saved,onSend});vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(optimized);
-    expect(button('#layer-order-hint').textContent).toContain('Overlapping layers');
+  it('says nothing about stitching order when it is the order of the layers',()=>{
+    reviewLayers([reviewDrawing('red',5),reviewDrawing('blue',2)]);
+    expect(button('#sewing-order-box').hidden).toBe(true);
+    expect(button('#layer-order-hint').textContent).toContain('Stitched from the top down');
+  });
+  it('gives a design saved with the old Simplify settings the same result as a new one',()=>{
+    reviewLayers(fixture());studio.send();const expected=onSend.mock.calls.at(-1)[0];
+    const old={...studio.snapshot(),simplification:{removeCovered:false,overlapMm:1,minAreaMm2:4,maxColors:1,hiddenTravel:false,optimizeOrder:false}};
+    const saved=importProject(exportProject(old));
+    studio.destroy();root.replaceChildren();studio=mountStudio(root,{project:saved,onSend});vi.advanceTimersByTime(70);
+    studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(expected);
+    expect(studio.snapshot().simplification).toEqual({removeCovered:true,overlapMm:0.6,minAreaMm2:0,maxColors:0,hiddenTravel:true,optimizeOrder:true});
   });
 });
