@@ -7,6 +7,11 @@ export const STUDIO_MARKUP = `
     <div class="simplify-layout">
       <div class="simplify-art"><canvas id="simplify-canvas" width="500" height="500" role="img" aria-label="Stitch comparison in the hoop"></canvas><button class="btn" id="simplify-before" aria-pressed="false">Show before</button></div>
       <div class="simplify-controls">
+        <label class="check"><input type="checkbox" id="simplify-route"> Hide travel under later fills to save cuts</label>
+        <p class="hint">Uses short routes inside dense fills that have not been sewn yet. Keeps requested cuts and PES commands. Some gaps still need a cut.</p>
+        <label class="check"><input type="checkbox" id="simplify-order"> Group threads where layers do not overlap</label>
+        <p class="hint">Keeps overlapping layers in their original order. Imported PES layers stay in place. Applied only when machine cuts or thread changes improve.</p>
+        <label class="check"><input type="checkbox" id="routing-show" checked> Show hidden travel in blue</label><p class="hint">Blue dashed lines mark running stitches that later fills will cover.</p>
         <label class="check"><input type="checkbox" id="simplify-covered"> Skip what is hidden under another fill</label>
         <label class="stack">How much to keep under the edge<select id="simplify-overlap"><option value="0.4">A little</option><option value="0.6" selected>Some</option><option value="1">More</option></select></label>
         <p class="hint">A filled shape on top hides what is under it, so that part is left out. A strip is kept under the edge so no fabric shows through. Outlines, lettering and PES files do not hide anything.</p>
@@ -68,7 +73,8 @@ export const STUDIO_MARKUP = `
   </nav>
   <aside class="objects-panel" id="objects-panel" aria-label="Layers of the design, in stitching order">
     <div class="panel-heading"><h2>Layers <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the layers list">×</button></div>
-    <p class="hint">Stitched from the top down. The eye leaves a layer out.</p>
+    <p class="hint" id="layer-order-hint">Stitched from the top down. The eye leaves a layer out.</p>
+    <details id="sewing-order-box" hidden><summary>Stitching order</summary><p class="hint" id="sewing-layer-order"></p></details>
     <div id="layers" class="layer-list" role="group" aria-label="Layers: tap one to select it"></div>
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>

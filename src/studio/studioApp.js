@@ -18,6 +18,7 @@ import { foldThin, thinRadius } from './thinDetails.js';
 import { FULL_CROP, isFullCrop, dragCrop, cropPixels } from './crop.js';
 import { parsePes, stitchFileDesign } from './pesImport.js';
 import { drawingDesign, traceLabels, cloneShapes, insideShape, segmentDistance, simplifyLine, simplifyRing, MAX_RING_POINTS, MAX_SHAPES, MAX_VECTOR_POINTS, shapePointCount } from './editablePaths.js';
+import { planWithRouting } from './routing.js';
 import { simplifyParts, simplificationDefaults, sewingFigures } from './simplification.js';
 
 export function mountStudio(root, opts) {
@@ -75,7 +76,7 @@ export function mountStudio(root, opts) {
   };
   var undoStack = [], redoStack = [];
   var editPoints=false, pointSelection=null;
-  var simplifyPreview = null, sourceParts = [], designIssues = [];
+  var simplifyPreview = null, sourceParts = [], designIssues = [], routingReport={routes:[],order:[],reordered:false};
   var objectBounds = new Map(), zoom = 1, showGrid = true, panCanvas = false, pictureNotes = [];
 
   // ---------- helpers ----------
@@ -960,11 +961,16 @@ export function mountStudio(root, opts) {
   }
   function digitize() {
     if (!S.design) return;
-    $('#simplify-open').setAttribute('aria-pressed', String(!!(S.simplification.removeCovered || S.simplification.minAreaMm2 || S.simplification.maxColors)));
+    $('#simplify-open').setAttribute('aria-pressed', String(!!(S.simplification.removeCovered || S.simplification.minAreaMm2 || S.simplification.maxColors || S.simplification.hiddenTravel || S.simplification.optimizeOrder)));
     var simplified = simplifyParts(sourceParts, simplifyPreview ? simplifyPreview.options : S.simplification);
     S.parts = simplified.parts;
     renderIssues(designIssues.concat(simplified.issues));
-    S.plan = composePlans(S.parts.map(function (part) { return E.plan(part.design, engineSettings(part.layer, S.settings)); }));
+    routingReport=planWithRouting(S.parts,S.settings,simplifyPreview?simplifyPreview.options:S.simplification,sourceParts);
+    S.plan=routingReport.plan;
+    var routingOptions=simplifyPreview?simplifyPreview.options:S.simplification;
+    $('#sewing-order-box').hidden=!routingOptions.optimizeOrder;
+    $('#layer-order-hint').textContent=routingOptions.optimizeOrder?'Overlapping layers keep this order. The actual stitching sequence is listed below.':'Stitched from the top down. The eye leaves a layer out.';
+    $('#sewing-layer-order').textContent=routingReport.order.map(function(id,i){return (i+1)+'. '+S.layers.find(l=>l.id===id).name;}).join(' → ');
     S.stats = E.planStats(S.plan);
     var bounds = S.stats.bounds;
     if (bounds && (bounds[0] < 0 || bounds[1] < 0 || bounds[2] > 100 || bounds[3] > 100)) { failDesign('Stitches extend beyond the hoop. Move the layer inward or reduce its size.'); return; }
@@ -1510,21 +1516,25 @@ export function mountStudio(root, opts) {
   }
   function renderSimplifyPreview() {
     var after=sewingFigures(S.plan), before=simplifyPreview.before, summary=$('#simplify-summary');
+    $('#routing-show').disabled=!routingReport.routes.length;
     summary.replaceChildren();
     var table=document.createElement('table');
     var header=document.createElement('tr');
     ['','Before','Preview'].forEach(function(v){var th=document.createElement('th');th.textContent=v;header.appendChild(th);});table.appendChild(header);
-    [['Threads','threads'],['Thread changes','changes'],['Stitches','stitches'],['Cuts','cuts'],['Minutes to sew (about)','minutes']].forEach(function(row){
+    [['Threads','threads'],['Thread changes / stops','changes'],['Stitches','stitches'],['Cuts','cuts'],['Minutes to sew (about)','minutes']].forEach(function(row){
       var tr=document.createElement('tr');
       [row[0],before[row[1]],after[row[1]]].forEach(function(v,i){var td=document.createElement(i?'td':'th');td.textContent=typeof v==='number'?(row[1]==='minutes'?v.toFixed(1):fmt(v)):v;tr.appendChild(td);});table.appendChild(tr);
     }); summary.appendChild(table);
-    if(after.stitches>before.stitches || after.cuts>before.cuts)summary.appendChild(document.createTextNode('This adds stitches or cuts: a fill split into pieces needs extra moves and knots. Compare before you keep it.'));
+    var details=document.createElement('p');details.className='hint';details.textContent=routingReport.routes.length+' hidden travel '+(routingReport.routes.length===1?'connection. ':'connections. ')+(routingReport.reordered?'Sewing order adjusted without crossing overlapping layers.':'Layer order unchanged.');summary.appendChild(details);
+    var order=document.createElement('p');order.className='hint';order.textContent='Stitching order: '+routingReport.order.map(id=>S.layers.find(l=>l.id===id).name).join(' → ');summary.appendChild(order);
+    if(after.stitches>before.stitches || after.cuts>before.cuts)summary.appendChild(document.createTextNode('This adds stitches or cuts: split fills and longer travel can add sewing. Compare before you keep it.'));
     $('#simplify-apply').disabled=!after.stitches || !['overlap','area','colors'].every(function(key){return $('#simplify-'+key).checkValidity();});
     var canvas=$('#simplify-canvas'), ctx=canvas.getContext('2d');
     // Draw the actual proposed stitches at the same scale as the main canvas, then fit the dialog.
     var temp=document.createElement('canvas');temp.width=temp.height=base.width;
     var tx=temp.getContext('2d');tx.fillStyle=S.fabric;tx.fillRect(0,0,temp.width,temp.height);drawStitches(tx, simplifyPreview.showBefore ? simplifyPreview.beforePlan : S.plan);
     ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(temp,0,0,canvas.width,canvas.height);
+    if(!simplifyPreview.showBefore && $('#routing-show').checked){routingReport.routes.forEach(function(route){ctx.beginPath();route.points.forEach(function(p,i){if(i)ctx.lineTo(p[0]/100*canvas.width,p[1]/100*canvas.height);else ctx.moveTo(p[0]/100*canvas.width,p[1]/100*canvas.height);});ctx.setLineDash([]);ctx.strokeStyle='#ffffff';ctx.lineWidth=6;ctx.stroke();ctx.setLineDash([6,4]);ctx.strokeStyle='#0078d4';ctx.lineWidth=3;ctx.stroke();});ctx.setLineDash([]);}
     if(!after.stitches)summary.appendChild(document.createTextNode('These settings leave nothing to stitch. Reduce simplification.'));
   }
   function syncSimplifyControls() {
@@ -1535,6 +1545,7 @@ export function mountStudio(root, opts) {
       if(!option){option=document.createElement('option');option.value=String(value);option.textContent='As saved ('+value+' '+unit+')';select.appendChild(option);}
       select.value=option.value;
     }
+    $('#simplify-route').checked=!!o.hiddenTravel;$('#simplify-order').checked=!!o.optimizeOrder;
     $('#simplify-covered').checked=o.removeCovered; pick($('#simplify-overlap'),o.overlapMm,'mm');
     pick($('#simplify-area'),o.minAreaMm2,'mm²'); $('#simplify-colors').value=o.maxColors;
   }
@@ -1559,17 +1570,19 @@ export function mountStudio(root, opts) {
   $('#simplify-apply').addEventListener('click',function(){closeSimplify(true);});
   $('#simplify-dialog').addEventListener('cancel',function(e){e.preventDefault();closeSimplify(false);});
   $('#simplify-reset').addEventListener('click',function(){simplifyPreview.options=simplificationDefaults();syncSimplifyControls();digitize();});
-  ['covered','overlap','area','colors'].forEach(function(key){
+  ['covered','overlap','area','colors','route','order'].forEach(function(key){
     $('#simplify-'+key).addEventListener('input',function(){
       var o=simplifyPreview.options;
       var overlap=+$('#simplify-overlap').value, area=+$('#simplify-area').value, colors=+$('#simplify-colors').value;
       if(!Number.isFinite(overlap)||overlap<0.4||overlap>2||!Number.isFinite(area)||area<0||area>10||!Number.isInteger(colors)||colors<0||colors>63) {
         $('#simplify-apply').disabled=true;$('#simplify-summary').textContent='Thread colors must be a whole number from 0 to 63.';return;
       }
-      Object.assign(o,{removeCovered:$('#simplify-covered').checked,overlapMm:overlap,minAreaMm2:area,maxColors:colors});
+      Object.assign(o,{removeCovered:$('#simplify-covered').checked,overlapMm:overlap,minAreaMm2:area,maxColors:colors,hiddenTravel:$('#simplify-route').checked,optimizeOrder:$('#simplify-order').checked});
       digitize();
     });
   });
+
+  $('#routing-show').addEventListener('change',function(){if(simplifyPreview)renderSimplifyPreview();});
 
   // Editable source paths: tracing and edits never overwrite the original picture.
   function selectedPath() {
@@ -1732,7 +1745,7 @@ export function mountStudio(root, opts) {
   }
   function snapshot() {
     if (S.layers.some(function(l){return l.source.loading;})) throw new Error('Wait for all pictures to finish loading.');
-    return {v:8,simplification:{...S.simplification},mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
+    return {v:9,simplification:{...S.simplification},mode:S.mode,view:S.view,fabric:S.fabric,hoop:S.hoop,settings:S.settings,
       draw:serializeSource('draw',S.draw),image:serializeSource('image',S.image),text:serializeSource('text',S.text),name:S.name,placement:S.placement,
       activeLayerId:S.activeId,layers:S.layers.map(function(l){return {id:l.id,name:l.name,kind:l.kind,visible:l.visible,transform:Object.assign({},l.transform),stitchSettings:l.stitchSettings?Object.assign({},l.stitchSettings):undefined,source:serializeSource(l.kind,l.source)};})};
   }
@@ -1750,7 +1763,7 @@ export function mountStudio(root, opts) {
     try {
       var s = opts.project;
       if (!s) { var raw = localStorage.getItem(KEY); if (!raw) return false; s = JSON.parse(raw); }
-      if (!s || !(s.v >= 1 && s.v <= 8)) return false;
+      if (!s || !(s.v >= 1 && s.v <= 9)) return false;
       loadedProject = s;
       S.placement = s.placement;
       S.simplification = {...simplificationDefaults(), ...s.simplification};
@@ -2000,7 +2013,7 @@ export function mountStudio(root, opts) {
   textPalette = Palette($('#txt-palette'), function () { return S.text.color; }, function (i) { pushUndo(); S.placement=undefined; S.text.color = i; updateDesign(); scheduleSave(); });
   drawPalettes.forEach(function (p) { p.draw(); });
   syncThreadName(); syncFabric(); setTool(S.draw.tool); syncHistory();
-  if(loadedProject && (loadedProject.v>=2 && loadedProject.v<=8) && loadedProject.layers) {
+  if(loadedProject && (loadedProject.v>=2 && loadedProject.v<=9) && loadedProject.layers) {
     S.layers=loadedProject.layers.map(function(l){return Object.assign({},l,{transform:Object.assign({},l.transform),source:deserializeSource(l.kind,l.source)});});
     S.activeId=loadedProject.activeLayerId;
   } else {

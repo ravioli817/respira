@@ -216,6 +216,7 @@ const holder = {};
     }
     var t = fillChains(mask, W, H, res, { angle: s.angle, spacing: s.spacing, pull: s.fillPullMm ?? 0.15, minRun: 0.5, minOverlap: 0.25 });
     var tp = orderChains(t.chains, pos, { stitchLen: s.stitchLen, minEnd: 0.8, tatami: true }, t.ca, t.sa);
+    if(s.routeTravel && s.spacing<=0.45 && tp.length)out.forEach(function(path){path.routeMask=mask;});
     for (var j = 0; j < tp.length; j++) out.push({ pts: tp[j], inside: inside });
     return out;
   }
@@ -432,7 +433,9 @@ const holder = {};
       else {
         var d = dist(cur, p0), fn = paths[i].inside;
         var near = fn ? (d <= 0.6 || (d <= 6 && segInside(cur, p0, fn))) : d <= 1.0;
-        if (near && !paths[i].trimBefore) stitchTo(p0, 3.0);
+        var route=!near&&!paths[i].trimBefore&&s.routeTravel?s.routeTravel(cur,p0,paths[i].routeMask&&paths[i-1].routeMask===paths[i].routeMask?paths[i].routeMask:null):null;
+        if(route){route.slice(1).forEach(st);cur=p0;}
+        else if (near && !paths[i].trimBefore) stitchTo(p0, 3.0);
         else { tieOff(); put(cur, CMD.TRIM, paths[i].trimBefore); startAt(p0, next); }
       }
       for (var j = 1; j < pts.length; j++) stitchTo(pts[j], maxStitch);
