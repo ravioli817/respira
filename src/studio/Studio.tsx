@@ -80,7 +80,7 @@ const newRecord = (data?: ProjectData): SavedProject => ({
       const base = emptyProject();
       return {
         ...base,
-        v: 7,
+        v: 8,
         activeLayerId: "drawing",
         layers: [
           {

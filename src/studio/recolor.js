@@ -1,6 +1,7 @@
 /** Existing colors in one drawing, preserving their first-use order. */
 export function drawingColors(drawing) {
   const present=new Set(drawing.labels);present.delete(0);
+  for(const shape of drawing.shapes||[])present.add(shape.color);
   for(const stroke of drawing.strokes)present.add(stroke.color);
   return [...new Set([...drawing.order,...present])].filter(c=>present.has(c));
 }
@@ -11,5 +12,5 @@ export function recolorDrawing(drawing,target,from=null) {
   const labels=drawing.labels.map(replace);
   const present=new Set(labels);present.delete(0);
   const order=[...new Set(drawing.order.map(replace).concat([...present]))].filter(c=>present.has(c));
-  return {...drawing,labels,order,strokes:drawing.strokes.map(s=>({...s,color:replace(s.color)}))};
+  return {...drawing,labels,order,...(drawing.shapes?{shapes:drawing.shapes.map(s=>({...s,color:replace(s.color)}))}:{}),strokes:drawing.strokes.map(s=>({...s,color:replace(s.color)}))};
 }

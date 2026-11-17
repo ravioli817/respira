@@ -359,3 +359,76 @@ it("preserves v7 simplification and rejects unsafe or fractional settings", () =
   }
   expect(() => validateProject({ ...project, v: 6 })).toThrow();
 });
+
+it("round-trips v8 editable shapes with holes and rejects malformed or oversized point arrays", () => {
+  const base = emptyProject();
+  const shape = {
+    color: 5,
+    rings: [
+      [
+        [10, 10],
+        [30, 10],
+        [30, 30],
+        [10, 30],
+      ],
+      [
+        [15, 15],
+        [15, 25],
+        [25, 25],
+        [25, 15],
+      ],
+    ],
+  };
+  const data = {
+    ...base,
+    v: 8 as const,
+    layers: [
+      {
+        id: "a",
+        name: "Traced",
+        kind: "draw" as const,
+        visible: true,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        source: { ...base.draw, shapes: [shape] },
+      },
+    ],
+    activeLayerId: "a",
+  };
+  expect(importProject(exportProject(data)).layers?.[0].source).toEqual(
+    data.layers[0].source,
+  );
+  for (const bad of [
+    { ...shape, color: 64 },
+    { ...shape, rings: [] },
+    {
+      ...shape,
+      rings: [
+        [
+          [1, 2],
+          [3, 4],
+        ],
+      ],
+    },
+    {
+      ...shape,
+      rings: [
+        [
+          [101, 2],
+          [3, 4],
+          [5, 6],
+        ],
+      ],
+    },
+    { ...shape, rings: [Array.from({ length: 4001 }, () => [1, 2])] },
+  ]) {
+    expect(() =>
+      validateProject({
+        ...data,
+        layers: [
+          { ...data.layers[0], source: { ...base.draw, shapes: [bad] } },
+        ],
+      }),
+    ).toThrow();
+  }
+  expect(() => validateProject({ ...data, v: 7 })).toThrow();
+});
