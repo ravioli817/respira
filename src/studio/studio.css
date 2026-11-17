@@ -407,3 +407,12 @@ input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 
 .simplify-actions { position:sticky; bottom:-24px; background:var(--surface); border-top:1px solid var(--line); padding:12px 0; }
 #simplify-open[aria-pressed=true] { border-color:var(--accent); background:var(--accent-soft); }
 @media(max-width:700px) { .simplify-art { position:static; } .simplify-actions { bottom:-16px; } }
+
+#point-handles { position:absolute; inset:0; pointer-events:none; z-index:4; }
+.point-handle { position:absolute; width:44px; height:44px; margin:-22px 0 0 -22px; padding:0; border:0; background:transparent; pointer-events:auto; touch-action:none; }
+.point-handle::before { content:''; display:block; width:10px; height:10px; margin:auto; border:2px solid #102d4a; border-radius:50%; background:white; box-shadow:0 0 0 1px white; }
+.point-handle[aria-pressed=true] { z-index:1; }
+.point-handle[aria-pressed=true]::before { width:16px; height:16px; background:#ffce46; }
+#point-tools input, #point-tools select { width:100%; min-height:44px; background:var(--surface); border:1px solid var(--line-strong); border-radius:8px; padding:8px; }
+.point-coordinates { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.point-buttons { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }

@@ -1,5 +1,5 @@
 export interface ProjectData {
-  v: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  v: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   simplification?: {
     removeCovered: boolean;
     overlapMm: number;
@@ -23,6 +23,7 @@ export interface ProjectData {
     order: number[];
     example: boolean;
     labels: number[];
+    shapes?: Array<{ color: number; rings: number[][][] }>;
     strokes: Array<{ k: "satin" | "run"; c: number; p: number[][] }>;
   };
   image: {
@@ -241,6 +242,23 @@ function validateCrop(value: unknown) {
 }
 
 /** Reconstruct only known fields. Imported files never supply live engine state or HTML. */
+function validateShapes(value: unknown) {
+  let count = 0;
+  return array(value, 300).map((value) => {
+    const shape = object(value);
+    const rings = array(shape.rings, 300).map((value) => {
+      const ring = array(value, 4000).map((value) => {
+        const point = array(value, 2);
+        if (point.length !== 2 || ++count > 20000) return fail();
+        return point.map((v) => number(v, 0, 100));
+      });
+      if (ring.length < 3) return fail();
+      return ring;
+    });
+    if (!rings.length) return fail();
+    return { color: color(shape.color), rings };
+  });
+}
 export function validateProject(value: unknown): ProjectData {
   const s = object(value),
     d = object(s.draw),
@@ -254,7 +272,8 @@ export function validateProject(value: unknown): ProjectData {
       s.v !== 4 &&
       s.v !== 5 &&
       s.v !== 6 &&
-      s.v !== 7) ||
+      s.v !== 7 &&
+      s.v !== 8) ||
     !["draw", "image", "text", "stitches"].includes(String(s.mode))
   )
     return fail();
@@ -316,6 +335,9 @@ export function validateProject(value: unknown): ProjectData {
       example: bool(d.example),
       labels,
       strokes,
+      ...(d.shapes === undefined
+        ? {}
+        : { shapes: s.v === 8 ? validateShapes(d.shapes) : fail() }),
     },
     image: {
       sizeMM: number(im.sizeMM, 20, 100),
@@ -385,7 +407,8 @@ export function validateProject(value: unknown): ProjectData {
     s.v === 4 ||
     s.v === 5 ||
     s.v === 6 ||
-    s.v === 7
+    s.v === 7 ||
+    s.v === 8
   ) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
@@ -406,8 +429,17 @@ export function validateProject(value: unknown): ProjectData {
           : validateProject({
               ...emptyProject(),
               v: 1,
-              [kind]: l.source,
+              [kind]:
+                kind === "draw"
+                  ? { ...object(l.source), shapes: undefined }
+                  : l.source,
             })[kind];
+      if (kind === "draw" && object(l.source).shapes !== undefined) {
+        if (s.v !== 8) return fail();
+        (source as ProjectData["draw"]).shapes = validateShapes(
+          object(l.source).shapes,
+        );
+      }
       return {
         id,
         name: string(l.name, 60),
@@ -434,7 +466,7 @@ export function validateProject(value: unknown): ProjectData {
     if (!ids.has(result.activeLayerId)) return fail();
   }
   if (s.simplification !== undefined) {
-    if (s.v !== 7) return fail();
+    if (s.v !== 7 && s.v !== 8) return fail();
     const o = object(s.simplification);
     result.simplification = {
       removeCovered: bool(o.removeCovered),
@@ -503,7 +535,8 @@ export function importProject(text: string): ProjectData {
       file.version !== 4 &&
       file.version !== 5 &&
       file.version !== 6 &&
-      file.version !== 7) ||
+      file.version !== 7 &&
+      file.version !== 8) ||
     object(file.data).v !== file.version
   )
     return fail();

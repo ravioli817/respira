@@ -60,6 +60,7 @@ export const STUDIO_MARKUP = `
     <button class="rail-btn" id="move-layer" aria-pressed="true" title="Move: tap a layer to move, resize or change it">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 3.5l12 9.2-5.4.8 3 6-2.3 1.1-3-6L6 18z"/></svg><span>Move</span>
     </button>
+    <button class="rail-btn" id="edit-points" aria-pressed="false" title="Edit points in the selected drawing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 17 12 6l7 11"/><circle cx="5" cy="17" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="19" cy="17" r="2"/></svg><span>Points</span></button>
     <span class="rail-rule" aria-hidden="true"></span>
     <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Layers: everything in the design, in stitching order">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Layers</span>
@@ -72,7 +73,7 @@ export const STUDIO_MARKUP = `
     <div class="layer-order"><button class="btn" id="layer-earlier">Move up</button><button class="btn" id="layer-later">Move down</button></div>
     <button class="btn" id="layer-merge" hidden>Merge drawings</button>
     <button class="btn" id="new-drawing-object">Add another drawing</button>
-    <p class="hint">Where fills overlap, Simplify design can leave out the hidden part. To merge two drawings, put them next to each other in this list.</p>
+    <p class="hint">Where fills overlap, Simplify design can leave out the hidden part. To merge two drawings, put them next to each other in this list. Drawings with editable shapes stay separate.</p>
   </aside>
   <section class="stage-col" aria-label="Hoop">
     <div class="canvas-heading">
@@ -124,6 +125,7 @@ export const STUDIO_MARKUP = `
       <div class="field" id="stage">
         <canvas id="base" aria-hidden="true"></canvas>
         <canvas id="overlay" role="img" aria-label="Embroidery canvas. Pick a drawing tool to add marks, or Move to move and resize a layer."></canvas>
+        <div id="point-handles" hidden></div>
         <div id="selection-box" class="selection-box" hidden>
           <button class="resize-handle nw" data-corner="nw" aria-label="Resize object from top left" tabindex="-1"></button>
           <button class="resize-handle ne" data-corner="ne" aria-label="Resize object from top right" tabindex="-1"></button>
@@ -173,6 +175,21 @@ export const STUDIO_MARKUP = `
         <button class="btn" id="add-shape">Add shape</button><button class="btn" id="cancel-shape">Cancel shape</button>
         <p id="shape-status" role="status" class="hint"></p>
       </details>
+    <section class="panel" id="point-tools" hidden aria-label="Point editing">
+      <h2>Edit points</h2>
+      <p class="hint" id="point-help"></p>
+      <button class="btn" id="trace-drawing">Make painted fills editable</button>
+      <label class="stack">Shape or line<select id="point-path"></select></label>
+      <button class="btn" id="point-color">Change thread</button>
+      <label class="stack" id="point-ring-wrap">Edge<select id="point-ring"></select></label>
+      <div id="point-actions">
+        <label class="stack">Point<input id="point-index" type="number" min="1" step="1"><span id="point-total"></span></label>
+        <div class="point-coordinates"><label class="stack">Point X (mm)<input id="point-x" type="number" step="0.2"></label><label class="stack">Point Y (mm)<input id="point-y" type="number" step="0.2"></label></div>
+        <div class="point-buttons"><button class="btn" id="point-add">Add point after</button><button class="btn" id="point-remove">Remove point</button><button class="btn" id="point-less">Fewer points</button><button class="btn" id="point-delete-path">Delete this shape or line</button></div>
+        <p class="hint">Coordinates are measured from the hoop’s top-left. Arrow keys nudge a focused point; Shift moves it farther. On dense outlines, zoom in or choose a point by number. Fewer points changes the outline slightly; Undo restores it.</p>
+      </div>
+      <button class="btn" id="point-done">Done editing points</button>
+    </section>
     <section class="panel first" id="panel-draw">
       <h2>Thread</h2>
       <div class="threads in-bench">
@@ -209,6 +226,8 @@ export const STUDIO_MARKUP = `
         </div>
       </div>
       <p class="hint">Medium and Strong also fold parts too thin to stitch (under about 1.2 mm) into the color beside them. Light keeps fine lines.</p>
+      <button class="btn" id="trace-picture">Make editable shapes</button>
+      <p class="hint">Trace these picture colors into shapes you can reshape or recolor. Holes stay open. The original picture is kept as a layer but left out of stitching.</p>
       <div class="clusters" id="clusters"></div>
       <button class="btn" id="img-rematch" hidden>Back to matched threads</button>
       <p class="hint">Tap a thread to change it; your pick stays with that color when you change the settings above. Skip one to leave the fabric showing there.</p>

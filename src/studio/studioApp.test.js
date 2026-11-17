@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(7);
+  expect(saved.v).toBe(8);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -791,7 +791,7 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
   button("#undo").click();
   const saved = studio.snapshot();
-  expect(saved.v).toBe(7);
+  expect(saved.v).toBe(8);
   studio.destroy();
   studio = mountStudio(root, { project: saved, onSend });
   await vi.advanceTimersByTimeAsync(70);
@@ -1122,7 +1122,7 @@ it("adds an embroidery file as a layer, keeps it through saving, and sends its s
   );
   const saved = studio.snapshot(),
     layer = saved.layers.at(-1);
-  expect(saved.v).toBe(7);
+  expect(saved.v).toBe(8);
   expect(layer.kind).toBe("stitches");
   expect(layer.name).toBe("bought-rose");
   expect(layer.source.slots).toEqual([5, 20]);
@@ -1502,7 +1502,7 @@ it("preserves PES cut flags and repeated-color stops through v6 files, undo and 
   expect(before.threads.map((t) => t.index)).toEqual([5, 5]);
   expect(before.stitches.filter((s) => s[2] === 0x30)).toHaveLength(1);
   const project = importProject(exportProject(studio.snapshot()));
-  expect(project.v).toBe(7);
+  expect(project.v).toBe(8);
   expect(project.layers[0].source.paths).toEqual(source.paths);
   studio.destroy();
   studio = mountStudio(root, { project, onSend });
@@ -1633,4 +1633,91 @@ it('can restore details when later edits leave a simplified design empty', async
   button('#simplify-reset').click();expect(button('#simplify-apply').disabled).toBe(false);
   button('#simplify-apply').click();expect(button('#send').disabled).toBe(false);
   expect(studio.snapshot().layers[0].source.labels).toEqual(runs);
+});
+
+async function editableFixture() {
+  const {emptyProject}=await import('../projects/projectFile');
+  const base=emptyProject();
+  const layer={id:'editable',name:'Editable',kind:'draw',visible:true,transform:{x:4,y:-2,scale:.8,rotation:30},source:{...base.draw,order:[5],shapes:[{color:5,rings:[[[30,30],[70,30],[70,70],[30,70]],[[40,40],[40,60],[60,60],[60,40]]]}],strokes:[{k:'satin',c:2,p:[[20,20,2],[25,20,3],[25,25,2],[20,20,2]]}]}};
+  studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:{...base,v:8,layers:[layer],activeLayerId:layer.id}});vi.advanceTimersByTime(60);
+  vi.spyOn(button('#overlay'),'getBoundingClientRect').mockReturnValue({left:0,top:0,width:100,height:100});
+  button('#edit-points').click();return layer;
+}
+function change(id,value){input(id,value);button(id).dispatchEvent(new Event('change',{bubbles:true}));}
+function pointEvent(target,type,x,y){target.dispatchEvent(new MouseEvent(type,{clientX:x,clientY:y,bubbles:true}));}
+describe('editable drawing points',()=>{
+  it('edits transformed points, preserves holes, regenerates stitches and round-trips v8',async()=>{
+    const {exportProject,importProject}=await import('../projects/projectFile');
+    const {transformPoint}=await import('./composition.js');
+    const original=await editableFixture();studio.send();const before=onSend.mock.calls.at(-1)[0];
+    const world=transformPoint([32,31],original.transform);
+    input('#point-x',String(world[0]));change('#point-y',String(world[1]));vi.advanceTimersByTime(60);
+    const edited=studio.snapshot().layers[0];expect(edited.source.shapes[0].rings[0][0][0]).toBeCloseTo(32,4);expect(edited.source.shapes[0].rings[0][0][1]).toBeCloseTo(31,4);
+    expect(edited.source.shapes[0].rings[1]).toEqual(original.source.shapes[0].rings[1]);
+    studio.send();expect(onSend.mock.calls.at(-1)[0].stitches).not.toEqual(before.stitches);
+    button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);
+    button('#redo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source.shapes).toEqual(edited.source.shapes);
+    const saved=importProject(exportProject(studio.snapshot()));expect(saved.v).toBe(8);
+    studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:saved});vi.advanceTimersByTime(60);
+    expect(studio.snapshot().layers[0].source.shapes).toEqual(edited.source.shapes);expect(button('#send').disabled).toBe(false);
+  });
+  it('adds/removes nodes, keeps closed stroke endpoints joined, and recolors only the selected shape',async()=>{
+    await editableFixture();button('#point-add').click();expect(studio.snapshot().layers[0].source.shapes[0].rings[0]).toHaveLength(5);
+    button('#point-remove').click();expect(studio.snapshot().layers[0].source.shapes[0].rings[0]).toHaveLength(4);
+    root.querySelector('#draw-palette-bench [aria-label="Blue"]').click();
+    expect(studio.snapshot().layers[0].source.shapes[0].color).toBe(2);
+    vi.advanceTimersByTime(60);studio.send();expect(onSend.mock.calls.at(-1)[0].threads[0].index).toBe(2);
+    change('#point-path','stroke:0');change('#point-index','1');
+    const old=studio.snapshot().layers[0].source.strokes[0].p;
+    change('#point-x',String(+button('#point-x').value+1));
+    const pts=studio.snapshot().layers[0].source.strokes[0].p;expect(pts[0]).toEqual(pts.at(-1));expect(pts).not.toEqual(old);
+    expect(pts[1][2]).toBe(3);
+    button('#point-remove').click();expect(studio.snapshot().layers[0].source.strokes[0].p).toHaveLength(4); // Three corners is the minimum.
+    button('#point-delete-path').click();expect(studio.snapshot().layers[0].source.strokes).toHaveLength(0);
+    expect(studio.snapshot().layers[0].source.shapes).toHaveLength(1);
+  });
+  it('drags a point with one undo step and rolls back a cancelled drag',async()=>{
+    const original=await editableFixture();const {transformPoint}=await import('./composition.js');
+    const start=transformPoint([30,30],original.transform),end=transformPoint([33,32],original.transform);
+    pointEvent(button('#point-handles [data-point="0"]'),'pointerdown',...start);
+    pointEvent(button('#overlay'),'pointermove',...end);pointEvent(button('#overlay'),'pointerup',...end);
+    expect(studio.snapshot().layers[0].source.shapes[0].rings[0][0][0]).toBeCloseTo(33);
+    button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);
+    pointEvent(button('#point-handles [data-point="0"]'),'pointerdown',...start);
+    pointEvent(button('#overlay'),'pointermove',...end);pointEvent(button('#overlay'),'pointercancel',...end);
+    expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);
+    expect(button('#redo').disabled).toBe(false);
+  });
+  it('keeps editable shapes intact when starting a new drawing, duplicating or hiding them',async()=>{
+    const original=await editableFixture();button('#point-done').click();button('#layer-duplicate').click();
+    expect(studio.snapshot().layers[1].source.shapes).toEqual(original.source.shapes);
+    button('#layer-visible').checked=false;button('#layer-visible').dispatchEvent(new Event('change',{bubbles:true}));vi.advanceTimersByTime(60);
+    button('#tool-line').click();const state=studio.snapshot();expect(state.layers.length).toBe(3);expect(state.layers[0].source.shapes).toEqual(original.source.shapes);expect(state.layers[1].visible).toBe(false);expect(state.layers[2].source.shapes).toBeUndefined();
+  });
+  it('converts a picture without changing stitches and retains the original through undo',async()=>{
+    const {emptyProject}=await import('../projects/projectFile');
+    vi.stubGlobal('Image',class{width=100;height=100;set src(v){this.url=v;Promise.resolve().then(()=>this.onload?.());}});
+    const base=emptyProject(),pic={id:'pic',name:'Logo',kind:'image',visible:true,transform:{x:2,y:0,scale:1,rotation:10},source:{...base.image,sizeMM:30,k:1,removeBg:false,sourceDataURL:'data:image/png;base64,AAAA',fileName:'logo.png'}};
+    studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:{...base,v:8,layers:[pic],activeLayerId:'pic'}});await vi.advanceTimersByTimeAsync(100);
+    studio.send();const before=onSend.mock.calls.at(-1)[0];button('#trace-picture').click();vi.advanceTimersByTime(60);
+    const saved=studio.snapshot();expect(saved.layers).toHaveLength(2);expect(saved.layers[0].visible).toBe(false);expect(saved.layers[0].source.sourceDataURL).toBe(pic.source.sourceDataURL);expect(saved.layers[1].source.shapes.length).toBeGreaterThan(0);expect(saved.layers[1].transform).toEqual(pic.transform);
+    studio.send();expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(before.stitches);
+    button('#undo').click();await vi.advanceTimersByTimeAsync(100);expect(studio.snapshot().layers).toHaveLength(1);expect(studio.snapshot().layers[0].visible).toBe(true);
+    button('#redo').click();await vi.advanceTimersByTimeAsync(100);expect(studio.snapshot().layers[1].source.shapes).toEqual(saved.layers[1].source.shapes);
+  });
+});
+
+it('traces painted drawing fills without changing their stitch output',()=>{
+  studio.send();const stitches=onSend.mock.calls.at(-1)[0].stitches;
+  button('#edit-points').click();const before=studio.snapshot();button('#trace-drawing').click();vi.advanceTimersByTime(60);
+  const after=studio.snapshot();expect(after.layers[0].source.shapes.length).toBeGreaterThan(0);expect(after.layers[0].source.labels).toEqual([0,250000]);
+  studio.send();expect(onSend.mock.calls.at(-1)[0].stitches).toEqual(stitches);
+  button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source).toEqual(before.layers[0].source);
+});
+it('cancels a drag when leaving Points without leaving a partial edit',async()=>{
+  const original=await editableFixture();const {transformPoint}=await import('./composition.js');
+  const start=transformPoint([30,30],original.transform),end=transformPoint([33,32],original.transform);
+  pointEvent(button('#point-handles [data-point="0"]'),'pointerdown',...start);pointEvent(button('#overlay'),'pointermove',...end);
+  button('#point-done').click();vi.advanceTimersByTime(60);
+  expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);expect(button('#point-handles').hidden).toBe(true);
 });
