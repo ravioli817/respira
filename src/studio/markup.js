@@ -67,11 +67,11 @@ export const STUDIO_MARKUP = `
     </button>
     <button class="rail-btn" id="edit-points" aria-pressed="false" title="Edit points in the selected drawing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 17 12 6l7 11"/><circle cx="5" cy="17" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="19" cy="17" r="2"/></svg><span>Points</span></button>
     <span class="rail-rule" aria-hidden="true"></span>
-    <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Layers: everything in the design, in stitching order">
+    <button class="rail-btn" id="toggle-objects" aria-controls="objects-panel" aria-expanded="false" title="Layers: everything in the design">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>Layers</span>
     </button>
   </nav>
-  <aside class="objects-panel" id="objects-panel" aria-label="Layers of the design, in stitching order">
+  <aside class="objects-panel" id="objects-panel" aria-label="Design layers">
     <div class="panel-heading"><h2>Layers <span id="object-count"></span></h2><button class="icon-btn" id="close-objects" aria-label="Close the layers list">×</button></div>
     <p class="hint" id="layer-order-hint">Stitched from the top down. The eye leaves a layer out.</p>
     <details id="sewing-order-box" hidden><summary>Stitching order</summary><p class="hint" id="sewing-layer-order"></p></details>
