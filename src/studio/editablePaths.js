@@ -95,6 +95,6 @@ export function drawingDesign(source) {
   if(!source.shapes?.length)return {labels:source.labels,order:source.order,lines:source.strokes};
   const labels=source.labels.slice();
   for(const shape of source.shapes)paintShape(labels,shape);
-  return {labels,order:[...new Set(source.order.concat(source.shapes.map(s=>s.color)))],lines:source.strokes};
+  return {labels,order:[...new Set((source.labels.some(Boolean)?source.order:[]).concat(source.shapes.map(s=>s.color)))],lines:source.strokes};
 }
 export function cloneShapes(shapes=[]) { return shapes.map(s=>({...s,rings:s.rings.map(r=>r.map(p=>p.slice()))})); }

@@ -22,7 +22,7 @@ describe('editable tracing geometry',()=>{
   });
   it('preserves transformed geometry and keeps edits independent of original arrays',()=>{
     const labels=new Uint8Array(250000);rect(labels,200,200,80,60,5);const shapes=traceLabels(labels);
-    const a=source(labels),b={...source(new Uint8Array(250000)),shapes};const t={x:4,y:-3,scale:.8,rotation:25};
+    const a={...source(labels),order:[5]},b={...source(new Uint8Array(250000)),shapes};const t={x:4,y:-3,scale:.8,rotation:25};
     expect(transformDesign(drawingDesign(a),t)).toEqual(transformDesign(drawingDesign(b),t));
     const copy=cloneShapes(shapes);copy[0].rings[0][0][0]+=2;expect(shapes[0].rings[0][0][0]).toBe(40);
   });
@@ -41,4 +41,10 @@ describe('editable tracing geometry',()=>{
     const labels=new Uint8Array(250000);for(let y=0;y<40;y+=2)for(let x=0;x<40;x+=2)labels[y*500+x]=5;
     expect(()=>traceLabels(labels)).toThrow(/Too many/);
   });
+});
+
+it('retains shape color order after recoloring instead of appending the new thread last',()=>{
+  const labels=new Uint8Array(250000);rect(labels,100,100,40,40,5);rect(labels,180,180,40,40,2);
+  const shapes=traceLabels(labels,[5,2]);shapes[0].color=55;
+  expect(drawingDesign({...source(new Uint8Array(250000)),shapes}).order).toEqual([55,2]);
 });

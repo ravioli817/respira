@@ -1666,6 +1666,7 @@ describe('editable drawing points',()=>{
     button('#point-remove').click();expect(studio.snapshot().layers[0].source.shapes[0].rings[0]).toHaveLength(4);
     root.querySelector('#draw-palette-bench [aria-label="Blue"]').click();
     expect(studio.snapshot().layers[0].source.shapes[0].color).toBe(2);
+    vi.advanceTimersByTime(60);studio.send();expect(onSend.mock.calls.at(-1)[0].threads[0].index).toBe(2);
     change('#point-path','stroke:0');change('#point-index','1');
     const old=studio.snapshot().layers[0].source.strokes[0].p;
     change('#point-x',String(+button('#point-x').value+1));
