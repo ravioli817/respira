@@ -174,7 +174,7 @@ it("combines drawing and satin text, preserving geometry through reorder, hide, 
   const mixed = onSend.mock.calls.at(-1)[0];
   expect(Math.max(...mixed.stitches.map((s) => s[1]))).toBeGreaterThan(300);
   const saved = studio.snapshot();
-  expect(saved.v).toBe(8);
+  expect(saved.v).toBe(9);
   expect(saved.layers.filter((l) => l.visible)).toHaveLength(2);
   expect(saved.layers.at(-1).source.font).toBe("SmallSatin");
   expect(saved.layers.at(-1).transform.y).toBe(30);
@@ -791,7 +791,7 @@ it("saves both new embroidery fonts and trim rules through undo, duplication and
   expect(studio.snapshot().layers.at(-1).source.trimRule).toBe("letter");
   button("#undo").click();
   const saved = studio.snapshot();
-  expect(saved.v).toBe(8);
+  expect(saved.v).toBe(9);
   studio.destroy();
   studio = mountStudio(root, { project: saved, onSend });
   await vi.advanceTimersByTimeAsync(70);
@@ -1122,7 +1122,7 @@ it("adds an embroidery file as a layer, keeps it through saving, and sends its s
   );
   const saved = studio.snapshot(),
     layer = saved.layers.at(-1);
-  expect(saved.v).toBe(8);
+  expect(saved.v).toBe(9);
   expect(layer.kind).toBe("stitches");
   expect(layer.name).toBe("bought-rose");
   expect(layer.source.slots).toEqual([5, 20]);
@@ -1502,7 +1502,7 @@ it("preserves PES cut flags and repeated-color stops through v6 files, undo and 
   expect(before.threads.map((t) => t.index)).toEqual([5, 5]);
   expect(before.stitches.filter((s) => s[2] === 0x30)).toHaveLength(1);
   const project = importProject(exportProject(studio.snapshot()));
-  expect(project.v).toBe(8);
+  expect(project.v).toBe(9);
   expect(project.layers[0].source.paths).toEqual(source.paths);
   studio.destroy();
   studio = mountStudio(root, { project, onSend });
@@ -1657,7 +1657,7 @@ describe('editable drawing points',()=>{
     studio.send();expect(onSend.mock.calls.at(-1)[0].stitches).not.toEqual(before.stitches);
     button('#undo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);
     button('#redo').click();vi.advanceTimersByTime(60);expect(studio.snapshot().layers[0].source.shapes).toEqual(edited.source.shapes);
-    const saved=importProject(exportProject(studio.snapshot()));expect(saved.v).toBe(8);
+    const saved=importProject(exportProject(studio.snapshot()));expect(saved.v).toBe(9);
     studio.destroy();root.replaceChildren();studio=mountStudio(root,{onSend,project:saved});vi.advanceTimersByTime(60);
     expect(studio.snapshot().layers[0].source.shapes).toEqual(edited.source.shapes);expect(button('#send').disabled).toBe(false);
   });
@@ -1720,4 +1720,28 @@ it('cancels a drag when leaving Points without leaving a partial edit',async()=>
   pointEvent(button('#point-handles [data-point="0"]'),'pointerdown',...start);pointEvent(button('#overlay'),'pointermove',...end);
   button('#point-done').click();vi.advanceTimersByTime(60);
   expect(studio.snapshot().layers[0].source.shapes).toEqual(original.source.shapes);expect(button('#point-handles').hidden).toBe(true);
+});
+
+describe('routing and sewing order preview',()=>{
+  function fixture(){const a=reviewDrawing('red first',5),b=reviewDrawing('blue middle',2),c=reviewDrawing('red last',5);b.transform.y=40;c.transform.x=20;reviewLayers([a,b,c]);button('#simplify-dialog').showModal=function(){this.open=true;};button('#simplify-dialog').close=function(){this.open=false;};}
+  function toggle(id){button(id).checked=true;button(id).dispatchEvent(new Event('input',{bubbles:true}));}
+  it('previews a safe order without changing the layer stack, and cancels without saving it',()=>{
+    fixture();const source=studio.snapshot();studio.send();const before=onSend.mock.calls.at(-1)[0];
+    button('#simplify-open').click();toggle('#simplify-order');
+    expect(button('#simplify-summary').textContent).toContain('Sewing order adjusted');
+    expect(studio.snapshot()).toEqual(source);expect(studio.send()).toBe('blocked');
+    expect(button('#sewing-layer-order').textContent).not.toBe('1. red first → 2. blue middle → 3. red last');
+    button('#simplify-cancel').click();studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(before);
+    expect(button('#sewing-order-box').hidden).toBe(true);
+  });
+  it('applies both options in one undo step and preserves their output through export/import',()=>{
+    fixture();const before=studio.snapshot();studio.send();const original=onSend.mock.calls.at(-1)[0];
+    button('#simplify-open').click();toggle('#simplify-order');toggle('#simplify-route');button('#simplify-apply').click();
+    const saved=importProject(exportProject(studio.snapshot()));expect(saved.v).toBe(9);expect(saved.simplification.optimizeOrder).toBe(true);expect(saved.simplification.hiddenTravel).toBe(true);expect(saved.layers).toEqual(before.layers);
+    studio.send();const optimized=onSend.mock.calls.at(-1)[0];expect(optimized.threads.length).toBeLessThan(original.threads.length);
+    button('#undo').click();vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(original);
+    button('#redo').click();vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(optimized);
+    studio.destroy();root.replaceChildren();studio=mountStudio(root,{project:saved,onSend});vi.advanceTimersByTime(70);studio.send();expect(onSend.mock.calls.at(-1)[0]).toEqual(optimized);
+    expect(button('#layer-order-hint').textContent).toContain('Overlapping layers');
+  });
 });

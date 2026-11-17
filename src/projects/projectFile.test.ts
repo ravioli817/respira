@@ -432,3 +432,40 @@ it("round-trips v8 editable shapes with holes and rejects malformed or oversized
   }
   expect(() => validateProject({ ...data, v: 7 })).toThrow();
 });
+
+it("preserves v9 routing options and rejects them in older versions or with invalid values", () => {
+  const base = emptyProject();
+  const data = {
+    ...base,
+    v: 9 as const,
+    layers: [
+      {
+        id: "a",
+        name: "A",
+        kind: "draw" as const,
+        visible: true,
+        source: base.draw,
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      },
+    ],
+    activeLayerId: "a",
+    simplification: {
+      removeCovered: false,
+      overlapMm: 0.6,
+      minAreaMm2: 0,
+      maxColors: 0,
+      hiddenTravel: true,
+      optimizeOrder: true,
+    },
+  };
+  expect(importProject(exportProject(data)).simplification).toEqual(
+    data.simplification,
+  );
+  expect(() => validateProject({ ...data, v: 8 })).toThrow();
+  expect(() =>
+    validateProject({
+      ...data,
+      simplification: { ...data.simplification, hiddenTravel: "yes" },
+    }),
+  ).toThrow();
+});

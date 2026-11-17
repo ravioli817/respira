@@ -1,10 +1,12 @@
 export interface ProjectData {
-  v: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  v: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   simplification?: {
     removeCovered: boolean;
     overlapMm: number;
     minAreaMm2: number;
     maxColors: number;
+    hiddenTravel?: boolean;
+    optimizeOrder?: boolean;
   };
   activeLayerId?: string;
   layers?: DesignLayer[];
@@ -273,7 +275,8 @@ export function validateProject(value: unknown): ProjectData {
       s.v !== 5 &&
       s.v !== 6 &&
       s.v !== 7 &&
-      s.v !== 8) ||
+      s.v !== 8 &&
+      s.v !== 9) ||
     !["draw", "image", "text", "stitches"].includes(String(s.mode))
   )
     return fail();
@@ -337,7 +340,9 @@ export function validateProject(value: unknown): ProjectData {
       strokes,
       ...(d.shapes === undefined
         ? {}
-        : { shapes: s.v === 8 ? validateShapes(d.shapes) : fail() }),
+        : {
+            shapes: s.v === 8 || s.v === 9 ? validateShapes(d.shapes) : fail(),
+          }),
     },
     image: {
       sizeMM: number(im.sizeMM, 20, 100),
@@ -408,7 +413,8 @@ export function validateProject(value: unknown): ProjectData {
     s.v === 5 ||
     s.v === 6 ||
     s.v === 7 ||
-    s.v === 8
+    s.v === 8 ||
+    s.v === 9
   ) {
     const ids = new Set<string>();
     result.layers = array(s.layers, 20).map((value) => {
@@ -435,7 +441,7 @@ export function validateProject(value: unknown): ProjectData {
                   : l.source,
             })[kind];
       if (kind === "draw" && object(l.source).shapes !== undefined) {
-        if (s.v !== 8) return fail();
+        if (s.v !== 8 && s.v !== 9) return fail();
         (source as ProjectData["draw"]).shapes = validateShapes(
           object(l.source).shapes,
         );
@@ -466,13 +472,19 @@ export function validateProject(value: unknown): ProjectData {
     if (!ids.has(result.activeLayerId)) return fail();
   }
   if (s.simplification !== undefined) {
-    if (s.v !== 7 && s.v !== 8) return fail();
+    if (s.v !== 7 && s.v !== 8 && s.v !== 9) return fail();
     const o = object(s.simplification);
     result.simplification = {
       removeCovered: bool(o.removeCovered),
       overlapMm: number(o.overlapMm, 0.4, 2),
       minAreaMm2: number(o.minAreaMm2, 0, 10),
       maxColors: number(o.maxColors, 0, 63, true),
+      ...(o.hiddenTravel === undefined
+        ? {}
+        : { hiddenTravel: s.v === 9 ? bool(o.hiddenTravel) : fail() }),
+      ...(o.optimizeOrder === undefined
+        ? {}
+        : { optimizeOrder: s.v === 9 ? bool(o.optimizeOrder) : fail() }),
     };
   }
   if (s.placement !== undefined) {
@@ -536,7 +548,8 @@ export function importProject(text: string): ProjectData {
       file.version !== 5 &&
       file.version !== 6 &&
       file.version !== 7 &&
-      file.version !== 8) ||
+      file.version !== 8 &&
+      file.version !== 9) ||
     object(file.data).v !== file.version
   )
     return fail();

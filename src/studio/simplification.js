@@ -4,7 +4,7 @@ import { encodeStitchesToPen } from '../formats/pen/encoder';
 import { decodePenData } from '../formats/pen/decoder';
 import { playbackStats } from '../prepare/playback';
 
-export const simplificationDefaults = () => ({ removeCovered: false, overlapMm: 0.6, minAreaMm2: 0, maxColors: 0 });
+export const simplificationDefaults = () => ({ removeCovered: false, overlapMm: 0.6, minAreaMm2: 0, maxColors: 0, hiddenTravel: false, optimizeOrder: false });
 
 // Connected components are measured at final hoop size, before colors are combined.
 // Four-neighbor connectivity avoids treating diagonally touching islands as a solid fill.
